@@ -9,13 +9,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid Meta Ad Library link" }, { status: 400 })
     }
 
-    // ВАШ РЕАЛЬНИЙ WEBHOOK URL СЮДИ:
-    const makeWebhookUrl = "ВАШ_РЕАЛЬНИЙ_WEBHOOK_URL_СЮДИ"
+    const makeWebhookUrl = "https://hook.us2.make.com/nignpcuv7qnwneg4yrtym6p77635252w"
 
     const response = await fetch(makeWebhookUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
+        "x-make-apikey": process.env.MAKE_API_KEY || "",
       },
       body: JSON.stringify({
         action: "parse_meta_link",
