@@ -1,6 +1,6 @@
 "use client"
 
-import { Calendar, Video } from "lucide-react"
+import { Calendar, Video } from 'lucide-react'
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -34,6 +34,9 @@ export function AdCard({ ad }: AdCardProps) {
     router.prefetch(`/creative/${ad.id}`)
   }
 
+  // Використовуємо ad.image_url для прев'ю, якщо доступно, інакше video_preview_image
+  const previewImage = ad.image_url || ad.video_preview_image || "/placeholder.svg"
+
   return (
     <Card
       className="group overflow-hidden bg-white border border-slate-200 rounded-2xl h-full flex flex-col hover:border-blue-200 hover:shadow-lg transition-all duration-300 ease-out"
@@ -53,10 +56,10 @@ export function AdCard({ ad }: AdCardProps) {
 
       <CardContent className="p-6 pt-0 flex-grow">
         <div className="relative aspect-video mb-3 bg-slate-100 rounded-xl overflow-hidden group-hover:shadow-md transition-shadow duration-300">
-          {ad.video_preview_image ? (
+          {previewImage ? (
             <div className="relative w-full h-full">
               <Image
-                src={ad.video_preview_image || "/placeholder.svg"}
+                src={previewImage || "/placeholder.svg"}
                 alt={title}
                 fill
                 className="object-cover transition-all duration-300 group-hover:scale-105"
@@ -84,7 +87,18 @@ export function AdCard({ ad }: AdCardProps) {
 
         <p className="text-sm text-slate-600 line-clamp-3 mb-3 leading-relaxed">{truncateText(ad.text || "", 120)}</p>
 
-        <div className="flex items-center justify-between text-xs text-slate-400 font-medium">
+        {/* Додаємо відображення нових полів для тестування */}
+        {ad.audio_script && (
+          <p className="text-xs text-slate-500 mt-1">Audio: {truncateText(ad.audio_script, 50)}</p>
+        )}
+        {ad.video_script && (
+          <p className="text-xs text-slate-500 mt-1">Video Script: {truncateText(ad.video_script, 50)}</p>
+        )}
+        {ad.image_description && (
+          <p className="text-xs text-slate-500 mt-1">Image Desc: {truncateText(ad.image_description, 50)}</p>
+        )}
+
+        <div className="flex items-center justify-between text-xs text-slate-400 font-medium mt-3">
           <div className="flex items-center">
             <Calendar className="h-3.5 w-3.5 mr-1.5" />
             <span>{formatDate(ad.created_at)}</span>

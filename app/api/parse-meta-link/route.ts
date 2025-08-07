@@ -9,7 +9,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid Meta Ad Library link" }, { status: 400 })
     }
 
-    const makeWebhookUrl = "https://hook.us2.make.com/nignpcuv7qnwneg4yrtym6p77635252w"
+    const makeWebhookUrl = "https://hook.us2.make.com/t0pelhx9vuczmukixxkw3kooi1wsfaof"
 
     const response = await fetch(makeWebhookUrl, {
       method: "POST",

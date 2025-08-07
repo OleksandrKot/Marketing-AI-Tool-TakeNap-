@@ -6,7 +6,28 @@ import type { Ad } from "@/lib/types"
 export async function getAds(search?: string, page?: string | null, date?: string | null, limit = 100): Promise<Ad[]> {
   const supabase = createServerSupabaseClient()
 
-  let query = supabase.from("ads_library").select("*").order("created_at", { ascending: false }).limit(limit)
+  // Оновлено: вибираємо всі нові поля
+  let query = supabase.from("ads_library").select(`
+    id,
+    created_at,
+    ad_archive_id,
+    page_name,
+    text,
+    caption,
+    cta_text,
+    cta_type,
+    display_format,
+    link_url,
+    title,
+    video_hd_url,
+    video_preview_image,
+    publisher_platform,
+    audio_script,
+    video_script,
+    meta_ad_url,
+    image_url,
+    image_description
+  `).order("created_at", { ascending: false }).limit(limit)
 
   if (search) {
     query = query.or(`title.ilike.%${search}%,text.ilike.%${search}%,page_name.ilike.%${search}%`)

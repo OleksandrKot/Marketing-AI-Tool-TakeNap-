@@ -13,6 +13,12 @@ export interface Ad {
   video_hd_url: string
   video_preview_image: string
   publisher_platform: string
+  // Нові поля з вашої таблиці
+  audio_script: string | null
+  video_script: string | null
+  meta_ad_url: string | null
+  image_url: string | null
+  image_description: string | null
 }
 
 export type ViewMode = "grid" | "list"

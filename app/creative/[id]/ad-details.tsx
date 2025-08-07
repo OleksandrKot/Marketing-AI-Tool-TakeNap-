@@ -4,21 +4,7 @@ import { useState, useCallback, memo } from "react"
 import { useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
 import Image from "next/image"
-import {
-  ArrowLeft,
-  Video,
-  Download,
-  Share2,
-  Heart,
-  RotateCcw,
-  Calendar,
-  Clock,
-  Info,
-  Hash,
-  Type,
-  Link,
-  Play,
-} from "lucide-react"
+import { ArrowLeft, Video, Download, Share2, Heart, RotateCcw, Calendar, Clock, Info, Hash, Type, Link, Play, ImageIcon, Mic, Film } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -55,26 +41,27 @@ const AdDetails = memo(function AdDetails({ ad }: AdDetailsProps) {
   }, [router])
 
   const handleDownload = useCallback(async () => {
-    if (!ad.video_hd_url) return
+    const urlToDownload = isVideo ? ad.video_hd_url : ad.image_url;
+    if (!urlToDownload) return;
 
-    setIsLoading(true)
+    setIsLoading(true);
     try {
-      const response = await fetch(ad.video_hd_url)
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `${ad.title || "creative"}.${isVideo ? "mp4" : "jpg"}`
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
+      const response = await fetch(urlToDownload);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${ad.title || "creative"}.${isVideo ? "mp4" : "jpg"}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
     } catch (error) {
-      console.error("Download failed:", error)
+      console.error("Download failed:", error);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [ad.video_hd_url, ad.title, isVideo])
+  }, [ad.video_hd_url, ad.image_url, ad.title, isVideo]);
 
   const handleLike = useCallback(() => {
     setIsLiked((prev) => !prev)
@@ -98,6 +85,9 @@ const AdDetails = memo(function AdDetails({ ad }: AdDetailsProps) {
       video.play()
     }
   }, [])
+
+  // Використовуємо ad.image_url для прев'ю, якщо доступно, інакше video_preview_image
+  const previewImage = ad.image_url || ad.video_preview_image || "/placeholder.svg"
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -168,7 +158,7 @@ const AdDetails = memo(function AdDetails({ ad }: AdDetailsProps) {
                         </>
                       ) : (
                         <>
-                          <Type className="h-3 w-3 mr-1" />
+                          <ImageIcon className="h-3 w-3 mr-1" />
                           Image
                         </>
                       )}
@@ -224,7 +214,7 @@ const AdDetails = memo(function AdDetails({ ad }: AdDetailsProps) {
               </div>
 
               {/* Media Information */}
-              {(ad.video_hd_url || ad.video_preview_image) && (
+              {(ad.video_hd_url || ad.video_preview_image || ad.image_url) && (
                 <div className="border-t border-slate-200 pt-6 mt-6">
                   <h3 className="text-lg font-semibold text-slate-900 mb-4">Media Information</h3>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -237,12 +227,23 @@ const AdDetails = memo(function AdDetails({ ad }: AdDetailsProps) {
                         </div>
                       </div>
                     )}
-                    {ad.video_preview_image && (
+                    {ad.image_url && (
                       <div className="bg-slate-50 rounded-xl p-4">
-                        <h4 className="text-sm font-medium text-slate-500 mb-2">Preview Image</h4>
+                        <h4 className="text-sm font-medium text-slate-500 mb-2">Image URL</h4>
                         <div className="flex items-center">
                           <Link className="h-4 w-4 mr-2 text-slate-400" />
                           <p className="text-sm text-slate-700 truncate">Available</p>
+                        </div>
+                      </div>
+                    )}
+                    {ad.meta_ad_url && (
+                      <div className="bg-slate-50 rounded-xl p-4">
+                        <h4 className="text-sm font-medium text-slate-500 mb-2">Meta Ad URL</h4>
+                        <div className="flex items-center">
+                          <Link className="h-4 w-4 mr-2 text-slate-400" />
+                          <a href={ad.meta_ad_url} target="_blank" rel="noopener noreferrer" className="text-sm text-blue-600 hover:underline truncate">
+                            {ad.meta_ad_url}
+                          </a>
                         </div>
                       </div>
                     )}
@@ -263,17 +264,17 @@ const AdDetails = memo(function AdDetails({ ad }: AdDetailsProps) {
                   {isVideo && ad.video_hd_url ? (
                     <video
                       src={ad.video_hd_url}
-                      poster={ad.video_preview_image || undefined}
+                      poster={previewImage || undefined}
                       controls
                       preload="metadata"
                       className="w-full h-full object-contain"
                       onLoadedData={() => setVideoLoaded(true)}
                       style={{ display: videoLoaded ? "block" : "none" }}
                     />
-                  ) : ad.video_preview_image ? (
+                  ) : previewImage ? (
                     <div className="relative w-full h-full">
                       <Image
-                        src={ad.video_preview_image || "/placeholder.svg"}
+                        src={previewImage || "/placeholder.svg"}
                         alt={ad.title || "Ad preview"}
                         fill
                         className="object-contain transition-opacity duration-300"
@@ -287,7 +288,7 @@ const AdDetails = memo(function AdDetails({ ad }: AdDetailsProps) {
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
                       <div className="text-center">
-                        <div className="w-16 h-16 bg-slate-200 rounded-full flex items-center justify-center mx-auto mb-3">
+                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
                           <Video className="h-8 w-8 text-slate-400" />
                         </div>
                         <p className="text-slate-500">No preview available</p>
@@ -306,23 +307,25 @@ const AdDetails = memo(function AdDetails({ ad }: AdDetailsProps) {
             </Card>
 
             {/* Video Controls */}
-            {isVideo && (
+            {(isVideo || ad.image_url) && ( // Кнопка завантаження для відео або зображення
               <div className="flex gap-4 mb-6">
-                <Button
-                  onClick={handleRestartVideo}
-                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl h-11 transition-all duration-200"
-                >
-                  <RotateCcw className="h-4 w-4 mr-2" />
-                  Restart Video
-                </Button>
+                {isVideo && (
+                  <Button
+                    onClick={handleRestartVideo}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl h-11 transition-all duration-200"
+                  >
+                    <RotateCcw className="h-4 w-4 mr-2" />
+                    Restart Video
+                  </Button>
+                )}
                 <Button
                   variant="outline"
                   onClick={handleDownload}
-                  disabled={isLoading}
+                  disabled={isLoading || (!ad.video_hd_url && !ad.image_url)}
                   className="border-blue-600 text-blue-600 hover:bg-blue-50 font-medium rounded-xl h-11 transition-all duration-200"
                 >
                   <Download className="h-4 w-4 mr-2" />
-                  {isLoading ? "Downloading..." : "Download Video"}
+                  {isLoading ? "Downloading..." : `Download ${isVideo ? "Video" : "Image"}`}
                 </Button>
               </div>
             )}
@@ -432,77 +435,55 @@ const AdDetails = memo(function AdDetails({ ad }: AdDetailsProps) {
             </Card>
 
             {/* Audio Script */}
-            <Card className="border-slate-200 rounded-2xl">
-              <CardContent className="p-0">
-                <div className="bg-blue-50 p-6 border-b border-slate-200">
-                  <h2 className="text-xl font-semibold text-slate-900">Audio Script</h2>
-                </div>
-                <div className="p-6">
-                  <p className="text-slate-700 leading-relaxed">
-                    How to hit enough protein for weight loss and gain muscle. In a week, you'll start to feel it. In
-                    two weeks, you'll start to see it. And in three weeks, others will see it. But you just have to get
-                    started. If you don't know where to start, check out Better Me's 28-Day High-Protein Meal Plan. This
-                    meal plan makes it easy to stay on track. Plus, all these dishes are quick to make and require
-                    minimal effort. Make today your Day One and tap to download Better Me now!
-                  </p>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Video Scenario */}
-            <Card className="border-slate-200 rounded-2xl">
-              <CardContent className="p-0">
-                <div className="bg-blue-50 p-6 border-b border-slate-200">
-                  <h2 className="text-xl font-semibold text-slate-900">Video Scenario</h2>
-                </div>
-                <div className="p-6">
-                  <div className="space-y-6">
-                    <div>
-                      <p className="font-medium text-slate-800 mb-2">00:00 – 00:02</p>
-                      <div className="space-y-1 text-slate-700 text-sm">
-                        <p>
-                          <span className="font-medium">Location:</span> Kitchen counter
-                        </p>
-                        <p>
-                          <span className="font-medium">Characters:</span> A hand
-                        </p>
-                        <p>
-                          <span className="font-medium">Actions:</span> A hand uses a spoon to scoop a spoonful of a
-                          fruit-and-yogurt-based meal.
-                        </p>
-                        <p>
-                          <span className="font-medium">Emotions:</span> None visible.
-                        </p>
-                        <p>
-                          <span className="font-medium">Camera:</span> Stationary, close-up view of the meal.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div>
-                      <p className="font-medium text-slate-800 mb-2">00:02 – 00:04</p>
-                      <div className="space-y-1 text-slate-700 text-sm">
-                        <p>
-                          <span className="font-medium">Location:</span> White background
-                        </p>
-                        <p>
-                          <span className="font-medium">Characters:</span> Text overlay
-                        </p>
-                        <p>
-                          <span className="font-medium">Actions:</span> Text appears showing meal plan details
-                        </p>
-                        <p>
-                          <span className="font-medium">Emotions:</span> Motivational tone
-                        </p>
-                        <p>
-                          <span className="font-medium">Camera:</span> Static text display
-                        </p>
-                      </div>
+            {ad.audio_script && (
+              <Card className="border-slate-200 rounded-2xl">
+                <CardContent className="p-0">
+                  <div className="bg-blue-50 p-6 border-b border-slate-200">
+                    <div className="flex items-center">
+                      <Mic className="h-5 w-5 text-blue-600 mr-2" />
+                      <h2 className="text-xl font-semibold text-slate-900">Audio Script</h2>
                     </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                  <div className="p-6">
+                    <p className="text-slate-700 leading-relaxed">{ad.audio_script}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Video Scenario */}
+            {ad.video_script && (
+              <Card className="border-slate-200 rounded-2xl">
+                <CardContent className="p-0">
+                  <div className="bg-blue-50 p-6 border-b border-slate-200">
+                    <div className="flex items-center">
+                      <Film className="h-5 w-5 text-blue-600 mr-2" />
+                      <h2 className="text-xl font-semibold text-slate-900">Video Scenario</h2>
+                    </div>
+                  </div>
+                  <div className="p-6">
+                    <p className="text-slate-700 leading-relaxed">{ad.video_script}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Image Description */}
+            {ad.image_description && (
+              <Card className="border-slate-200 rounded-2xl">
+                <CardContent className="p-0">
+                  <div className="bg-blue-50 p-6 border-b border-slate-200">
+                    <div className="flex items-center">
+                      <ImageIcon className="h-5 w-5 text-blue-600 mr-2" />
+                      <h2 className="text-xl font-semibold text-slate-900">Image Description</h2>
+                    </div>
+                  </div>
+                  <div className="p-6">
+                    <p className="text-slate-700 leading-relaxed">{ad.image_description}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
           </div>
         </div>
 
