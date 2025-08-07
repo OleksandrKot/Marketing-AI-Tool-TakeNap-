@@ -26,7 +26,12 @@ async function getAdById(id: string) {
       title,
       video_hd_url,
       video_preview_image,
-      publisher_platform
+      publisher_platform,
+      audio_script,
+      video_script,
+      meta_ad_url,
+      image_url,
+      image_description
     `)
     .eq("id", id)
     .single()

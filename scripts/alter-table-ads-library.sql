@@ -1,33 +1,19 @@
--- Створення таблиці ads_library
-CREATE TABLE IF NOT EXISTS ads_library (
-  id BIGSERIAL PRIMARY KEY,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  ad_archive_id TEXT UNIQUE,
-  page_name TEXT,
-  text TEXT,
-  caption TEXT,
-  cta_text TEXT,
-  cta_type TEXT,
-  display_format TEXT,
-  link_url TEXT,
-  title TEXT,
-  video_hd_url TEXT,
-  video_preview_image TEXT,
-  publisher_platform TEXT,
-  -- Нові поля
-  audio_script TEXT,
-  video_script TEXT,
-  meta_ad_url TEXT,
-  image_url TEXT,
-  image_description TEXT
-);
+-- Додавання нових колонок до існуючої таблиці ads_library
+-- Виконуйте ці команди, якщо таблиця ads_library вже існує,
+-- але не містить цих колонок.
 
--- Додавання індексів для швидкості
-CREATE INDEX IF NOT EXISTS idx_ads_library_page_name ON ads_library(page_name);
-CREATE INDEX IF NOT EXISTS idx_ads_library_created_at ON ads_library(created_at);
-CREATE INDEX IF NOT EXISTS idx_ads_library_display_format ON ads_library(display_format);
+ALTER TABLE ads_library
+ADD COLUMN IF NOT EXISTS audio_script TEXT,
+ADD COLUMN IF NOT EXISTS video_script TEXT,
+ADD COLUMN IF NOT EXISTS meta_ad_url TEXT,
+ADD COLUMN IF NOT EXISTS image_url TEXT,
+ADD COLUMN IF NOT EXISTS image_description TEXT;
 
--- Додавання тестових даних (оновлено з новими полями)
+-- Оновлення тестових даних для нових колонок
+-- Цей блок можна виконати після ALTER TABLE, щоб заповнити нові поля
+-- для вже існуючих тестових записів або додати нові записи з повними даними.
+-- Якщо ви вже маєте дані, які хочете зберегти, будьте обережні з INSERT.
+-- Цей INSERT ON CONFLICT DO NOTHING додасть нові записи, якщо ad_archive_id не існує.
 INSERT INTO ads_library (
   ad_archive_id,
   page_name,
@@ -104,4 +90,4 @@ INSERT INTO ads_library (
   'https://placeholder.svg?height=400&width=600&query=spotify-app-screenshot',
   'Screenshot of Spotify app interface with music playing.'
 )
-ON CONFLICT (ad_archive_id) DO NOTHING; -- Це запобігає помилкам, якщо ви запустите скрипт кілька разів
+ON CONFLICT (ad_archive_id) DO NOTHING;

@@ -9,7 +9,7 @@ import { StatsBar } from "@/components/stats-bar"
 import { ProfileDropdown } from "@/components/profile-dropdown"
 import { PageNavigation } from "@/components/page-navigation"
 import { getAds } from "./actions"
-import { Search, ChevronLeft, ChevronRight } from "lucide-react"
+import { Search, ChevronLeft, ChevronRight } from 'lucide-react'
 import { Button } from "@/components/ui/button"
 
 interface AdArchiveBrowserProps {
@@ -64,7 +64,7 @@ export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
         // Оновити список креативів через 10 секунд
         setTimeout(() => {
           window.location.reload()
-        }, 10000)
+        }, 30000) // Збільшено до 30 секунд
       } else {
         alert("Error processing link: " + result.error)
       }
