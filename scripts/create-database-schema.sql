@@ -2,7 +2,7 @@
 CREATE TABLE IF NOT EXISTS ads_library (
   id BIGSERIAL PRIMARY KEY,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-  ad_archive_id TEXT,
+  ad_archive_id TEXT UNIQUE, -- Додано UNIQUE для ad_archive_id
   page_name TEXT,
   text TEXT,
   caption TEXT,
@@ -35,7 +35,7 @@ INSERT INTO ads_library (
   video_hd_url,
   video_preview_image,
   publisher_platform
-) VALUES 
+) VALUES
 (
   '123456789',
   'BetterMe',
@@ -45,9 +45,9 @@ INSERT INTO ads_library (
   'LEARN_MORE',
   'VIDEO',
   'https://betterme.world',
-  'High Protein Meal Plan',
-  'https://example.com/video.mp4',
+  'https://placeholder.svg?height=400&width=600&query=video-placeholder',
   '/placeholder.svg?height=400&width=600',
+  'High Protein Meal Plan',
   'Facebook'
 ),
 (
@@ -59,9 +59,9 @@ INSERT INTO ads_library (
   'SHOP_NOW',
   'IMAGE',
   'https://nike.com',
-  'Nike Air Max Collection',
   NULL,
   '/placeholder.svg?height=400&width=600',
+  'Nike Air Max Collection',
   'Instagram'
 ),
 (
@@ -73,8 +73,9 @@ INSERT INTO ads_library (
   'SIGN_UP',
   'VIDEO',
   'https://spotify.com/premium',
-  'Spotify Premium',
-  'https://example.com/spotify-video.mp4',
+  'https://placeholder.svg?height=400&width=600&query=spotify-video',
   '/placeholder.svg?height=400&width=600',
+  'Spotify Premium',
   'Facebook'
-);
+)
+ON CONFLICT (ad_archive_id) DO NOTHING; -- Це запобігає помилкам, якщо ви запустите скрипт кілька разів
