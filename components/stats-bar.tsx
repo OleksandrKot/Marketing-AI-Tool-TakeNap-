@@ -32,11 +32,11 @@ export function StatsBar({ totalAds, videoAds, uniquePages, columnIndex }: Stats
             <Eye className="h-6 w-6 text-blue-600" />
           </div>
           <div className="flex-1">
-            <p className="text-sm text-slate-500 font-medium mb-2">Competitor Link</p>
+            <p className="text-sm text-slate-500 font-medium mb-2">Search Products</p>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
-                placeholder="Paste Meta Ad Library link..."
+                placeholder="Product name or Meta Ad Library link..."
                 value={competitorLink}
                 onChange={(e) => setCompetitorLink(e.target.value)}
                 className="border-slate-200 rounded-lg h-9 text-sm text-slate-700 placeholder:text-slate-500 bg-slate-50 pl-10"
@@ -47,7 +47,7 @@ export function StatsBar({ totalAds, videoAds, uniquePages, columnIndex }: Stats
       </Card>
     )
   } else if (columnIndex === 1) {
-    // Creative Format
+    // Creative Format only
     return (
       <Card className="border-slate-200 rounded-2xl hover:shadow-md transition-all duration-300 hover:border-slate-300">
         <CardContent className="p-6 flex items-center space-x-4">

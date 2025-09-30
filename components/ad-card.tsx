@@ -1,6 +1,6 @@
 "use client"
 
-import { Calendar, Video } from 'lucide-react'
+import { Calendar, Video, Tag } from "lucide-react"
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -26,6 +26,7 @@ export function AdCard({ ad }: AdCardProps) {
   const activeDays = Math.floor((today.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24))
 
   const handleViewDetails = () => {
+    // Переходимо на реальну сторінку деталей з ID креативу
     router.push(`/creative/${ad.id}`)
   }
 
@@ -34,8 +35,15 @@ export function AdCard({ ad }: AdCardProps) {
     router.prefetch(`/creative/${ad.id}`)
   }
 
-  // Використовуємо ad.image_url для прев'ю, якщо доступно, інакше video_preview_image
-  const previewImage = ad.image_url || ad.video_preview_image || "/placeholder.svg"
+  // Логіка для preview картинки:
+  // - Для відео: використовуємо video_preview_image_url або image_url як fallback
+  // - Для статичних: використовуємо image_url (сам креатив)
+  const previewImage = isVideo
+    ? ad.video_preview_image_url || ad.image_url || "/placeholder.svg"
+    : ad.image_url || "/placeholder.svg"
+
+  // Безпечна перевірка тегів
+  const tags = Array.isArray(ad.tags) ? ad.tags : []
 
   return (
     <Card
@@ -56,7 +64,7 @@ export function AdCard({ ad }: AdCardProps) {
 
       <CardContent className="p-6 pt-0 flex-grow">
         <div className="relative aspect-video mb-3 bg-slate-100 rounded-xl overflow-hidden group-hover:shadow-md transition-shadow duration-300">
-          {previewImage ? (
+          {previewImage && previewImage !== "/placeholder.svg" ? (
             <div className="relative w-full h-full">
               <Image
                 src={previewImage || "/placeholder.svg"}
@@ -87,15 +95,24 @@ export function AdCard({ ad }: AdCardProps) {
 
         <p className="text-sm text-slate-600 line-clamp-3 mb-3 leading-relaxed">{truncateText(ad.text || "", 120)}</p>
 
-        {/* Додаємо відображення нових полів для тестування */}
-        {ad.audio_script && (
-          <p className="text-xs text-slate-500 mt-1">Audio: {truncateText(ad.audio_script, 50)}</p>
-        )}
-        {ad.video_script && (
-          <p className="text-xs text-slate-500 mt-1">Video Script: {truncateText(ad.video_script, 50)}</p>
-        )}
-        {ad.image_description && (
-          <p className="text-xs text-slate-500 mt-1">Image Desc: {truncateText(ad.image_description, 50)}</p>
+        {/* Tags Display - безпечна перевірка */}
+        {tags.length > 0 && (
+          <div className="flex flex-wrap gap-1 mb-3">
+            {tags.slice(0, 3).map((tag) => (
+              <Badge
+                key={tag}
+                className="bg-purple-50 text-purple-700 border-purple-200 font-medium px-2 py-1 rounded-full border text-xs"
+              >
+                <Tag className="h-3 w-3 mr-1" />
+                {tag}
+              </Badge>
+            ))}
+            {tags.length > 3 && (
+              <Badge className="bg-slate-100 text-slate-600 border-slate-200 font-medium px-2 py-1 rounded-full border text-xs">
+                +{tags.length - 3}
+              </Badge>
+            )}
+          </div>
         )}
 
         <div className="flex items-center justify-between text-xs text-slate-400 font-medium mt-3">
