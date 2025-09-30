@@ -8,9 +8,13 @@ import { ViewToggle } from "@/components/view-toggle"
 import { StatsBar } from "@/components/stats-bar"
 import { ProfileDropdown } from "@/components/profile-dropdown"
 import { PageNavigation } from "@/components/page-navigation"
+import { AINewsModal } from "@/components/ai-news-modal"
+import { CreativeTypeSelector } from "@/components/creative-type-selector"
+import { detectProductFromUrl } from "@/lib/product-webhooks"
 import { getAds } from "./actions"
-import { Search, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, ChevronLeft, ChevronRight, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ProductFilterIndicator } from "@/components/product-filter-indicator"
 
 interface AdArchiveBrowserProps {
   initialAds: Ad[]
@@ -22,13 +26,33 @@ export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
   const [viewMode, setViewMode] = useState<ViewMode>("grid")
   const [isLoading, setIsLoading] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
-  const totalPages = 20 // This would be calculated based on total ads and items per page
-  const totalAds = 100 // This would come from your data source
+  const totalPages = 20
+  const totalAds = 100
+  const [productFilter, setProductFilter] = useState<string>("")
+  const [selectedTags, setSelectedTags] = useState<string[]>([])
+  const [showAINewsModal, setShowAINewsModal] = useState(false)
+  const [processingMessage, setProcessingMessage] = useState("")
+
+  // 🎯 Стан для типу креативу
+  const [selectedCreativeType, setSelectedCreativeType] = useState<"all" | "video" | "image">("all")
+
+  // Отримуємо всі доступні теги з креативів
+  const availableTags = Array.from(
+    new Set(ads.filter((ad) => Array.isArray(ad.tags) && ad.tags.length > 0).flatMap((ad) => ad.tags || [])),
+  ).sort()
+
+  // 🎯 Фільтруємо креативи по типу
+  const filteredAdsByType = ads.filter((ad) => {
+    if (selectedCreativeType === "all") return true
+    if (selectedCreativeType === "video") return ad.display_format === "VIDEO"
+    if (selectedCreativeType === "image") return ad.display_format === "IMAGE"
+    return true
+  })
 
   const handleFilterChange = async (filters: FilterOptions) => {
     setIsLoading(true)
     try {
-      const filteredAds = await getAds(filters.search, filters.page, filters.date)
+      const filteredAds = await getAds(filters.search, filters.page, filters.date, filters.tags)
       setAds(filteredAds)
     } catch (error) {
       console.error("Error filtering ads:", error)
@@ -37,53 +61,127 @@ export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
     }
   }
 
-  const handleSearch = async () => {
-    const competitorLinkInput = document.querySelector('input[placeholder*="Meta Ad Library"]') as HTMLInputElement
-    const metaLink = competitorLinkInput?.value
+  const handleTagsChange = async (tags: string[]) => {
+    setSelectedTags(tags)
+    setIsLoading(true)
+    try {
+      const filteredAds = await getAds(productFilter || "", null, null, tags)
+      setAds(filteredAds)
+    } catch (error) {
+      console.error("Error filtering by tags:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
-    if (!metaLink || !metaLink.includes("facebook.com/ads/library")) {
-      alert("Please enter a valid Meta Ad Library link")
+  const handleSearch = async () => {
+    const competitorLinkInput = document.querySelector('input[placeholder*="Product name"]') as HTMLInputElement
+    const searchValue = competitorLinkInput?.value?.trim()
+
+    if (!searchValue) {
+      alert("Please enter a product name or Meta Ad Library link")
       return
     }
 
-    setIsLoading(true)
+    const isMetaLink = searchValue.includes("facebook.com/ads/library")
 
-    try {
-      const response = await fetch("/api/parse-meta-link", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ metaLink }),
-      })
+    if (isMetaLink) {
+      // 🔍 Спочатку визначаємо продукт
+      const { productKey, productName } = detectProductFromUrl(searchValue)
 
-      const result = await response.json()
-
-      if (result.success) {
-        alert("Link sent for processing! New ads will appear shortly.")
-        // Оновити список креативів через 10 секунд
-        setTimeout(() => {
-          window.location.reload()
-        }, 30000) // Збільшено до 30 секунд
-      } else {
-        alert("Error processing link: " + result.error)
+      if (!productKey || !productName) {
+        alert(
+          "⚠️ Unknown product!\n\nCould not identify the product from this Meta Ad Library link.\n\nPlease make sure the link contains a valid page ID.",
+        )
+        return
       }
-    } catch (error) {
-      alert("Error: " + error.message)
-    } finally {
-      setIsLoading(false)
+
+      // 🎯 Показуємо модалку з інформацією про продукт
+      const typeMessages = {
+        all: `Analyzing ${productName} ads and extracting all creatives (both video and static)...`,
+        video: `Analyzing ${productName} ads and extracting VIDEO creatives only...`,
+        image: `Analyzing ${productName} ads and extracting STATIC creatives only...`,
+      }
+
+      setProcessingMessage(typeMessages[selectedCreativeType])
+      setShowAINewsModal(true)
+      setIsLoading(true)
+
+      try {
+        const response = await fetch("/api/parse-meta-link", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            metaLink: searchValue,
+            creativeType: selectedCreativeType,
+          }),
+        })
+
+        const result = await response.json()
+
+        if (result.success) {
+          // 🎯 Повідомлення про успіх з уточненням продукту та типу
+          const successMessages = {
+            all: `Successfully processed ${result.productName}! New ads (video & static) will appear shortly.`,
+            video: `Successfully processed ${result.productName}! New video ads will appear shortly.`,
+            image: `Successfully processed ${result.productName}! New static ads will appear shortly.`,
+          }
+
+          setProcessingMessage(successMessages[selectedCreativeType])
+
+          setTimeout(() => {
+            setShowAINewsModal(false)
+            window.location.reload()
+          }, 3000)
+        } else {
+          setShowAINewsModal(false)
+          alert(`Error processing link:\n\n${result.message || result.error}`)
+        }
+      } catch (error) {
+        setShowAINewsModal(false)
+        alert("Error: " + error.message)
+      } finally {
+        setIsLoading(false)
+      }
+    } else {
+      // Це назва продукту - фільтруємо локально
+      setProductFilter(searchValue)
+      setIsLoading(true)
+
+      try {
+        const filteredAds = await getAds(searchValue, null, null, selectedTags)
+        setAds(filteredAds)
+      } catch (error) {
+        console.error("Error filtering ads:", error)
+      } finally {
+        setIsLoading(false)
+      }
     }
   }
 
   const handlePageChange = (page: number) => {
     if (page >= 1 && page <= totalPages) {
       setCurrentPage(page)
-      // Add logic to fetch ads for the specific page
       console.log(`Navigating to page ${page}`)
     }
   }
 
-  const videoAds = ads.filter((ad) => ad.display_format === "VIDEO").length
+  const videoAds = filteredAdsByType.filter((ad) => ad.display_format === "VIDEO").length
+
+  const clearProductFilter = async () => {
+    setProductFilter("")
+    setIsLoading(true)
+    try {
+      const allAds = await getAds("", null, null, selectedTags)
+      setAds(allAds)
+    } catch (error) {
+      console.error("Error loading ads:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -102,19 +200,39 @@ export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
           </div>
         </div>
 
-        {/* Top row - Creative Format, Date of Creation, and Competitor Link */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-4">
+        {/* Product Filter Indicator */}
+        {productFilter && <ProductFilterIndicator productName={productFilter} onClear={clearProductFilter} />}
+
+        {/* Search Block with Creative Type Selector */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           {/* Competitor Link */}
-          <StatsBar totalAds={ads.length} videoAds={videoAds} uniquePages={pages.length} columnIndex={0} />
+          <StatsBar
+            totalAds={filteredAdsByType.length}
+            videoAds={videoAds}
+            uniquePages={pages.length}
+            columnIndex={0}
+          />
 
-          {/* Date of Creation */}
-          <StatsBar totalAds={ads.length} videoAds={videoAds} uniquePages={pages.length} columnIndex={2} />
-
-          {/* Creative Format */}
-          <StatsBar totalAds={ads.length} videoAds={videoAds} uniquePages={pages.length} columnIndex={1} />
+          {/* Creative Type Selector - тепер у вигляді карточки */}
+          <CreativeTypeSelector selectedType={selectedCreativeType} onTypeChange={setSelectedCreativeType} />
         </div>
 
-        {/* Bottom row - Search button and Filters section */}
+        {/* ℹ️ Info Alert */}
+        <div className="mb-6 bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start space-x-3">
+          <AlertCircle className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm text-blue-900 font-medium">How it works:</p>
+            <p className="text-sm text-blue-700 mt-1">
+              1. Paste a <strong>Meta Ad Library link</strong> (we'll detect the product automatically)
+              <br />
+              2. Choose <strong>creative type</strong> (All / Video / Static)
+              <br />
+              3. Click <strong>Search</strong> to start processing
+            </p>
+          </div>
+        </div>
+
+        {/* Search Button + Filters */}
         <div className="mb-8 grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
           {/* Search Button */}
           <div className="flex justify-center">
@@ -123,22 +241,35 @@ export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
               className="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-all duration-200 hover:shadow-md hover:shadow-blue-500/25 h-9 w-full flex items-center justify-center"
             >
               <Search className="h-4 w-4 mr-2" />
-              Search
+              {selectedCreativeType === "all"
+                ? "Search All Types"
+                : selectedCreativeType === "video"
+                  ? "Search Videos Only"
+                  : "Search Static Only"}
             </Button>
           </div>
 
           {/* Filters section */}
           <div className="md:col-span-2 flex justify-start w-full">
-            <FilterBar onFilterChange={handleFilterChange} pages={pages} className="w-full" />
+            <FilterBar
+              onFilterChange={handleFilterChange}
+              pages={pages}
+              className="w-full"
+              availableTags={availableTags}
+              selectedTags={selectedTags}
+              onTagsChange={handleTagsChange}
+            />
           </div>
         </div>
 
         {/* Bottom row - Stats, Pagination and View Toggle */}
         <div className="flex items-center justify-between w-full gap-4 mb-8">
           <p className="text-slate-500 text-sm font-medium">
-            Showing <span className="font-semibold text-slate-700">{ads.length}</span> of{" "}
-            <span className="font-semibold text-slate-700">{ads.length}</span> ads{" "}
-            <span className="text-slate-400">({totalAds} ads total)</span>
+            Showing <span className="font-semibold text-slate-700">{filteredAdsByType.length}</span> of{" "}
+            <span className="font-semibold text-slate-700">{totalAds}</span> ads
+            {selectedCreativeType !== "all" && <span className="text-blue-600"> ({selectedCreativeType} only)</span>}
+            {productFilter && <span className="text-blue-600"> for "{productFilter}"</span>}
+            {selectedTags.length > 0 && <span className="text-purple-600"> with tags: {selectedTags.join(", ")}</span>}
           </p>
 
           <div className="flex items-center gap-4">
@@ -173,7 +304,7 @@ export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
         </div>
 
         {/* Results section */}
-        {isLoading ? (
+        {isLoading && !showAINewsModal ? (
           <div className="flex justify-center items-center h-64">
             <div className="relative">
               <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
@@ -186,16 +317,18 @@ export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
               viewMode === "grid" ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" : "grid-cols-1"
             }`}
           >
-            {ads.map((ad) => (
+            {filteredAdsByType.map((ad) => (
               <AdCard key={ad.id} ad={ad} />
             ))}
-            {ads.length === 0 && (
+            {filteredAdsByType.length === 0 && (
               <div className="col-span-full text-center py-20">
                 <div className="max-w-md mx-auto">
                   <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
                     <Search className="h-8 w-8 text-slate-400" />
                   </div>
-                  <h3 className="text-lg font-semibold text-slate-900 mb-2">No ads found</h3>
+                  <h3 className="text-lg font-semibold text-slate-900 mb-2">
+                    No {selectedCreativeType === "all" ? "" : selectedCreativeType} ads found
+                  </h3>
                   <p className="text-slate-500">
                     Try adjusting your search criteria or filters to find what you're looking for.
                   </p>
@@ -204,6 +337,13 @@ export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
             )}
           </div>
         )}
+
+        {/* AI News Modal */}
+        <AINewsModal
+          isOpen={showAINewsModal}
+          onClose={() => setShowAINewsModal(false)}
+          processingMessage={processingMessage}
+        />
       </div>
     </div>
   )
