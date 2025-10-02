@@ -75,8 +75,7 @@ export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
   }
 
   const handleSearch = async () => {
-    const competitorLinkInput = document.querySelector('input[placeholder*="Product name"]') as HTMLInputElement
-    const searchValue = competitorLinkInput?.value?.trim()
+    const searchValue = productFilter.trim()
 
     if (!searchValue) {
       alert("Please enter a product name or Meta Ad Library link")
@@ -86,21 +85,11 @@ export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
     const isMetaLink = searchValue.includes("facebook.com/ads/library")
 
     if (isMetaLink) {
-      // 🔍 Спочатку визначаємо продукт
-      const { productKey, productName } = detectProductFromUrl(searchValue)
-
-      if (!productKey || !productName) {
-        alert(
-          "⚠️ Unknown product!\n\nCould not identify the product from this Meta Ad Library link.\n\nPlease make sure the link contains a valid page ID.",
-        )
-        return
-      }
-
-      // 🎯 Показуємо модалку з інформацією про продукт
+      // 🎯 Показуємо модалку з інформацією без прив'язки до продукту
       const typeMessages = {
-        all: `Analyzing ${productName} ads and extracting all creatives (both video and static)...`,
-        video: `Analyzing ${productName} ads and extracting VIDEO creatives only...`,
-        image: `Analyzing ${productName} ads and extracting STATIC creatives only...`,
+        all: `Analyzing link and extracting all creatives (video & static)...`,
+        video: `Analyzing link and extracting VIDEO creatives only...`,
+        image: `Analyzing link and extracting STATIC creatives only...`,
       }
 
       setProcessingMessage(typeMessages[selectedCreativeType])
@@ -122,11 +111,11 @@ export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
         const result = await response.json()
 
         if (result.success) {
-          // 🎯 Повідомлення про успіх з уточненням продукту та типу
+          // 🎯 Повідомлення про успіх без залежності від назви продукту
           const successMessages = {
-            all: `Successfully processed ${result.productName}! New ads (video & static) will appear shortly.`,
-            video: `Successfully processed ${result.productName}! New video ads will appear shortly.`,
-            image: `Successfully processed ${result.productName}! New static ads will appear shortly.`,
+            all: `Successfully processed link! New ads (video & static) will appear shortly.`,
+            video: `Successfully processed link! New video ads will appear shortly.`,
+            image: `Successfully processed link! New static ads will appear shortly.`,
           }
 
           setProcessingMessage(successMessages[selectedCreativeType])
@@ -139,9 +128,10 @@ export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
           setShowAINewsModal(false)
           alert(`Error processing link:\n\n${result.message || result.error}`)
         }
-      } catch (error) {
+      } catch (error: unknown) {
         setShowAINewsModal(false)
-        alert("Error: " + error.message)
+        const message = error instanceof Error ? error.message : "Unknown error"
+        alert("Error: " + message)
       } finally {
         setIsLoading(false)
       }
@@ -211,6 +201,8 @@ export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
             videoAds={videoAds}
             uniquePages={pages.length}
             columnIndex={0}
+            value={productFilter}
+            onChange={(v) => setProductFilter(v)}
           />
 
           {/* Creative Type Selector - тепер у вигляді карточки */}

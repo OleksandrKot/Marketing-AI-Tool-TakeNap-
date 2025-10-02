@@ -15,33 +15,31 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid creative type" }, { status: 400 })
     }
 
-    // 🔍 Визначаємо продукт по URL
+    // 🔍 Визначаємо продукт по URL (необов'язково)
     const { productKey, productName, pageId } = detectProductFromUrl(metaLink)
 
-    if (!productKey) {
-      return NextResponse.json(
-        {
-          error: "Unknown product",
-          message: `Could not identify product from URL. ${pageId ? `Page ID found: ${pageId}` : "No page ID found"}`,
-        },
-        { status: 400 },
-      )
+    // 🎯 Обираємо webhook: перевага загальному (щоб не залежати від page_id)
+    const envDefault = process.env.MAKE_WEBHOOK_ALL
+    const productWebhook = productKey ? getWebhookUrl(productKey, creativeType) : null
+    // Якщо немає env — підстрахуємось існуючим Replika webhook'ом
+    const replikaFallbackMap: Record<string, string | undefined> = {
+      all: (await import("@/lib/product-webhooks")).PRODUCT_WEBHOOKS.replika?.webhooks.all,
+      video: (await import("@/lib/product-webhooks")).PRODUCT_WEBHOOKS.replika?.webhooks.video,
+      image: (await import("@/lib/product-webhooks")).PRODUCT_WEBHOOKS.replika?.webhooks.image,
     }
-
-    // 🎯 Вибираємо правильний webhook URL
-    const webhookUrl = getWebhookUrl(productKey, creativeType)
+    const webhookUrl = envDefault || productWebhook || replikaFallbackMap[creativeType]
 
     if (!webhookUrl) {
       return NextResponse.json(
         {
           error: "Webhook not configured",
-          message: `No webhook configured for ${productName} (${creativeType})`,
+          message: `No webhook configured for ${productName || "unknown product"} (${creativeType}). Provide env MAKE_WEBHOOK_ALL/VIDEO/IMAGE or add a mapping.`,
         },
         { status: 500 },
       )
     }
 
-    console.log(`🎯 Product: ${productName} (${productKey})`)
+    console.log(`🎯 Product: ${productName || "Unknown"} (${productKey || "-"})`)
     console.log(`🎯 Creative Type: ${creativeType}`)
     console.log(`🎯 Webhook URL: ${webhookUrl}`)
 
@@ -76,8 +74,8 @@ export async function POST(request: NextRequest) {
       status: "processing",
       webhookUrl: webhookUrl, // Для дебагу (можна прибрати в продакшені)
     })
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error:", error)
-    return NextResponse.json({ error: "Internal server error", details: error.message }, { status: 500 })
+    return NextResponse.json({ error: "Internal server error", details: error?.message }, { status: 500 })
   }
 }
