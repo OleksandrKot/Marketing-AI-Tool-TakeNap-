@@ -11,9 +11,12 @@ interface StatsBarProps {
   videoAds: number
   uniquePages: number
   columnIndex: number // 0 for Competitor Link, 1 for Creative Format, 2 for Date of Creation
+  // Optional controlled input props for the competitor link
+  value?: string
+  onChange?: (value: string) => void
 }
 
-export function StatsBar({ totalAds, videoAds, uniquePages, columnIndex }: StatsBarProps) {
+export function StatsBar({ totalAds, videoAds, uniquePages, columnIndex, value, onChange }: StatsBarProps) {
   const [competitorLink, setCompetitorLink] = useState("")
   const [selectedFormat, setSelectedFormat] = useState<string | null>(null)
   const [selectedDateRange, setSelectedDateRange] = useState<string | null>(null)
@@ -37,8 +40,15 @@ export function StatsBar({ totalAds, videoAds, uniquePages, columnIndex }: Stats
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
                 placeholder="Product name or Meta Ad Library link..."
-                value={competitorLink}
-                onChange={(e) => setCompetitorLink(e.target.value)}
+                value={value !== undefined ? value : competitorLink}
+                onChange={(e) => {
+                  const v = e.target.value
+                  if (onChange) {
+                    onChange(v)
+                  } else {
+                    setCompetitorLink(v)
+                  }
+                }}
                 className="border-slate-200 rounded-lg h-9 text-sm text-slate-700 placeholder:text-slate-500 bg-slate-50 pl-10"
               />
             </div>
@@ -70,6 +80,8 @@ export function StatsBar({ totalAds, videoAds, uniquePages, columnIndex }: Stats
                 <div className="flex items-center space-x-2">
                   {selectedFormat && (
                     <button
+                      aria-label="Clear selected format"
+                      title="Clear selected format"
                       onClick={(e) => {
                         e.stopPropagation()
                         setSelectedFormat(null)
