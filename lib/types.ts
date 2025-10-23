@@ -10,7 +10,7 @@ export interface Ad {
   display_format: string
   link_url: string
   title: string
-  video_hd_url: string
+  video_hd_url: string | null
   video_preview_image_url: string // Змінено з video_preview_image
   publisher_platform: string
   // Нові поля з вашої таблиці
@@ -19,8 +19,12 @@ export interface Ad {
   meta_ad_url: string | null
   image_url: string | null
   image_description: string | null
-  new_scenario: string | null // Додаємо нове поле для JSON сценаріїв
-  tags: string[] | null // Додаємо поле для тегів
+  new_scenario?: string | null // Додаємо нове поле для JSON сценаріїв
+  tags?: string[] | null // Додаємо поле для тегів
+  // Дублікати та додаткові поля
+  duplicates_ad_text?: string | null
+  duplicates_links?: string | null
+  duplicates_preview_image?: string | null
 }
 
 export type ViewMode = "grid" | "list"

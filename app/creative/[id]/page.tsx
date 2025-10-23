@@ -33,7 +33,10 @@ async function getAdById(id: string) {
         meta_ad_url,
         image_url,
         image_description,
-        new_scenario
+        new_scenario,
+        duplicates_ad_text,
+        duplicates_links,
+        duplicates_preview_image
       `)
       .eq("id", id)
       .single()
