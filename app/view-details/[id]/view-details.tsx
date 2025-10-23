@@ -106,7 +106,7 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
     }
   }, [])
 
-  const previewImage = ad.image_url || ad.video_preview_image || "/placeholder.svg"
+  const previewImage = ad.image_url || ad.video_preview_image_url || "/placeholder.svg"
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -248,6 +248,30 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                   </div>
                   <div className="p-6">
                     <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{ad.text}</p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Duplicate Ad Text */}
+            {ad.duplicates_ad_text && (
+              <Card className="border-slate-200 rounded-2xl">
+                <CardContent className="p-0">
+                  <div className="bg-blue-50 p-6 border-b border-slate-200">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-xl font-semibold text-slate-900">Duplicate Ad Text</h2>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleCopyToClipboard(ad.duplicates_ad_text!, "duplicates_ad_text")}
+                        className="text-slate-500 hover:text-slate-700"
+                      >
+                        {copiedField === "duplicates_ad_text" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="p-6">
+                    <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{ad.duplicates_ad_text}</p>
                   </div>
                 </CardContent>
               </Card>
@@ -401,7 +425,7 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleCopyToClipboard(ad.link_url, "link_url")}
+                            onClick={() => handleCopyToClipboard(ad.link_url!, "link_url")}
                             className="text-slate-500 hover:text-slate-700"
                           >
                             {copiedField === "link_url" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
@@ -425,7 +449,7 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleCopyToClipboard(ad.meta_ad_url, "meta_ad_url")}
+                            onClick={() => handleCopyToClipboard(ad.meta_ad_url!, "meta_ad_url")}
                             className="text-slate-500 hover:text-slate-700"
                           >
                             {copiedField === "meta_ad_url" ? (
@@ -455,7 +479,7 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleCopyToClipboard(ad.audio_script, "audio_script")}
+                        onClick={() => handleCopyToClipboard(ad.audio_script!, "audio_script")}
                         className="text-slate-500 hover:text-slate-700"
                       >
                         {copiedField === "audio_script" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
@@ -482,7 +506,7 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleCopyToClipboard(ad.video_script, "video_script")}
+                        onClick={() => handleCopyToClipboard(ad.video_script!, "video_script")}
                         className="text-slate-500 hover:text-slate-700"
                       >
                         {copiedField === "video_script" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
@@ -509,7 +533,7 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleCopyToClipboard(ad.image_description, "image_description")}
+                        onClick={() => handleCopyToClipboard(ad.image_description!, "image_description")}
                         className="text-slate-500 hover:text-slate-700"
                       >
                         {copiedField === "image_description" ? (

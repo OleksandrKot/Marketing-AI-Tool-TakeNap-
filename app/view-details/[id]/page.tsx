@@ -24,13 +24,16 @@ async function getAdById(id: string) {
       link_url,
       title,
       video_hd_url,
-      video_preview_image,
+      video_preview_image_url,
       publisher_platform,
       audio_script,
       video_script,
       meta_ad_url,
       image_url,
-      image_description
+      image_description,
+      duplicates_ad_text,
+      duplicates_links,
+      duplicates_preview_image
     `)
     .eq("id", id)
     .single()
@@ -60,7 +63,7 @@ function getFakeAdById(id: string) {
       link_url: "https://lovescape.app/download",
       title: "Find Your Perfect Match with Lovescape AI",
       video_hd_url: "/generic-dating-app-video.png",
-      video_preview_image: "/lovescape-app-preview-couple-smiling.png",
+      video_preview_image_url: "/lovescape-app-preview-couple-smiling.png",
       publisher_platform: "Facebook",
       audio_script: `[Upbeat romantic music starts]
 
@@ -117,6 +120,11 @@ Narrator: "Lovescape. Where love finds you."
 The lighting is natural and golden, coming through large windows in the background. The café has a cozy, modern aesthetic with exposed brick walls and hanging plants. In the bottom right corner, there's a subtle Lovescape app logo overlay.
 
 The overall mood is authentic, romantic, and aspirational - showing the kind of meaningful connection that the app promises to deliver. The couple appears relaxed and genuinely happy, not posed or artificial.`,
+      new_scenario: null,
+      tags: null,
+      duplicates_ad_text: null,
+      duplicates_links: null,
+      duplicates_preview_image: null,
     },
   }
 
@@ -140,7 +148,7 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
     openGraph: {
       title: ad.title || "Creative",
       description: ad.text?.substring(0, 160),
-      images: ad.video_preview_image ? [ad.video_preview_image] : [],
+      images: ad.video_preview_image_url ? [ad.video_preview_image_url] : [],
     },
   }
 }

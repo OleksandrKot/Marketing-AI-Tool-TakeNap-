@@ -67,6 +67,8 @@ export function ContentTab({ ad }: ContentTabProps) {
     ? ad.video_preview_image_url || ad.image_url || "/placeholder.svg"
     : ad.image_url || "/placeholder.svg"
 
+  const imageArray = ad.duplicates_preview_image?.split(";") || [];
+  
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       {/* Left Column - Media & Content */}
@@ -153,6 +155,29 @@ export function ContentTab({ ad }: ContentTabProps) {
           )}
         </div>
 
+        {/* Other duplicates gallery */}
+        {ad.duplicates_preview_image && (
+          <Card className="border-slate-200 rounded-2xl">
+            <CardContent className="p-6">
+              <h2 className="text-xl font-semibold text-slate-900 mb-4">Other Duplicates</h2>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {imageArray.map((url, index) => (
+                  <div key={index} className="space-y-2">
+                    <div className="relative aspect-video bg-slate-100 rounded-lg overflow-hidden">
+                      <img
+                        src={url.trim()}
+                        alt={`image-${index}`}
+                        className="w-full h-full object-cover"
+                      />
+                    </div>
+                    <p className="text-sm text-slate-700 line-clamp-2">Duplicate {index + 1}</p>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Ad Text */}
         {ad.text && (
           <Card className="border-slate-200 rounded-2xl">
@@ -172,6 +197,30 @@ export function ContentTab({ ad }: ContentTabProps) {
               </div>
               <div className="p-6">
                 <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{ad.text}</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Duplicate Ad Text */}
+        {ad.duplicates_ad_text && (
+          <Card className="border-slate-200 rounded-2xl">
+            <CardContent className="p-0">
+              <div className="bg-blue-50 p-6 border-b border-slate-200">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-semibold text-slate-900">Duplicate Ad Text</h2>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleCopyToClipboard(ad.duplicates_ad_text!, "duplicates_ad_text")}
+                    className="text-slate-500 hover:text-slate-700"
+                  >
+                    {copiedField === "duplicates_ad_text" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                  </Button>
+                </div>
+              </div>
+              <div className="p-6">
+                <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{ad.duplicates_ad_text}</p>
               </div>
             </CardContent>
           </Card>
@@ -238,7 +287,7 @@ export function ContentTab({ ad }: ContentTabProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleCopyToClipboard(ad.audio_script, "audio_script")}
+                    onClick={() => handleCopyToClipboard(ad.audio_script!, "audio_script")}
                     className="text-slate-500 hover:text-slate-700"
                   >
                     {copiedField === "audio_script" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
@@ -265,7 +314,7 @@ export function ContentTab({ ad }: ContentTabProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleCopyToClipboard(ad.video_script, "video_script")}
+                    onClick={() => handleCopyToClipboard(ad.video_script!, "video_script")}
                     className="text-slate-500 hover:text-slate-700"
                   >
                     {copiedField === "video_script" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
@@ -292,7 +341,7 @@ export function ContentTab({ ad }: ContentTabProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleCopyToClipboard(ad.image_description, "image_description")}
+                    onClick={() => handleCopyToClipboard(ad.image_description!, "image_description")}
                     className="text-slate-500 hover:text-slate-700"
                   >
                     {copiedField === "image_description" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
