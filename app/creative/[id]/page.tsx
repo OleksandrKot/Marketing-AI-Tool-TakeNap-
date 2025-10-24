@@ -4,6 +4,7 @@ import { notFound } from "next/navigation"
 import { Suspense } from "react"
 import { AdDetailsSkeleton } from "./ad-details-skeleton"
 import type { Metadata } from "next"
+import type { Ad } from "@/lib/types"
 
 // Кешування даних креативу
 async function getAdById(id: string) {
@@ -52,6 +53,52 @@ async function getAdById(id: string) {
     console.error("Database connection error:", error)
     // Якщо проблема з підключенням, повертаємо фейкові дані
     return getFakeAdById(id)
+  }
+}
+
+// Функція для отримання related ads по ID
+async function getRelatedAdsByIds(ids: string[]): Promise<Ad[] | null> {
+  try {
+    const supabase = createServerSupabaseClient()
+
+    const { data, error } = await supabase
+      .from("ads_library")
+      .select(`
+        id,
+        created_at,
+        ad_archive_id,
+        page_name,
+        text,
+        caption,
+        cta_text,
+        cta_type,
+        display_format,
+        link_url,
+        title,
+        video_hd_url,
+        video_preview_image_url,
+        publisher_platform,
+        audio_script,
+        video_script,
+        meta_ad_url,
+        image_url,
+        image_description,
+        new_scenario,
+        duplicates_ad_text,
+        duplicates_links,
+        duplicates_preview_image
+      `)
+      .in("id", ids)
+
+    if (error) {
+      console.error("Error fetching related ads:", error)
+      return null
+    }
+
+    return data as Ad[] | null
+  } catch (error) {
+    console.error("Database connection error for related ads:", error)
+    return null
   }
 }
 
@@ -235,18 +282,28 @@ interface CreativePageProps {
   params: {
     id: string
   }
+  searchParams: {
+    related?: string
+  }
 }
 
-export default async function CreativePage({ params }: CreativePageProps) {
+export default async function CreativePage({ params, searchParams }: CreativePageProps) {
   const ad = await getAdById(params.id)
 
   if (!ad) {
     notFound()
   }
 
+  // Отримуємо related ads якщо є параметр related в URL
+  let relatedAds = null
+  if (searchParams.related) {
+    const relatedIds = searchParams.related.split(',')
+    relatedAds = await getRelatedAdsByIds(relatedIds)
+  }
+
   return (
     <Suspense fallback={<AdDetailsSkeleton />}>
-      <AdDetails ad={ad} />
+      <AdDetails ad={ad} relatedAds={relatedAds} />
     </Suspense>
   )
 }

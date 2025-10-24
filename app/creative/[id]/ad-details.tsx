@@ -19,9 +19,10 @@ const ShareModal = dynamic(() => import("./share-modal"), {
 
 interface AdDetailsProps {
   ad: Ad
+  relatedAds?: Ad[] | null
 }
 
-const AdDetails = memo(function AdDetails({ ad }: AdDetailsProps) {
+const AdDetails = memo(function AdDetails({ ad, relatedAds }: AdDetailsProps) {
   const router = useRouter()
   const [isLiked, setIsLiked] = useState(false)
   const [showShareModal, setShowShareModal] = useState(false)
@@ -140,7 +141,7 @@ const AdDetails = memo(function AdDetails({ ad }: AdDetailsProps) {
         <CreativeTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
         {/* Tab Content */}
-        {activeTab === "content" && <ContentTab ad={ad} />}
+        {activeTab === "content" && <ContentTab ad={ad} relatedAds={relatedAds} />}
         {activeTab === "info" && <InfoTab ad={ad} />}
         {activeTab === "adaptations" && <AdaptationsTab ad={ad} />}
 
