@@ -173,6 +173,61 @@ export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
     }
   }
 
+  interface GroupedAds {
+    [imageKey: string]: Ad[]
+  }
+
+  // =============================================================================
+  // Group ads by image and text
+  
+  // Function to get grouping key based on image and text
+  const getGroupingKey = (ad: Ad): string => {
+    // Створюємо ключ на основі image_url та text
+    const imageKey = ad.image_url ? getImageKey(ad.image_url) : 'no-image';
+    const textKey = ad.text ? ad.text.substring(0, 100).replace(/\s+/g, ' ').trim() : 'no-text';
+    
+    // Комбінуємо image та text ключі
+    return `${imageKey}|${textKey}`;
+  };
+
+  // Function to get image key for grouping
+  const getImageKey = (imageUrl: string): string => {
+    // Extract the base URL before query parameters
+    try {
+        const url = new URL(imageUrl);
+        // Get the pathname and remove the filename to get the base path
+        const pathParts = url.pathname.split('/');
+        // Take the first few parts of the path to group similar images
+        const basePath = pathParts.slice(0, -1).join('/');
+        return `${url.hostname}${basePath}`;
+    } catch {
+        // If URL parsing fails, use the first part of the URL
+        return imageUrl.split('?')[0].split('/').slice(0, -1).join('/');
+    }
+};
+
+  const groupAdsByImage = (ads: Ad[]): GroupedAds => {
+    const grouped: GroupedAds = {};
+    
+    ads.forEach(ad => {
+        const groupingKey = getGroupingKey(ad);
+        if (!grouped[groupingKey]) {
+            grouped[groupingKey] = [];
+        }
+        grouped[groupingKey].push(ad);
+    });
+    
+    return grouped;
+};
+
+const GroupedAds = groupAdsByImage(ads)
+
+// Debug: логуємо групування для перевірки
+console.log("GroupedAds:", GroupedAds);
+console.log("Number of groups:", Object.keys(GroupedAds).length);
+
+// =============================================================================
+
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="container mx-auto px-6 py-12 max-w-7xl">
@@ -309,9 +364,17 @@ export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
               viewMode === "grid" ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-3" : "grid-cols-1"
             }`}
           >
-            {filteredAdsByType.map((ad) => (
-              <AdCard key={ad.id} ad={ad} />
-            ))}
+            {Object.entries(GroupedAds).map(([imageKey, adsInGroup]) => {
+              const primaryAd = adsInGroup[0];
+              const relatedAds = adsInGroup.slice(1);
+              return (
+                <AdCard 
+                  key={primaryAd.id} 
+                  ad={primaryAd} 
+                  relatedAds={relatedAds}
+                />
+              );
+            })}
             {filteredAdsByType.length === 0 && (
               <div className="col-span-full text-center py-20">
                 <div className="max-w-md mx-auto">

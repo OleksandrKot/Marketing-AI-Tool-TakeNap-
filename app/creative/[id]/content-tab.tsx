@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useCallback } from "react"
+import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { Video, Download, RotateCcw, ExternalLink, Copy, Check, Mic, Film, Eye } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -9,9 +10,11 @@ import type { Ad } from "@/lib/types"
 
 interface ContentTabProps {
   ad: Ad
+  relatedAds?: Ad[] | null
 }
 
-export function ContentTab({ ad }: ContentTabProps) {
+export function ContentTab({ ad, relatedAds }: ContentTabProps) {
+  const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [imageLoaded, setImageLoaded] = useState(false)
   const [videoLoaded, setVideoLoaded] = useState(false)
@@ -67,7 +70,11 @@ export function ContentTab({ ad }: ContentTabProps) {
     ? ad.video_preview_image_url || ad.image_url || "/placeholder.svg"
     : ad.image_url || "/placeholder.svg"
 
-  const imageArray = ad.duplicates_preview_image?.split(";") || [];
+  const imageArray = ad.duplicates_preview_image?.split(";").filter(url => url.trim() !== "") || [];
+  
+  // Debug: логуємо duplicates_preview_image для перевірки
+  console.log("duplicates_preview_image:", ad.duplicates_preview_image);
+  console.log("imageArray:", imageArray);
   
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -156,23 +163,59 @@ export function ContentTab({ ad }: ContentTabProps) {
         </div>
 
         {/* Other duplicates gallery */}
-        {ad.duplicates_preview_image && (
+        {ad.duplicates_preview_image && imageArray.length > 0 && (
           <Card className="border-slate-200 rounded-2xl">
-            <CardContent className="p-6">
-              <h2 className="text-xl font-semibold text-slate-900 mb-4">Other Duplicates</h2>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-                {imageArray.map((url, index) => (
-                  <div key={index} className="space-y-2">
-                    <div className="relative aspect-video bg-slate-100 rounded-lg overflow-hidden">
-                      <img
-                        src={url.trim()}
-                        alt={`image-${index}`}
-                        className="w-full h-full object-cover"
-                      />
+            <CardContent className="p-0">
+              <div className="bg-blue-50 p-6 border-b border-slate-200">
+                <h2 className="text-xl font-semibold text-slate-900">Other Duplicates</h2>
+              </div>
+              <div className="p-6">
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                {imageArray.map((url, index) => {
+                  const cleanUrl = url.trim();
+                  return (
+                    <div key={index} className="space-y-2">
+                      <div className="relative aspect-video bg-slate-100 rounded-lg overflow-hidden">
+                        {cleanUrl ? (
+                          <img
+                            src={cleanUrl}
+                            alt={`Duplicate ${index + 1}`}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              // Якщо зображення не завантажилось, показуємо placeholder
+                              const target = e.target as HTMLImageElement;
+                              target.style.display = 'none';
+                              target.parentElement?.classList.add('flex', 'items-center', 'justify-center');
+                              target.parentElement!.innerHTML = `
+                                <div class="text-center">
+                                  <div class="w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center mx-auto mb-2">
+                                    <svg class="h-6 w-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                    </svg>
+                                  </div>
+                                  <p class="text-xs text-slate-400">No preview</p>
+                                </div>
+                              `;
+                            }}
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center">
+                            <div className="text-center">
+                              <div className="w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center mx-auto mb-2">
+                                <svg className="h-6 w-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                </svg>
+                              </div>
+                              <p className="text-xs text-slate-400">No preview</p>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-sm text-slate-700 line-clamp-2">Duplicate {index + 1}</p>
                     </div>
-                    <p className="text-sm text-slate-700 line-clamp-2">Duplicate {index + 1}</p>
-                  </div>
-                ))}
+                  );
+                })}
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -266,6 +309,52 @@ export function ContentTab({ ad }: ContentTabProps) {
                     Type: <span className="font-medium text-slate-700">{ad.cta_type || "N/A"}</span>
                   </div>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Related Ads Section */}
+        {relatedAds && relatedAds.length > 0 && (
+          <Card className="border-slate-200 rounded-2xl">
+            <CardContent className="p-0">
+              <div className="bg-blue-50 p-6 border-b border-slate-200">
+                <h2 className="text-xl font-semibold text-slate-900">Related Ads ({relatedAds.length})</h2>
+              </div>
+              <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {relatedAds.map((relatedAd) => (
+                  <div
+                    key={relatedAd.id}
+                    className="bg-white border border-slate-200 rounded-xl p-4 hover:border-blue-200 hover:shadow-lg transition-all duration-300 cursor-pointer"
+                    onClick={() => {
+                      // Передаємо всі related ads (включаючи поточний ad) на нову сторінку
+                      const allRelatedIds = [ad.id, ...relatedAds.map(ra => ra.id)].filter(id => id !== relatedAd.id)
+                      const relatedParam = allRelatedIds.length > 0 ? `?related=${allRelatedIds.join(',')}` : ''
+                      router.push(`/creative/${relatedAd.id}${relatedParam}`)
+                    }}
+                  >
+                    <div className="aspect-video bg-slate-100 rounded-lg overflow-hidden mb-3">
+                      {relatedAd.image_url && (
+                        <img
+                          src={relatedAd.image_url}
+                          alt={relatedAd.title || "Related ad"}
+                          className="w-full h-full object-cover"
+                        />
+                      )}
+                    </div>
+                    <h3 className="font-medium text-slate-900 mb-1 line-clamp-2">
+                      {relatedAd.title || "Untitled Ad"}
+                    </h3>
+                    <p className="text-sm text-slate-500 mb-2">{relatedAd.page_name}</p>
+                    {relatedAd.display_format === "VIDEO" && (
+                      <span className="inline-block bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded-full">
+                        📹 Video
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
               </div>
             </CardContent>
           </Card>

@@ -12,9 +12,10 @@ import { formatDate, truncateText } from "@/lib/utils"
 
 interface AdCardProps {
   ad: Ad
+  relatedAds?: Ad[]
 }
 
-export function AdCard({ ad }: AdCardProps) {
+export function AdCard({ ad, relatedAds = [] }: AdCardProps) {
   const router = useRouter()
   const [imageLoaded, setImageLoaded] = useState(false)
   const title = ad.title || "Untitled Ad"
@@ -26,8 +27,10 @@ export function AdCard({ ad }: AdCardProps) {
   const activeDays = Math.floor((today.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24))
 
   const handleViewDetails = () => {
-    // Переходимо на реальну сторінку деталей з ID креативу
-    router.push(`/creative/${ad.id}`)
+    // Переходимо на реальну сторінку деталей з ID креативу та передаємо relatedAds через URL
+    const relatedAdsIds = relatedAds.map(relatedAd => relatedAd.id).join(',')
+    const url = relatedAdsIds ? `/creative/${ad.id}?related=${relatedAdsIds}` : `/creative/${ad.id}`
+    router.push(url)
   }
 
   // Prefetch the details page on hover for faster navigation
