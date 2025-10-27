@@ -22,6 +22,7 @@ interface AdArchiveBrowserProps {
 }
 
 export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
+  
   const [ads, setAds] = useState<Ad[]>(initialAds)
   const [viewMode, setViewMode] = useState<ViewMode>("grid")
   const [isLoading, setIsLoading] = useState(false)
@@ -306,6 +307,9 @@ console.log("Number of groups:", Object.keys(GroupedAds).length);
               selectedTags={selectedTags}
               onTagsChange={handleTagsChange}
             />
+
+
+            
           </div>
         </div>
 

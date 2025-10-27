@@ -5,6 +5,7 @@ import { X, ChevronDown, MapPin, Clock, Tag } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import type { FilterOptions } from "@/lib/types"
+import { useRouter } from "next/navigation"
 
 interface FilterBarProps {
   onFilterChange: (filters: FilterOptions) => void
@@ -27,8 +28,10 @@ export function FilterBar({
     search: "",
     page: null,
     date: null,
+    tags: null,
   })
 
+  const router = useRouter()
   const [selectedPlacement, setSelectedPlacement] = useState<string | null>(null)
   const [selectedActiveDays, setSelectedActiveDays] = useState<string | null>(null)
   const [isTagsDropdownOpen, setIsTagsDropdownOpen] = useState(false)
@@ -63,7 +66,7 @@ export function FilterBar({
   }
 
   const clearFilters = () => {
-    const newFilters = { search: "", page: null, date: null }
+    const newFilters = { search: "", page: null, date: null, tags: null }
     setFilters(newFilters)
     setSelectedPlacement(null)
     setSelectedActiveDays(null)
@@ -286,6 +289,16 @@ export function FilterBar({
           <X className="h-4 w-4 mr-1" />
           Clear
         </Button>
+
+        {/* Advanced Filter Button */}
+        <div className="flex justify-center">
+               <Button
+                 onClick={() => router.push("/advance-filter")}
+                 className="bg-blue-600 text-white hover:bg-blue-700 hover:shadow-md font-medium rounded-xl h-9 px-6 transition-all duration-200"
+               >
+                 Advanced Filter
+               </Button>
+             </div>
       </div>
     </div>
   )
