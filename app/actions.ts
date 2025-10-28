@@ -45,10 +45,15 @@ export async function getAds(
       image_url,
       image_description,
       new_scenario,
-      tags
+      tags,
+      concept,
+      realisation,
+      topic,
+      hook, 
+      character
     `)
       .order("created_at", { ascending: false })
-      .limit(limit)
+      // .limit(limit)
 
     if (search) {
       // Покращений пошук - шукаємо в назві продукту, тексті та заголовку
@@ -132,6 +137,11 @@ function getFakeAds(search?: string, tags?: string[] | null): Ad[] {
       image_url: "/lovescape-coffee-date.png",
       image_description: "A warm, inviting image showing a diverse couple having coffee at a modern café.",
       tags: ["dating", "ai", "relationships", "mobile-app"], // Масив тегів
+      concept: "Modern Dating",
+      realisation: "Video Ad",
+      topic: "Dating App",
+      hook: "Find meaningful connections",
+      character: "Lorem ipsum",
       new_scenario: `\`\`\`json
 [
   {
@@ -176,6 +186,11 @@ function getFakeAds(search?: string, tags?: string[] | null): Ad[] {
       page_name: "BetterMe",
       text: "How to hit enough protein for weight loss and gain muscle? High Protein Meal Plan for Busy Women on a Weight Loss Journey",
       caption: "Transform your body with our meal plan",
+      concept: "Modern Dating",
+      realisation: "Video Ad",
+      topic: "Dating App",
+      hook: "Find meaningful connections",
+      character: "Lorem ipsum",
       cta_text: "Try now!",
       cta_type: "LEARN_MORE",
       display_format: "VIDEO",
@@ -201,6 +216,11 @@ function getFakeAds(search?: string, tags?: string[] | null): Ad[] {
       caption: "Nike Air Max - Step into greatness",
       cta_text: "Shop Now",
       cta_type: "SHOP_NOW",
+      concept: "Modern Dating",
+      realisation: "Video Ad",
+      topic: "Dating App",
+      hook: "Find meaningful connections",
+      character: "Lorem ipsum",
       display_format: "IMAGE",
       link_url: "https://nike.com",
       title: "Nike Air Max Collection",

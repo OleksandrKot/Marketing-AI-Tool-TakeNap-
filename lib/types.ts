@@ -21,10 +21,18 @@ export interface Ad {
   image_description: string | null
   new_scenario?: string | null // Додаємо нове поле для JSON сценаріїв
   tags?: string[] | null // Додаємо поле для тегів
+
   // Дублікати та додаткові поля
   duplicates_ad_text?: string | null
   duplicates_links?: string | null
   duplicates_preview_image?: string | null
+  
+  // Нові поля з таблиці ads_extended
+  concept: string | null
+  realisation: string | null
+  topic: string | null
+  hook: string | null
+  character: string | null
 }
 
 export type ViewMode = "grid" | "list"
