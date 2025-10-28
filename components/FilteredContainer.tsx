@@ -13,6 +13,11 @@ interface FilterOptions {
     displayFormat: string;
     dateRange: string;
     searchQuery: string;
+    conceptFormat: string;
+    realizationFormat: string; 
+    topicFormat: string;
+    hookFormat: string;
+    characterFormat: string;
 }
 
 export default function FilteredContainer() {
@@ -23,7 +28,12 @@ export default function FilteredContainer() {
         pageNames: [] as string[],
         publisherPlatforms: [] as string[],
         ctaTypes: [] as string[],
-        displayFormats: [] as string[]
+        displayFormats: [] as string[],
+        conceptFormats: [] as string [],
+        realizationFormats: [] as string [],
+        topicFormats: [] as string [],
+        hookFormats: [] as string [],
+        characterFormats: [] as string [],
     });
 
     // Завантажуємо всі ads при ініціалізації
@@ -39,12 +49,21 @@ export default function FilteredContainer() {
                 const publisherPlatforms = Array.from(new Set(allAds.map(ad => ad.publisher_platform).filter(Boolean))).sort();
                 const ctaTypes = Array.from(new Set(allAds.map(ad => ad.cta_type).filter(Boolean))).sort();
                 const displayFormats = Array.from(new Set(allAds.map(ad => ad.display_format).filter(Boolean))).sort();
-
+                const conceptFormats = Array.from(new Set(allAds.map(ad => ad.concept).filter((item): item is string => item !== null))).sort();
+                const realizationFormats = Array.from(new Set(allAds.map(ad => ad.realisation).filter((item): item is string => item !== null))).sort();
+                const topicFormats = Array.from(new Set(allAds.map(ad => ad.topic).filter((item): item is string => item !== null))).sort();
+                const hookFormats = Array.from(new Set(allAds.map(ad => ad.hook).filter((item): item is string => item !== null))).sort();
+                const characterFormats = Array.from(new Set(allAds.map(ad => ad.character).filter((item): item is string => item !== null))).sort();
                 setAvailableOptions({
                     pageNames,
                     publisherPlatforms,
                     ctaTypes,
-                    displayFormats
+                    displayFormats,
+                    conceptFormats,
+                    realizationFormats,
+                    topicFormats,
+                    hookFormats,
+                    characterFormats,
                 });
             } catch (error) {
                 console.error("Error loading ads:", error);
@@ -78,7 +97,6 @@ export default function FilteredContainer() {
         if (filters.publisherPlatform) {
             filtered = filtered.filter(ad => ad.publisher_platform === filters.publisherPlatform);
         }
-
         // Фільтр типу CTA
         if (filters.ctaType) {
             filtered = filtered.filter(ad => ad.cta_type === filters.ctaType);
@@ -87,6 +105,29 @@ export default function FilteredContainer() {
         // Фільтр формату відображення
         if (filters.displayFormat) {
             filtered = filtered.filter(ad => ad.display_format === filters.displayFormat);
+        }
+
+        // Фільтр концепції
+        if (filters.conceptFormat) {
+            filtered = filtered.filter(ad => ad.concept === filters.conceptFormat);
+            console.log("ewklrgmweogowerg" + filtered);
+            alert("gkweog");
+        }
+        // Фільтр реалізації
+        if (filters.realizationFormat) {
+            filtered = filtered.filter(ad => ad.realisation === filters.realizationFormat);
+        }
+        // Фільтр теми
+        if (filters.topicFormat) {
+            filtered = filtered.filter(ad => ad.topic === filters.topicFormat);
+        }
+        // Фільтр хука
+        if (filters.hookFormat) {
+            filtered = filtered.filter(ad => ad.hook === filters.hookFormat);
+        }
+        // Фільтр персонажа
+        if(filters.characterFormat) {
+            filtered = filtered.filter(ad => ad.character === filters.characterFormat);
         }
 
         // Фільтр дати
