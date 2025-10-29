@@ -17,7 +17,7 @@ interface StatsBarProps {
   onEnterPress?: () => void
 }
 
-export function StatsBar({ totalAds, videoAds, uniquePages, columnIndex, value, onChange }: StatsBarProps) {
+export function StatsBar({ totalAds, videoAds, uniquePages, columnIndex, value, onChange, onEnterPress }: StatsBarProps) {
   const [competitorLink, setCompetitorLink] = useState("")
   const [selectedFormat, setSelectedFormat] = useState<string | null>(null)
   const [selectedDateRange, setSelectedDateRange] = useState<string | null>(null)
@@ -48,6 +48,11 @@ export function StatsBar({ totalAds, videoAds, uniquePages, columnIndex, value, 
                     onChange(v)
                   } else {
                     setCompetitorLink(v)
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    onEnterPress?.()
                   }
                 }}
                 className="border-slate-200 rounded-lg h-9 text-sm text-slate-700 placeholder:text-slate-500 bg-slate-50 pl-10"

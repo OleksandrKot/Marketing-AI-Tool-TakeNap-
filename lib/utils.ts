@@ -1,8 +1,15 @@
-import { type ClassValue, clsx } from "clsx"
-import { twMerge } from "tailwind-merge"
-
-export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
+// Lightweight, dependency-free `cn` helper.
+// We avoid importing `clsx` / `tailwind-merge` here to prevent runtime
+// interop issues during the Next.js server build. This function merges
+// className inputs safely and returns a single string.
+export function cn(...inputs: any[]) {
+  return inputs
+    .flat(Infinity)
+    .filter(Boolean)
+    .map(String)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim()
 }
 
 export function formatDate(dateString: string): string {

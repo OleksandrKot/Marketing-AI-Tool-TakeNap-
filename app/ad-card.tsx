@@ -1,4 +1,5 @@
 "use client"
+import { Ad } from "@/lib/types"
 import { useRouter } from "next/router"
 
 const AdCard = ({ ad }) => {

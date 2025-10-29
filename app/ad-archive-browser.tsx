@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import type { Ad, FilterOptions, ViewMode } from "@/lib/types"
 import { AdCard } from "@/components/ad-card"
 import { FilterBar } from "@/components/filter-bar"
@@ -24,33 +24,26 @@ interface AdArchiveBrowserProps {
  * Компонент: AdArchiveBrowser
  * - Пагінація робиться по "raw" (незгрупованих) оголошеннях
  * - Кожному оголошенню передається його група (relatedAds), якщо така є
- * - Коментарі українською
  */
 export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
-  // -----------------------
   // State
-  // -----------------------
   const [ads, setAds] = useState<Ad[]>(initialAds)
   const [viewMode, setViewMode] = useState<ViewMode>("grid")
   const [isLoading, setIsLoading] = useState(false)
   const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 9
+  const itemsPerPage = 12
   const [productFilter, setProductFilter] = useState<string>("")
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [showAINewsModal, setShowAINewsModal] = useState(false)
   const [processingMessage, setProcessingMessage] = useState("")
   const [selectedCreativeType, setSelectedCreativeType] = useState<"all" | "video" | "image">("all")
 
-  // -----------------------
   // Доступні теги (зі списку ads)
-  // -----------------------
   const availableTags = Array.from(
     new Set(ads.filter((ad) => Array.isArray(ad.tags) && ad.tags.length > 0).flatMap((ad) => ad.tags || [])),
   ).sort()
 
-  // -----------------------
   // Фільтр по типу креативу
-  // -----------------------
   const filteredAdsByType = ads.filter((ad) => {
     if (selectedCreativeType === "all") return true
     if (selectedCreativeType === "video") return ad.display_format === "VIDEO"
@@ -58,9 +51,7 @@ export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
     return true
   })
 
-  // -----------------------
   // Допоміжні: формування ключа для групування (image + короткий текст)
-  // -----------------------
   const getImageKey = (imageUrl: string): string => {
     try {
       const url = new URL(imageUrl)
@@ -78,10 +69,8 @@ export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
     return `${imageKey}|${textKey}`
   }
 
-  // -----------------------
   // Group map: groupingKey -> Ad[]
   // Також створимо map: adId -> group's array (щоб швидко доставати relatedAds)
-  // -----------------------
   const groupedAll = (() => {
     const map = new Map<string, Ad[]>()
     for (const ad of filteredAdsByType) {
@@ -100,10 +89,8 @@ export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
     }
   })
 
-  // -----------------------
   // ПАГІНАЦІЯ ПО НЕЗГРУПОВАНИХ (raw) ADS
   // - Розбиваємо filteredAdsByType на сторінки (чисті елементи)
-  // -----------------------
   const chunk = (arr: Ad[], size: number): Ad[][] => {
     const out: Ad[][] = []
     for (let i = 0; i < arr.length; i += size) {
@@ -132,9 +119,7 @@ export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
   // Загальна кількість оголошень після фільтрації
   const totalAds = filteredAdsByType.length
 
-  // -----------------------
   // Пагінація: зміна сторінки
-  // -----------------------
   const handlePageChange = (page: number) => {
     if (page >= 1 && page <= totalPages) {
       setCurrentPage(page)
@@ -142,9 +127,7 @@ export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
     }
   }
 
-  // -----------------------
-  // Фільтри / Пошук (без змін — асинхронні виклики)
-  // -----------------------
+  // Фільтри / Пошук 
   const handleFilterChange = async (filters: FilterOptions) => {
     setIsLoading(true)
     try {
@@ -251,34 +234,47 @@ export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
 
   const videoAds = filteredAdsByType.filter((ad) => ad.display_format === "VIDEO").length
 
-  // Debounced search function
-  const debouncedSearch = async (searchValue: string) => {
-    setIsLoading(true)
-    try {
-      const filtered = await getAds(
-        searchValue || undefined,
-        null,
-        null,
-        selectedTags.length > 0 ? selectedTags : undefined
-      )
-      setAds(filtered)
-      setCurrentPage(1)
-    } catch (error) {
-      console.error("Error filtering ads:", error)
-    } finally {
-      setIsLoading(false)
-    }
-  }
+  // Debounced search using a ref to store timeout id
+  const searchTimeout = useRef<number | null>(null)
 
-  // Handle product filter change with debounce
   const handleProductFilterChange = (value: string) => {
     setProductFilter(value)
-    // Trigger search after typing stops for 300ms
-    const timeoutId = setTimeout(() => {
-      debouncedSearch(value)
+
+    // clear previous timeout
+    if (searchTimeout.current) {
+      window.clearTimeout(searchTimeout.current)
+      searchTimeout.current = null
+    }
+
+    // schedule new search
+    const id = window.setTimeout(async () => {
+      setIsLoading(true)
+      try {
+        const filtered = await getAds(
+          value || undefined,
+          null,
+          null,
+          selectedTags.length > 0 ? selectedTags : undefined,
+        )
+        setAds(filtered)
+        setCurrentPage(1)
+      } catch (error) {
+        console.error("Error filtering ads:", error)
+      } finally {
+        setIsLoading(false)
+      }
     }, 300)
-    return () => clearTimeout(timeoutId)
+    searchTimeout.current = id
   }
+
+  // cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeout.current) {
+        window.clearTimeout(searchTimeout.current)
+      }
+    }
+  }, [])
 
   const clearProductFilter = async () => {
     setProductFilter("")
@@ -294,9 +290,7 @@ export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
     }
   }
 
-  // -----------------------
   // JSX
-  // -----------------------
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="container mx-auto px-6 py-12 max-w-7xl">
