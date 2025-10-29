@@ -59,12 +59,9 @@ export async function getAds(
       const searchTerm = search.trim()
       if (searchTerm) {
         // Improved search - using proper Supabase parameterized queries
-        query = query.or([
-          { page_name: { ilike: `%${searchTerm}%` } },
-          { title: { ilike: `%${searchTerm}%` } },
-          { text: { ilike: `%${searchTerm}%` } },
-          { caption: { ilike: `%${searchTerm}%` } }  // Also search in captions
-        ])
+        query = query.or(
+          `page_name.ilike.%${searchTerm}%,title.ilike.%${searchTerm}%,text.ilike.%${searchTerm}%,caption.ilike.%${searchTerm}%`
+        )
       }
     }
 

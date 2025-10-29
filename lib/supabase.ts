@@ -1,5 +1,4 @@
 import { createClient } from "@supabase/supabase-js"
-
 // Створюємо клієнт Supabase для використання на стороні сервера
 export const createServerSupabaseClient = () => {
   const url = process.env.SUPABASE_URL
