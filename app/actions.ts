@@ -8,7 +8,7 @@ export async function getAds(
   page?: string | null,
   date?: string | null,
   tags?: string[] | null,
-  limit = 100,
+  // limit = 100,
 ): Promise<Ad[]> {
   try {
     console.log("🔍 Starting getAds function...")
@@ -56,8 +56,16 @@ export async function getAds(
       // .limit(limit)
 
     if (search) {
-      // Покращений пошук - шукаємо в назві продукту, тексті та заголовку
-      query = query.or(`page_name.ilike.%${search}%,title.ilike.%${search}%,text.ilike.%${search}%`)
+      const searchTerm = search.trim()
+      if (searchTerm) {
+        // Improved search - using proper Supabase parameterized queries
+        query = query.or([
+          { page_name: { ilike: `%${searchTerm}%` } },
+          { title: { ilike: `%${searchTerm}%` } },
+          { text: { ilike: `%${searchTerm}%` } },
+          { caption: { ilike: `%${searchTerm}%` } }  // Also search in captions
+        ])
+      }
     }
 
     if (page) {
@@ -239,15 +247,20 @@ function getFakeAds(search?: string, tags?: string[] | null): Ad[] {
 
   let filteredAds = allFakeAds
 
-  // Якщо є пошуковий запит, фільтруємо
-  if (search) {
-    const searchLower = search.toLowerCase()
-    filteredAds = filteredAds.filter(
-      (ad) =>
-        ad.page_name.toLowerCase().includes(searchLower) ||
-        ad.title.toLowerCase().includes(searchLower) ||
-        ad.text.toLowerCase().includes(searchLower),
-    )
+  // Client-side search filtering
+  if (search?.trim()) {
+    const searchTerms = search.toLowerCase().trim().split(/\s+/)
+    filteredAds = filteredAds.filter((ad) => {
+      const searchableText = [
+        ad.page_name,
+        ad.title,
+        ad.text,
+        ad.caption,
+        ...(ad.tags || [])
+      ].join(' ').toLowerCase()
+      
+      return searchTerms.every(term => searchableText.includes(term))
+    })
   }
 
   // Якщо є теги, фільтруємо по тегах - безпечна перевірка

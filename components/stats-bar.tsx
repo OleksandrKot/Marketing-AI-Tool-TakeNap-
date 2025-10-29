@@ -14,6 +14,7 @@ interface StatsBarProps {
   // Optional controlled input props for the competitor link
   value?: string
   onChange?: (value: string) => void
+  onEnterPress?: () => void
 }
 
 export function StatsBar({ totalAds, videoAds, uniquePages, columnIndex, value, onChange }: StatsBarProps) {
