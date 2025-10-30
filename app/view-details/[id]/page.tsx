@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from "@/lib/supabase"
 import { ViewDetails } from "./view-details"
+import type { Ad } from "@/lib/types"
 import { notFound } from "next/navigation"
 import { Suspense } from "react"
 import { ViewDetailsSkeleton } from "./view-details-skeleton"
@@ -25,6 +26,11 @@ async function getAdById(id: string) {
       title,
       video_hd_url,
       video_preview_image_url,
+  concept,
+  realisation,
+  topic,
+  hook,
+  character,
       publisher_platform,
       audio_script,
       video_script,
@@ -168,7 +174,7 @@ export default async function ViewDetailsPage({ params }: ViewDetailsPageProps) 
 
   return (
     <Suspense fallback={<ViewDetailsSkeleton />}>
-      <ViewDetails ad={ad} />
+      <ViewDetails ad={ad as Ad} />
     </Suspense>
   )
 }

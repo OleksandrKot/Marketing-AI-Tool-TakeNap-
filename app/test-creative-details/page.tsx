@@ -1,5 +1,6 @@
 import { createServerSupabaseClient } from "@/lib/supabase"
 import { AdDetails } from "../creative/[id]/ad-details"
+import type { Ad } from "@/lib/types"
 
 // Отримуємо перший доступний креатив з бази даних
 async function getFirstAd() {
@@ -19,8 +20,8 @@ async function getFirstAd() {
       display_format,
       link_url,
       title,
-      video_hd_url,
-      video_preview_image,
+  video_hd_url,
+  video_preview_image_url,
       publisher_platform,
       audio_script,
       video_script,
@@ -54,5 +55,5 @@ export default async function TestCreativeDetailsPage() {
     )
   }
 
-  return <AdDetails ad={ad} />
+  return <AdDetails ad={ad as Ad} />
 }
