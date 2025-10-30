@@ -18,7 +18,7 @@ export default function FolderDetailsPage() {
   const { favorites } = useFavorites()
   const [adMap, setAdMap] = useState<Record<string, any>>({})
 
-  const folder = useMemo(() => folders.find((f) => f.id === folderId) || null, [folders, folderId])
+  const folder = useMemo(() => folders.find((f: any) => f.id === folderId) || null, [folders, folderId])
 
   useEffect(() => {
     if (!folder) return

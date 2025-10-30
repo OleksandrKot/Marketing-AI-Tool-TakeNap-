@@ -1,8 +1,7 @@
 "use client"
 
-import { useState, useCallback, memo, useRef, useMemo } from "react"
+import { useState, useCallback, memo } from "react"
 import { useFavorites } from "@/lib/hooks/useFavorites"
-import { useFolders } from "@/lib/hooks/useFolders"
 import { useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
 import { ArrowLeft, Share2, Heart, Copy, Check, Layers } from "lucide-react"
@@ -27,23 +26,11 @@ interface AdDetailsProps {
 
 const AdDetails = memo(function AdDetails({ ad, relatedAds }: AdDetailsProps) {
   const router = useRouter()
-  const { isFavorite, toggleFavorite, addFavorite, removeFavorite } = useFavorites()
-  const { folders: serverFolders, addItemToFolder, removeItemFromFolder } = useFolders()
+  const { isFavorite, toggleFavorite } = useFavorites()
   const creativeId = ad.ad_archive_id || ad.id.toString()
   const isLiked = isFavorite(creativeId)
   const [showShareModal, setShowShareModal] = useState(false)
   const [showCollectionsModal, setShowCollectionsModal] = useState(false)
-  const [showFavMenu, setShowFavMenu] = useState(false)
-  const heartRef = useRef<HTMLButtonElement | null>(null)
-
-  const membership = useMemo(() => {
-    const map: Record<string, boolean> = {}
-    for (const f of serverFolders || []) {
-      const ids = ((f as any).folder_items || []).map((i: any) => i.creative_id)
-      map[f.id] = ids.includes(creativeId)
-    }
-    return map
-  }, [serverFolders, creativeId])
   const [activeTab, setActiveTab] = useState<"content" | "info" | "adaptations">("content")
   const [copiedAdId, setCopiedAdId] = useState(false)
 
@@ -52,9 +39,8 @@ const AdDetails = memo(function AdDetails({ ad, relatedAds }: AdDetailsProps) {
   }, [router])
 
   const handleLike = useCallback(() => {
-    // open small dropdown menu offering folders and local favorites
-    setShowFavMenu((s) => !s)
-  }, [])
+    toggleFavorite(creativeId)
+  }, [toggleFavorite, creativeId])
 
   const handleShare = useCallback(() => {
     setShowShareModal(true)
@@ -139,62 +125,16 @@ const AdDetails = memo(function AdDetails({ ad, relatedAds }: AdDetailsProps) {
 
             {/* Like and Share buttons */}
             <div className="flex items-center space-x-2">
-              <div className="relative">
-                <Button
-                  ref={heartRef}
-                  variant="ghost"
-                  size="icon"
-                  onClick={handleLike}
-                  className={`transition-colors ${isLiked ? "text-red-500 hover:text-red-600" : "text-slate-400 hover:text-slate-600"}`}
-                >
-                  <Heart className={`h-5 w-5 ${isLiked ? "fill-current" : ""}`} />
-                </Button>
-
-                {showFavMenu && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white border rounded-md shadow-lg z-50">
-                    <div className="p-2 border-b text-sm text-slate-600">Add to...</div>
-                    <div className="max-h-56 overflow-auto">
-                      <button
-                        className={`w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center justify-between ${isFavorite(creativeId) ? 'font-medium' : ''}`}
-                        onClick={() => {
-                          if (isFavorite(creativeId)) removeFavorite(creativeId)
-                          else addFavorite(creativeId)
-                          setShowFavMenu(false)
-                        }}
-                      >
-                        <span>Favorites (local)</span>
-                        {isFavorite(creativeId) && <span className="text-xs text-green-600">Added</span>}
-                      </button>
-                      {serverFolders && serverFolders.length > 0 ? (
-                        serverFolders.map((f) => (
-                          <div key={f.id} className="px-2">
-                            <button
-                              className={`w-full text-left px-3 py-2 hover:bg-slate-50 flex items-center justify-between ${membership[f.id] ? 'font-medium' : ''}`}
-                              onClick={() => {
-                                try {
-                                  if (membership[f.id]) removeItemFromFolder(f.id, creativeId)
-                                  else addItemToFolder(f.id, creativeId)
-                                } catch (e) {
-                                  console.error(e)
-                                }
-                                setShowFavMenu(false)
-                              }}
-                            >
-                              <span>{f.name}</span>
-                              {membership[f.id] && <span className="text-xs text-green-600">In folder</span>}
-                            </button>
-                          </div>
-                        ))
-                      ) : (
-                        <div className="p-3 text-sm text-slate-500">No folders yet</div>
-                      )}
-                    </div>
-                    <div className="p-2 border-t text-right">
-                      <button className="text-sm text-slate-500 hover:underline" onClick={() => { setShowFavMenu(false); setShowCollectionsModal(true) }}>Manage collections</button>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleLike}
+                className={`transition-colors ${
+                  isLiked ? "text-red-500 hover:text-red-600" : "text-slate-400 hover:text-slate-600"
+                }`}
+              >
+                <Heart className={`h-5 w-5 ${isLiked ? "fill-current" : ""}`} />
+              </Button>
               <Button
                 variant="ghost"
                 size="icon"

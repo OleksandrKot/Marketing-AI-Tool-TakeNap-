@@ -13,51 +13,28 @@ import placeholder from "../../public/placeholder.svg"
 import { truncateText } from "@/lib/utils"
 
 export default function FoldersPage() {
-  const { favorites, setItemNote } = useFavorites()
-  const { folders: collections, createFolder, createFolder: createCollection, deleteFolder: deleteCollection, updateFolder: updateCollection, addItemToFolder: addToCollection, removeItemFromFolder: removeFromCollection } = useFolders()
+  const { favorites } = useFavorites()
+  const { folders: collections, createFolder, createFolder: createCollection, deleteFolder: deleteCollection, updateFolder: updateCollection, addItemToFolder: addToCollection, removeItemFromFolder: removeFromCollection, setItemNote } = useFolders()
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState("")
+  const [newDescription, setNewDescription] = useState("")
   // owner is set automatically on create (auth user) — owner switch is allowed only when editing
   const [editing, setEditing] = useState<string | null>(null)
   const [editName, setEditName] = useState("")
-  const [editOwner, setEditOwner] = useState("")
-  const [users, setUsers] = useState<Array<{ id: string; email: string; display_name?: string | null }>>([])
-  const [usersLoading, setUsersLoading] = useState(false)
-  const [savingOwner, setSavingOwner] = useState(false)
+  const [editDescription, setEditDescription] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [adMap, setAdMap] = useState<Record<string, any>>({})
   const [addId, setAddId] = useState("")
 
   // pre-load users so we can display owner display names next to folders
-  useEffect(() => {
-    let mounted = true
-    ;(async () => {
-      try {
-        setUsersLoading(true)
-        const res = await fetch('/api/admin/users')
-        if (!res.ok) {
-          if (!mounted) return
-          setUsers([])
-        } else {
-          const payload = await res.json()
-          if (!mounted) return
-          setUsers(payload.users || [])
-        }
-      } catch (e) {
-        console.error('Failed to load users', e)
-        if (mounted) setUsers([])
-      } finally {
-        if (mounted) setUsersLoading(false)
-      }
-    })()
-    return () => { mounted = false }
-  }, [])
+  // owners are shown from user info when available; we no longer fetch users for owner transfer in the UI
 
   useEffect(() => {
     // prefetch ad metadata for items in collections
-  let ids: string[] = []
-  for (const c of collections) ids = ids.concat((c.folder_items || []).map((i: any) => i.creative_id))
+    let ids: string[] = []
+    for (const c of collections) ids = ids.concat((c.folder_items || []).map((i: any) => i.creative_id))
     ids = Array.from(new Set(ids)).filter((i) => !!i && !adMap[i])
     if (ids.length === 0) return
     let cancelled = false
@@ -93,15 +70,19 @@ export default function FoldersPage() {
 
   function openCreate() {
     setNewName("")
+    setNewDescription("")
     setCreating(true)
   }
 
   async function handleCreate() {
     if (!newName) return
     try {
-      await createCollection(newName, undefined, false)
-    } catch (e) {
+      await createCollection(newName, newDescription || undefined)
+      setStatusMessage('Folder created')
+      setTimeout(() => setStatusMessage(null), 2000)
+    } catch (e: any) {
       console.error(e)
+      setStatusMessage(`Create folder failed: ${e?.message || String(e)}`)
     }
     setCreating(false)
   }
@@ -109,53 +90,26 @@ export default function FoldersPage() {
   function startEdit(c: any) {
     setEditing(c.id)
     setEditName(c.name || "")
-    setEditOwner(c.owner || "")
-    // fetch users for owner dropdown
-    ;(async () => {
-      try {
-        setUsersLoading(true)
-        const res = await fetch('/api/admin/users')
-        if (!res.ok) {
-          setUsers([])
-        } else {
-          const payload = await res.json()
-          setUsers(payload.users || [])
-        }
-      } catch (e) {
-        console.error('Failed to load users', e)
-        setUsers([])
-      } finally {
-        setUsersLoading(false)
-      }
-    })()
+    setEditDescription(c.description ?? null)
+  // editing only allows changing name and description (not transferring ownership)
   }
 
   async function saveEdit(id: string) {
     try {
-      setSavingOwner(true)
-      setStatusMessage('Transferring ownership...')
-      // allow updating owner via owner field (RLS must allow this)
-      await updateCollection(id, { name: editName, owner: editOwner })
-      // refresh users list
-      try {
-        const res = await fetch('/api/admin/users')
-        if (res.ok) {
-          const payload = await res.json()
-          setUsers(payload.users || [])
-        }
-      } catch (e) {
-        // ignore
-      }
-      setStatusMessage('Ownership transferred')
-      setTimeout(() => setStatusMessage(null), 2500)
+      setSaving(true)
+      setStatusMessage('Saving folder...')
+  // only update folder name and description (no owner transfer from UI)
+  await updateCollection(id, { name: editName, description: editDescription ?? undefined })
+      setStatusMessage('Saved')
+      setTimeout(() => setStatusMessage(null), 2000)
     } catch (err: any) {
       console.error('Owner transfer failed:', err)
       // Show more detailed error if available from Supabase
       const message = err?.message || err?.error || JSON.stringify(err)
-      setStatusMessage(`Failed to transfer ownership: ${message}`)
+      setStatusMessage(`Failed to save folder: ${message}`)
       setTimeout(() => setStatusMessage(null), 6000)
     } finally {
-      setSavingOwner(false)
+      setSaving(false)
       setEditing(null)
     }
   }
@@ -211,7 +165,7 @@ export default function FoldersPage() {
                         <Folder className="h-5 w-5 text-slate-600" />
                         <div>
                           <div className="font-medium text-slate-900">{c.name}</div>
-                          <div className="text-xs text-slate-500">{c.owner ? `Owner: ${users.find(u => u.id === c.owner)?.display_name || users.find(u => u.id === c.owner)?.email || c.owner}` : 'No owner'}</div>
+                          <div className="text-xs text-slate-500">{c.owner ? `Owner: ${c.owner}` : 'No owner'}</div>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -231,7 +185,8 @@ export default function FoldersPage() {
               <CardHeader className="p-6 pb-4 flex items-start justify-between">
                 <div>
                   <h2 className="text-2xl font-semibold text-slate-900">{selected ? selected.name : 'Select a folder'}</h2>
-                  <p className="text-sm text-slate-500">{selected ? (selected.owner ? `Owner: ${users.find(u => u.id === selected.owner)?.display_name || users.find(u => u.id === selected.owner)?.email || selected.owner}` : 'No owner') : 'Open a folder to view and manage items.'}</p>
+                  <p className="text-sm text-slate-500">{selected ? (selected.owner ? `Owner: ${selected.owner}` : 'No owner') : 'Open a folder to view and manage items.'}</p>
+                  {selected?.description && <div className="text-sm text-slate-600 mt-2">Description: {selected.description}</div>}
                   {statusMessage && <div className="text-sm text-slate-500 mt-2">{statusMessage}</div>}
                 </div>
                 <div className="flex items-center gap-2">
@@ -291,18 +246,9 @@ export default function FoldersPage() {
                 {editing && (
                   <div className="flex items-center gap-2">
                     <input value={editName} onChange={(e) => setEditName(e.target.value)} className="px-3 py-2 border rounded-md" />
-                    {usersLoading ? (
-                      <div className="px-3 py-2 border rounded-md">Loading users...</div>
-                    ) : (
-                      <select disabled={savingOwner} value={editOwner} onChange={(e) => setEditOwner(e.target.value)} className="px-3 py-2 border rounded-md">
-                        <option value="">(no owner)</option>
-                        {users.map((u) => (
-                          <option key={u.id} value={u.id}>{u.display_name || u.email || u.id}</option>
-                        ))}
-                      </select>
-                    )}
-                    <Button disabled={savingOwner} onClick={() => editing && saveEdit(editing)}>
-                      <Save className="h-4 w-4 mr-2" />{savingOwner ? 'Saving...' : 'Save'}
+                    <input value={editDescription ?? ""} onChange={(e) => setEditDescription(e.target.value)} placeholder="Folder description" className="px-3 py-2 border rounded-md" />
+                    <Button disabled={saving} onClick={() => editing && saveEdit(editing)}>
+                      <Save className="h-4 w-4 mr-2" />{saving ? 'Saving...' : 'Save'}
                     </Button>
                     <Button variant="ghost" onClick={() => setEditing(null)}><X className="h-4 w-4" /></Button>
                   </div>
@@ -316,9 +262,10 @@ export default function FoldersPage() {
         {creating && (
           <div className="fixed inset-0 flex items-center justify-center z-50">
             <div className="absolute inset-0 bg-black/40" onClick={() => setCreating(false)} />
-            <div className="bg-white rounded-2xl p-6 z-10 w-full max-w-md">
+              <div className="bg-white rounded-2xl p-6 z-10 w-full max-w-md">
               <h3 className="text-lg font-semibold mb-2">Create Folder</h3>
               <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Folder name" className="w-full px-3 py-2 border rounded-md mb-2" />
+              <input value={newDescription} onChange={(e) => setNewDescription(e.target.value)} placeholder="Folder description (optional)" className="w-full px-3 py-2 border rounded-md mb-2" />
               <p className="text-sm text-slate-500 mb-4">Owner will be set to the currently logged in user.</p>
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" onClick={() => setCreating(false)}>Cancel</Button>
