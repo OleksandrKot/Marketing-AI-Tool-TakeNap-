@@ -27,6 +27,10 @@ export default function AuthForm({ onAuth, defaultTab = "login", tab: controlled
   const [success, setSuccess] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const emailRef = useRef<HTMLInputElement | null>(null);
+  const [emailExists, setEmailExists] = useState<boolean | null>(null)
+  const [checkingEmail, setCheckingEmail] = useState(false)
+  const [checkError, setCheckError] = useState<string | null>(null)
+  const debounceRef = useRef<number | null>(null)
 
   // keep internal tab in sync when controlled
   useEffect(() => {
@@ -42,6 +46,43 @@ export default function AuthForm({ onAuth, defaultTab = "login", tab: controlled
     emailRef.current?.focus();
   }, []);
 
+  // Debounced inline email existence check (only for register tab)
+  useEffect(() => {
+    // clear previous debounce
+    if (debounceRef.current) window.clearTimeout(debounceRef.current)
+    setEmailExists(null)
+    setCheckError(null)
+
+    if (tab !== 'register') return
+    const val = email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null
+    if (!val) return
+
+    setCheckingEmail(true)
+    // debounce 500ms
+    debounceRef.current = window.setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/auth/check?email=${encodeURIComponent(val)}`)
+        if (!res.ok) {
+          const payload = await res.json().catch(() => ({}))
+          setCheckError(payload?.error || `Check failed (${res.status})`)
+          setEmailExists(null)
+        } else {
+          const payload = await res.json()
+          setEmailExists(!!payload?.exists)
+        }
+      } catch (e: any) {
+        setCheckError(String(e?.message || e))
+        setEmailExists(null)
+      } finally {
+        setCheckingEmail(false)
+      }
+    }, 500)
+
+    return () => {
+      if (debounceRef.current) window.clearTimeout(debounceRef.current)
+    }
+  }, [email, tab])
+
   function validate() {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       setError("Please provide a valid email address");
@@ -56,6 +97,33 @@ export default function AuthForm({ onAuth, defaultTab = "login", tab: controlled
       return false;
     }
     return true;
+  }
+
+  const [resetSending, setResetSending] = useState(false)
+  const [resetMessage, setResetMessage] = useState<string | null>(null)
+
+  async function handleSendReset() {
+    setResetMessage(null)
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setResetMessage('Please enter a valid email to reset password')
+      return
+    }
+    setResetSending(true)
+    try {
+      // Redirect to an in-app reset handler that will complete the recovery flow
+      const resetUrl = `${window.location.origin}/auth/reset`
+      const { error } = await supabase.auth.resetPasswordForEmail(email, { redirectTo: resetUrl })
+      if (error) {
+        setResetMessage(error.message || 'Failed to send reset email')
+      } else {
+        setResetMessage('Password reset email sent — check your inbox')
+      }
+    } catch (e: any) {
+      console.error('reset password failed', e)
+      setResetMessage('Failed to send reset email')
+    } finally {
+      setResetSending(false)
+    }
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -120,28 +188,56 @@ export default function AuthForm({ onAuth, defaultTab = "login", tab: controlled
         }
         if (onAuth) onAuth(resultUser);
       } else {
+        // Check if the email is already registered via the admin users endpoint.
+        // This endpoint uses the service-role key on the server to list users.
+        try {
+          const res = await fetch(`/api/auth/check?email=${encodeURIComponent(email)}`)
+          if (res.ok) {
+            const payload = await res.json()
+            const exists = !!payload?.exists
+            if (exists) {
+              setError('An account with this email already exists. Please sign in or reset your password.')
+              setLoading(false)
+              return
+            }
+          }
+        } catch (e) {
+          // If the check endpoint is unreachable, fall back to attempting sign-up and let Supabase return the error.
+          console.warn('Could not check existing users before sign-up:', e)
+        }
+
         const { data, error } = await supabase.auth.signUp({
           email: email,
           password: password,
           options: {
             data: {
-              display_name: nickname
-            }
-          }
+              display_name: nickname,
+            },
+          },
         });
-        // remove stray debug alert
-        if (error) throw error;
+
+        // If Supabase returned an error (e.g., user already exists), show it and keep modal open
+        if (error) {
+          const msg = error?.message || String(error)
+          // Friendly message for already-registered case
+          if (msg.toLowerCase().includes("already") || msg.toLowerCase().includes("exists")) {
+            setError("An account with this email already exists. Please sign in or reset your password.")
+          } else {
+            setError(msg)
+          }
+          setLoading(false)
+          return
+        }
+
+        // No error: show the registration started message. Do not call onAuth unless a session was created
         setSuccess("Registration started — please check your email to confirm");
         const user = data.user;
-        // Determine display name: prefer auth metadata (if set by provider), else the nickname user entered
         const signupAuthDisplay = (user as any)?.user_metadata?.display_name || nickname || null;
         if (user && signupAuthDisplay) {
           try {
-            // Upsert both nickname and display_name to support different UI fields
             const { error: upsertError } = await supabase.from("profiles").upsert({ id: user.id, nickname: signupAuthDisplay, display_name: signupAuthDisplay });
             if (upsertError) console.warn("Could not save nickname to profiles table:", upsertError.message || upsertError);
             else localStorage.setItem("nickname", signupAuthDisplay);
-            // Also ensure auth user metadata display_name is set (non-blocking)
             try {
               await supabase.auth.updateUser({ data: { display_name: signupAuthDisplay } });
             } catch (metaErr) {
@@ -151,12 +247,17 @@ export default function AuthForm({ onAuth, defaultTab = "login", tab: controlled
             console.warn("Profiles upsert failed:", upsertErr?.message || upsertErr);
           }
         }
-        const resultUserSignup: any = { ...user };
-        if (signupAuthDisplay) {
-          resultUserSignup.display_name = signupAuthDisplay;
-          resultUserSignup.nickname = signupAuthDisplay;
+
+        // If signUp created a session (immediate login), call onAuth. Otherwise keep modal open so user can see instructions.
+        const hasSession = (data as any)?.session != null
+        if (hasSession && onAuth) {
+          const resultUserSignup: any = { ...(data.user || {}) }
+          if (signupAuthDisplay) {
+            resultUserSignup.display_name = signupAuthDisplay;
+            resultUserSignup.nickname = signupAuthDisplay;
+          }
+          onAuth(resultUserSignup)
         }
-        if (onAuth) onAuth(resultUserSignup);
       }
     } catch (err: any) {
       const msg = err?.message || String(err) || "Something went wrong"
@@ -184,6 +285,20 @@ export default function AuthForm({ onAuth, defaultTab = "login", tab: controlled
         onChange={(e) => setEmail(e.target.value)}
         className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
       />
+      {/* Inline email existence feedback for register */}
+      {tab === 'register' && (
+        <div className="mt-2 text-sm">
+          {checkingEmail && <div className="text-slate-500">Checking email...</div>}
+          {checkError && <div className="text-yellow-700">Could not verify email: {checkError}</div>}
+          {emailExists === true && (
+            <div className="text-red-600">
+              An account with this email already exists.{' '}
+              <button type="button" className="text-blue-600 underline ml-1" onClick={() => setTab('login')}>Sign in</button>
+            </div>
+          )}
+          {emailExists === false && <div className="text-green-600">Email is available</div>}
+        </div>
+      )}
 
       <div className="relative">
         <label className="sr-only" htmlFor="auth-password">Password</label>
@@ -205,6 +320,16 @@ export default function AuthForm({ onAuth, defaultTab = "login", tab: controlled
           {showPassword ? "Hide" : "Show"}
         </button>
       </div>
+
+      {/* Forgot password (login tab) */}
+      {tab === 'login' && (
+        <div className="text-right text-sm mt-1">
+          <button type="button" className="text-blue-600 hover:underline" onClick={handleSendReset} disabled={resetSending}>
+            {resetSending ? 'Sending...' : 'Forgot password?'}
+          </button>
+          {resetMessage && <div className="text-sm text-slate-600 mt-1">{resetMessage}</div>}
+        </div>
+      )}
 
       {tab === "register" && (
         <>

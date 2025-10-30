@@ -12,6 +12,7 @@ type Props = {
 export default function LoginModal({ open = true, onClose }: Props) {
   const modalRef = useRef<HTMLDivElement>(null);
   const [selectedTab, setSelectedTab] = React.useState<'login' | 'register'>('login');
+  const [authResult, setAuthResult] = React.useState<{ status: 'idle' | 'success' | 'error'; message?: string; user?: any }>({ status: 'idle' });
 
   useEffect(() => {
     if (!open) return;
@@ -87,12 +88,11 @@ export default function LoginModal({ open = true, onClose }: Props) {
 
   const modalContent = (
     <>
-      {/* Backdrop (portal) */}
-      <div
-        className="fixed inset-0 z-[9998] bg-[rgba(0,0,0,0.6)] pointer-events-auto"
-        onClick={() => onClose?.()}
-        aria-hidden="true"
-      />
+        {/* Backdrop (portal) */}
+        <div
+          className="fixed inset-0 z-[9998] bg-[rgba(0,0,0,0.6)] pointer-events-auto"
+          aria-hidden="true"
+        />
 
       {/* Modal container */}
       <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4">
@@ -145,8 +145,24 @@ export default function LoginModal({ open = true, onClose }: Props) {
               onTabChange={(t) => setSelectedTab(t)}
               hideTabs
               noWrapper
-              onAuth={() => onClose?.()}
+              onAuth={(user) => {
+                // Do not auto-close the modal. Show success message and keep modal open so user can review.
+                setAuthResult({ status: 'success', message: 'Authentication successful', user });
+              }}
             />
+
+            {/* Show result area below the form so users can see messages and errors */}
+            {authResult.status === 'success' && (
+              <div className="mt-4 p-3 rounded-md bg-green-50 border border-green-100 text-sm text-green-800">
+                <div className="font-medium">Success</div>
+                <div className="mt-1">{authResult.message || 'You are signed in.'}</div>
+                <div className="mt-3 text-right">
+                  <button className="px-3 py-1 rounded bg-green-600 text-white" onClick={() => onClose?.()}>
+                    Close
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
