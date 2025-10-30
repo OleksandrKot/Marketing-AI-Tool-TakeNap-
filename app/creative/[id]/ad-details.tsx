@@ -1,9 +1,11 @@
 "use client"
 
 import { useState, useCallback, memo } from "react"
+import { useFavorites } from "@/lib/hooks/useFavorites"
 import { useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
-import { ArrowLeft, Share2, Heart, Copy, Check } from "lucide-react"
+import { ArrowLeft, Share2, Heart, Copy, Check, Layers } from "lucide-react"
+import CollectionModal from "@/components/collection-modal"
 import { Button } from "@/components/ui/button"
 import { CreativeTabs } from "@/components/creative-tabs"
 import { ContentTab } from "./content-tab"
@@ -24,8 +26,11 @@ interface AdDetailsProps {
 
 const AdDetails = memo(function AdDetails({ ad, relatedAds }: AdDetailsProps) {
   const router = useRouter()
-  const [isLiked, setIsLiked] = useState(false)
+  const { isFavorite, toggleFavorite } = useFavorites()
+  const creativeId = ad.ad_archive_id || ad.id.toString()
+  const isLiked = isFavorite(creativeId)
   const [showShareModal, setShowShareModal] = useState(false)
+  const [showCollectionsModal, setShowCollectionsModal] = useState(false)
   const [activeTab, setActiveTab] = useState<"content" | "info" | "adaptations">("content")
   const [copiedAdId, setCopiedAdId] = useState(false)
 
@@ -34,8 +39,8 @@ const AdDetails = memo(function AdDetails({ ad, relatedAds }: AdDetailsProps) {
   }, [router])
 
   const handleLike = useCallback(() => {
-    setIsLiked((prev) => !prev)
-  }, [])
+    toggleFavorite(creativeId)
+  }, [toggleFavorite, creativeId])
 
   const handleShare = useCallback(() => {
     setShowShareModal(true)
@@ -130,6 +135,15 @@ const AdDetails = memo(function AdDetails({ ad, relatedAds }: AdDetailsProps) {
               >
                 <Heart className={`h-5 w-5 ${isLiked ? "fill-current" : ""}`} />
               </Button>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setShowCollectionsModal(true)}
+                className="text-slate-400 hover:text-slate-600"
+                title="Add to collections"
+              >
+                <Layers className="h-5 w-5" />
+              </Button>
               <Button variant="ghost" size="icon" onClick={handleShare} className="text-slate-400 hover:text-slate-600">
                 <Share2 className="h-5 w-5" />
               </Button>
@@ -147,6 +161,9 @@ const AdDetails = memo(function AdDetails({ ad, relatedAds }: AdDetailsProps) {
 
         {/* Share Modal */}
         {showShareModal && <ShareModal ad={ad} onClose={() => setShowShareModal(false)} />}
+        {showCollectionsModal && (
+          <CollectionModal isOpen={showCollectionsModal} onClose={() => setShowCollectionsModal(false)} creativeId={creativeId} />
+        )}
       </div>
     </div>
   )
