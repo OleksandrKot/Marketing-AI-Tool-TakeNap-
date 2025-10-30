@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { useFavorites } from "@/lib/hooks/useFavorites"
+import { useFolders } from "@/lib/hooks/useFolders"
 
 interface CollectionModalProps {
   isOpen: boolean
@@ -14,34 +15,41 @@ interface CollectionModalProps {
 }
 
 export function CollectionModal({ isOpen, onClose, creativeId }: CollectionModalProps) {
-  const { collections, createCollection, addToCollection, removeFromCollection } = useFavorites()
+  const { collections } = useFavorites()
+  const { folders: serverCollections, createFolder, addItemToFolder, removeItemFromFolder } = useFolders()
+  // prefer server-backed collections when available
+  const cols = serverCollections && serverCollections.length ? serverCollections : collections
   const [newName, setNewName] = useState("")
 
   const membership = useMemo(() => {
     const map: Record<string, boolean> = {}
-    for (const c of collections) map[c.id] = c.itemIds.includes(creativeId)
+    for (const c of cols) {
+      const anyc: any = c
+      const ids = (anyc.folder_items || anyc.itemIds || []).map((i: any) => i.creative_id || i)
+      map[c.id] = ids.includes(creativeId)
+    }
     return map
-  }, [collections, creativeId])
+  }, [cols, creativeId])
 
   const handleToggle = useCallback(
     (collectionId: string) => {
-      if (membership[collectionId]) removeFromCollection(collectionId, creativeId)
-      else addToCollection(collectionId, creativeId)
+      if (membership[collectionId]) removeItemFromFolder(collectionId, creativeId)
+      else addItemToFolder(collectionId, creativeId)
     },
-    [membership, addToCollection, removeFromCollection, creativeId],
+    [membership, addItemToFolder, removeItemFromFolder, creativeId],
   )
 
   const handleCreate = useCallback(async () => {
     const name = newName.trim()
     if (!name) return
-    createCollection(name)
-    // small timeout to allow collection to appear in store and then add
-    setTimeout(() => {
-      const created = (collections.find((c) => c.name === name) || null)
-      if (created) addToCollection(created.id, creativeId)
-    }, 50)
+    try {
+      const created = await createFolder(name)
+      if (created) await addItemToFolder(created.id, creativeId)
+    } catch (e) {
+      console.error(e)
+    }
     setNewName("")
-  }, [newName, createCollection, collections, addToCollection, creativeId])
+  }, [newName, createFolder, addItemToFolder, creativeId, cols])
 
   if (!isOpen) return null
 
@@ -71,8 +79,8 @@ export function CollectionModal({ isOpen, onClose, creativeId }: CollectionModal
             <div>
               <label className="text-sm text-slate-600 mb-2 block">Your collections</label>
               <div className="space-y-2 max-h-48 overflow-auto">
-                {collections.length === 0 && <div className="text-sm text-slate-500">No collections yet</div>}
-                {collections.map((c) => (
+                {cols.length === 0 && <div className="text-sm text-slate-500">No collections yet</div>}
+                {cols.map((c) => (
                   <div key={c.id} className="flex items-center justify-between bg-slate-50 p-3 rounded-md border">
                     <div className="flex items-center gap-3">
                       <input
@@ -84,10 +92,13 @@ export function CollectionModal({ isOpen, onClose, creativeId }: CollectionModal
                       />
                       <div>
                         <div className="font-medium text-slate-900">{c.name}</div>
-                        <div className="text-xs text-slate-500">{c.itemIds.length} items</div>
+                        <div className="text-xs text-slate-500">{(((c as any).folder_items || (c as any).itemIds || []) as any).length} items</div>
                       </div>
                     </div>
-                    <div className="text-sm text-slate-500">{new Date(c.createdAt).toLocaleDateString()}</div>
+                    <div className="flex items-center gap-3">
+                      <a href={`/folders/${c.id}`} className="text-sm text-slate-500 hover:underline">Open</a>
+                      <div className="text-sm text-slate-500">{new Date(((c as any).createdAt || (c as any).created_at) as any).toLocaleDateString()}</div>
+                    </div>
                   </div>
                 ))}
               </div>

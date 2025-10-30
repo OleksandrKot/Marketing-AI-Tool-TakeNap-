@@ -12,6 +12,8 @@ type Collection = {
   id: string
   name: string
   itemIds: string[]
+  owner?: string
+  description?: string
   createdAt: string
   updatedAt?: string
 }
@@ -105,6 +107,16 @@ export function useFavorites() {
     })
   }, [])
 
+  const createCollectionWithOwner = useCallback((name: string, owner?: string, description?: string) => {
+    const id = typeof crypto !== "undefined" && (crypto as any).randomUUID ? (crypto as any).randomUUID() : `${Date.now()}-${Math.random()}`
+    setStore((prev) => {
+      const col: Collection = { id, name, itemIds: [], owner, description, createdAt: new Date().toISOString() }
+      const next = { ...prev, collections: [...prev.collections, col] }
+      saveToStorage(next)
+      return next
+    })
+  }, [])
+
   const deleteCollection = useCallback((collectionId: string) => {
     setStore((prev) => {
       const next = { ...prev, collections: prev.collections.filter((c) => c.id !== collectionId) }
@@ -120,6 +132,29 @@ export function useFavorites() {
         collections: prev.collections.map((c) =>
           c.id === collectionId ? { ...c, itemIds: Array.from(new Set([...c.itemIds, creativeId])), updatedAt: new Date().toISOString() } : c,
         ),
+      }
+      saveToStorage(next)
+      return next
+    })
+  }, [])
+
+  const updateCollection = useCallback((collectionId: string, updates: { name?: string; owner?: string; description?: string }) => {
+    setStore((prev) => {
+      const next = {
+        ...prev,
+        collections: prev.collections.map((c) => (c.id === collectionId ? { ...c, ...updates, updatedAt: new Date().toISOString() } : c)),
+      }
+      saveToStorage(next)
+      return next
+    })
+  }, [])
+
+  // allow setting a note for a favorite item (global per creative id)
+  const setItemNote = useCallback((creativeId: string, note?: string) => {
+    setStore((prev) => {
+      const next = {
+        ...prev,
+        favorites: prev.favorites.map((f) => (f.creativeId === creativeId ? { ...f, note } : f)),
       }
       saveToStorage(next)
       return next
@@ -161,8 +196,11 @@ export function useFavorites() {
     removeFavorite,
     toggleFavorite,
     createCollection,
+    createCollectionWithOwner,
     deleteCollection,
     addToCollection,
+    updateCollection,
+    setItemNote,
     removeFromCollection,
     exportJSON,
     importJSON,

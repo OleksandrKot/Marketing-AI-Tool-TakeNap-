@@ -28,7 +28,7 @@ Download now and get 7 days premium FREE! 🎁`,
   link_url: "https://lovescape.app/download",
   title: "Find Your Perfect Match with Lovescape AI",
   video_hd_url: "https://placeholder.svg?height=720&width=1280&query=lovescape-dating-app-video",
-  video_preview_image: "https://placeholder.svg?height=720&width=1280&query=lovescape-app-preview-couple-smiling",
+  video_preview_image_url: "https://placeholder.svg?height=720&width=1280&query=lovescape-app-preview-couple-smiling",
   publisher_platform: "Facebook",
   audio_script: `[Upbeat romantic music starts]
 
@@ -85,6 +85,11 @@ Narrator: "Lovescape. Where love finds you."
 The lighting is natural and golden, coming through large windows in the background. The café has a cozy, modern aesthetic with exposed brick walls and hanging plants. In the bottom right corner, there's a subtle Lovescape app logo overlay.
 
 The overall mood is authentic, romantic, and aspirational - showing the kind of meaningful connection that the app promises to deliver. The couple appears relaxed and genuinely happy, not posed or artificial.`,
+  concept: "Modern Dating",
+  realisation: "Video Ad",
+  topic: "Dating App",
+  hook: "Find meaningful connections",
+  character: "Sarah, 28",
 }
 
 export default function TestLovescapePage() {
