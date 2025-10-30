@@ -11,14 +11,14 @@ export interface Ad {
   link_url: string
   title: string
   video_hd_url: string | null
-  video_preview_image_url: string // Змінено з video_preview_image
+  video_preview_image_url?: string | null // Змінено з video_preview_image
   publisher_platform: string
   // Нові поля з вашої таблиці
   audio_script: string | null
   video_script: string | null
   meta_ad_url: string | null
-  image_url: string | null
-  image_description: string | null
+  image_url?: string | null
+  image_description?: string | null
   new_scenario?: string | null // Додаємо нове поле для JSON сценаріїв
   tags?: string[] | null // Додаємо поле для тегів
 
@@ -28,11 +28,11 @@ export interface Ad {
   duplicates_preview_image?: string | null
   
   // Нові поля з таблиці ads_extended
-  concept: string | null
-  realisation: string | null
-  topic: string | null
-  hook: string | null
-  character: string | null
+  concept?: string | null
+  realisation?: string | null
+  topic?: string | null
+  hook?: string | null
+  character?: string | null
 }
 
 export type ViewMode = "grid" | "list"
