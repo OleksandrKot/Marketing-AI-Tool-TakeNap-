@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useCallback, memo } from "react"
+import { useFavorites } from "@/lib/hooks/useFavorites"
 import { useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
 import Image from "next/image"
@@ -23,7 +24,9 @@ import {
   ExternalLink,
   Copy,
   Check,
+  Layers,
 } from "lucide-react"
+import CollectionModal from "@/components/collection-modal"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -42,7 +45,12 @@ interface ViewDetailsProps {
 const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
-  const [isLiked, setIsLiked] = useState(false)
+  const { isFavorite, toggleFavorite } = useFavorites()
+  const creativeId = ad.ad_archive_id || ad.id.toString()
+  const [isLikedLocal, setIsLikedLocal] = useState(false)
+  const [showCollectionsModal, setShowCollectionsModal] = useState(false)
+  // derive persistent liked state from store
+  const isLiked = isFavorite(creativeId) || isLikedLocal
   const [showShareModal, setShowShareModal] = useState(false)
   const [imageLoaded, setImageLoaded] = useState(false)
   const [videoLoaded, setVideoLoaded] = useState(false)
@@ -81,8 +89,13 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
   }, [ad.video_hd_url, ad.image_url, ad.title, isVideo])
 
   const handleLike = useCallback(() => {
-    setIsLiked((prev) => !prev)
-  }, [])
+    // toggle persistent favorite
+    toggleFavorite(creativeId)
+    // keep a tiny local flicker for immediate UI when storage events are slow
+    setIsLikedLocal((p) => !p)
+    // clear the local flicker after a short time so store value is authoritative
+    setTimeout(() => setIsLikedLocal(false), 500)
+  }, [toggleFavorite, creativeId])
 
   const handleShare = useCallback(() => {
     setShowShareModal(true)
@@ -136,6 +149,15 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
               className={`transition-colors ${isLiked ? "text-red-500 hover:text-red-600" : "text-slate-400 hover:text-slate-600"}`}
             >
               <Heart className={`h-5 w-5 ${isLiked ? "fill-current" : ""}`} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setShowCollectionsModal(true)}
+              className="text-slate-400 hover:text-slate-600"
+              title="Add to collections"
+            >
+              <Layers className="h-5 w-5" />
             </Button>
             <Button variant="ghost" size="icon" onClick={handleShare} className="text-slate-400 hover:text-slate-600">
               <Share2 className="h-5 w-5" />
@@ -555,6 +577,9 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
 
         {/* Share Modal */}
         {showShareModal && <ShareModal ad={ad} onClose={() => setShowShareModal(false)} />}
+        {showCollectionsModal && (
+          <CollectionModal isOpen={showCollectionsModal} onClose={() => setShowCollectionsModal(false)} creativeId={creativeId} />
+        )}
       </div>
     </div>
   )
