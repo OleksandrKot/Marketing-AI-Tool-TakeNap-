@@ -11,6 +11,10 @@ export default function ProfilePage() {
   const [nickname, setNickname] = useState("")
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState("")
+  const [changing, setChanging] = useState(false)
+  const [newPassword, setNewPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [pwMessage, setPwMessage] = useState("")
   const router = useRouter()
 
   useEffect(() => {
@@ -57,6 +61,35 @@ export default function ProfilePage() {
     await supabase.auth.signOut()
     localStorage.removeItem("nickname")
     router.push("/")
+  }
+
+  async function handleChangePassword() {
+    setPwMessage("")
+    if (!newPassword || newPassword.length < 6) {
+      setPwMessage("Password must be at least 6 characters")
+      return
+    }
+    if (newPassword !== confirmPassword) {
+      setPwMessage("Passwords do not match")
+      return
+    }
+    setChanging(true)
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword })
+      if (error) {
+        console.error('Password change failed', error)
+        setPwMessage(error.message || 'Failed to change password')
+      } else {
+        setPwMessage('Password updated')
+        setNewPassword('')
+        setConfirmPassword('')
+      }
+    } catch (e) {
+      console.error(e)
+      setPwMessage('Failed to change password')
+    } finally {
+      setChanging(false)
+    }
   }
 
   if (!user) {
@@ -116,6 +149,19 @@ export default function ProfilePage() {
 
         <div className="mt-6">
           <Button variant="ghost" onClick={handleSignOut}>Sign out</Button>
+        </div>
+
+        <div className="mt-6 border-t pt-6">
+          <h3 className="text-sm font-semibold mb-2">Change password</h3>
+          <p className="text-sm text-slate-500 mb-3">Enter a new password to update your account password.</p>
+          <div className="flex flex-col gap-2">
+            <input type="password" placeholder="New password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="px-3 py-2 border rounded-xl" />
+            <input type="password" placeholder="Confirm new password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="px-3 py-2 border rounded-xl" />
+            <div className="flex items-center gap-3">
+              <Button onClick={handleChangePassword} disabled={changing}>{changing ? 'Updating...' : 'Update password'}</Button>
+            </div>
+            {pwMessage && <div className="text-sm text-slate-600 mt-2">{pwMessage}</div>}
+          </div>
         </div>
       </div>
     </div>
