@@ -5,7 +5,7 @@ import { useFavorites } from "@/lib/hooks/useFavorites"
 import { useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
 import { ArrowLeft, Share2, Heart, Copy, Check, Layers } from "lucide-react"
-import CollectionModal from "@/components/collection-modal"
+import { PlaylistModal } from "@/components/playlist-modal"
 import { Button } from "@/components/ui/button"
 import { CreativeTabs } from "@/components/creative-tabs"
 import { ContentTab } from "./content-tab"
@@ -30,7 +30,7 @@ const AdDetails = memo(function AdDetails({ ad, relatedAds }: AdDetailsProps) {
   const creativeId = ad.ad_archive_id || ad.id.toString()
   const isLiked = isFavorite(creativeId)
   const [showShareModal, setShowShareModal] = useState(false)
-  const [showCollectionsModal, setShowCollectionsModal] = useState(false)
+  const [showFolderModal, setShowFolderModal] = useState(false)
   const [activeTab, setActiveTab] = useState<"content" | "info" | "adaptations">("content")
   const [copiedAdId, setCopiedAdId] = useState(false)
 
@@ -39,7 +39,12 @@ const AdDetails = memo(function AdDetails({ ad, relatedAds }: AdDetailsProps) {
   }, [router])
 
   const handleLike = useCallback(() => {
-    toggleFavorite(creativeId)
+    // Toggle local favorites immediately (works whether logged in or not)
+    try {
+      toggleFavorite(creativeId)
+    } catch (e) {
+      console.error("toggle favorite failed", e)
+    }
   }, [toggleFavorite, creativeId])
 
   const handleShare = useCallback(() => {
@@ -133,12 +138,12 @@ const AdDetails = memo(function AdDetails({ ad, relatedAds }: AdDetailsProps) {
                   isLiked ? "text-red-500 hover:text-red-600" : "text-slate-400 hover:text-slate-600"
                 }`}
               >
-                <Heart className={`h-5 w-5 ${isLiked ? "fill-current" : ""}`} />
+                <Heart className="h-5 w-5" fill={isLiked ? "currentColor" : "none"} />
               </Button>
               <Button
                 variant="ghost"
                 size="icon"
-                onClick={() => setShowCollectionsModal(true)}
+                onClick={() => setShowFolderModal(true)}
                 className="text-slate-400 hover:text-slate-600"
                 title="Add to collections"
               >
@@ -161,8 +166,9 @@ const AdDetails = memo(function AdDetails({ ad, relatedAds }: AdDetailsProps) {
 
         {/* Share Modal */}
         {showShareModal && <ShareModal ad={ad} onClose={() => setShowShareModal(false)} />}
-        {showCollectionsModal && (
-          <CollectionModal isOpen={showCollectionsModal} onClose={() => setShowCollectionsModal(false)} creativeId={creativeId} />
+        {/* CollectionModal removed; Layers now opens FolderPickerModal */}
+        {showFolderModal && (
+          <PlaylistModal isOpen={showFolderModal} onClose={() => setShowFolderModal(false)} creativeId={creativeId} />
         )}
       </div>
     </div>

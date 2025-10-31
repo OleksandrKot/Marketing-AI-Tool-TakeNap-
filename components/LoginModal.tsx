@@ -1,178 +1,56 @@
 "use client";
-
-import React, { useEffect, useRef } from "react";
-import { createPortal } from "react-dom";
+import { useState, useEffect } from "react";
 import AuthForm from "./AuthForm";
 
-type Props = {
-  open?: boolean;
-  onClose?: () => void;
-};
+export default function LoginModal({ trigger, onClose, onAuth }: { trigger?: React.ReactNode; onClose?: () => void; onAuth?: (user: any) => void }) {
+  const [open, setOpen] = useState(true);
 
-export default function LoginModal({ open = true, onClose }: Props) {
-  const modalRef = useRef<HTMLDivElement>(null);
-  const [selectedTab, setSelectedTab] = React.useState<'login' | 'register'>('login');
-  const [authResult, setAuthResult] = React.useState<{ status: 'idle' | 'success' | 'error'; message?: string; user?: any }>({ status: 'idle' });
+  const handleClose = () => {
+    setOpen(false);
+    if (onClose) onClose();
+  };
+
+  const handleAuth = (user: any) => {
+    if (onAuth) onAuth(user);
+    handleClose();
+  };
 
   useEffect(() => {
-    if (!open) return;
-
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") {
-        onClose?.();
-      }
-    }
-
-    // Lock page scroll and compensate layout to avoid horizontal shift
-    const scrollbarWidth = window.innerWidth - document.documentElement.clientWidth;
-    // lock scrolling on the root element
-    document.documentElement.style.overflow = 'hidden';
-    // add padding to body to compensate for removed scrollbar (only if > 0)
-    if (scrollbarWidth > 0) {
-      document.body.style.paddingRight = `${scrollbarWidth}px`;
-    }
-
-    // Set up event listeners
-    window.addEventListener("keydown", onKey);
-
+    const prev = document.body.style.overflow;
+    if (open) document.body.style.overflow = "hidden";
     return () => {
-      window.removeEventListener("keydown", onKey);
-  document.documentElement.style.overflow = '';
-  if (document.body.style.paddingRight) document.body.style.paddingRight = '';
+      document.body.style.overflow = prev || "";
     };
-  }, [open, onClose]);
-
-  // Focus trap
-  useEffect(() => {
-    if (!open || !modalRef.current) return;
-
-    const modal = modalRef.current;
-    const focusableSelectors = [
-      'button:not([disabled])',
-      'input:not([disabled])',
-      '[tabindex]:not([tabindex="-1"])',
-    ].join(',');
-
-    const nodes = Array.from(modal.querySelectorAll<HTMLElement>(focusableSelectors))
-      .filter((n): n is HTMLElement => n.offsetParent !== null);
-      
-    const first = nodes[0];
-    const last = nodes[nodes.length - 1];
-
-    if (first) {
-      first.focus();
-    }
-
-    function handleKey(e: KeyboardEvent) {
-      if (e.key !== 'Tab') return;
-      
-      if (nodes.length === 0) {
-        e.preventDefault();
-        return;
-      }
-      
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last?.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first?.focus();
-      }
-    }
-
-    document.addEventListener('keydown', handleKey);
-    return () => document.removeEventListener('keydown', handleKey);
   }, [open]);
 
-  if (!open) return null;
+  return open ? (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 sm:px-6"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="login-modal-title"
+    >
+      <div className="max-w-md w-full">
+        <div className="relative bg-transparent">
+          <button
+            className="absolute -top-3 -right-3 bg-white hover:bg-slate-100 text-slate-700 rounded-full w-9 h-9 flex items-center justify-center shadow-md"
+            onClick={handleClose}
+            aria-label="Close login modal"
+            title="Close"
+          >
+            ×
+          </button>
 
-  const modalContent = (
-    <>
-        {/* Backdrop (portal) */}
-        <div
-          className="fixed inset-0 z-[9998] bg-[rgba(0,0,0,0.6)] pointer-events-auto"
-          aria-hidden="true"
-        />
+          <div className="bg-white rounded-3xl shadow-2xl p-6 sm:p-8">
+            <header className="mb-4 text-center">
+              <h2 id="login-modal-title" className="text-2xl font-bold text-slate-900">Welcome back</h2>
+              <p className="text-sm text-slate-600 mt-1">Sign in to access your saved creatives, folders and insights.</p>
+            </header>
 
-      {/* Modal container */}
-      <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4">
-        <div
-          ref={modalRef}
-          className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden transform transition-all duration-150"
-          role="dialog"
-          aria-modal="true"
-          onClick={(e) => e.stopPropagation()}
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100 bg-white">
-            <div>
-              <h3 className="text-lg font-semibold text-slate-900">Welcome</h3>
-              <p className="text-sm text-slate-500">Sign in or create an account</p>
-            </div>
-            <button
-              className="text-slate-400 hover:text-slate-700 text-2xl leading-none"
-              onClick={() => onClose?.()}
-              aria-label="Close"
-            >
-              ×
-            </button>
-          </div>
-
-          {/* Tabs */}
-          <div className="px-5 pt-4">
-            <div className="flex rounded-xl bg-slate-100 p-1">
-              <button
-                type="button"
-                onClick={() => setSelectedTab('login')}
-                className={`flex-1 py-2 text-center font-medium rounded-lg transition-colors ${selectedTab === 'login' ? 'bg-white text-slate-900 shadow' : 'text-slate-600'}`}
-              >
-                Login
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedTab('register')}
-                className={`flex-1 py-2 text-center font-medium rounded-lg transition-colors ${selectedTab === 'register' ? 'bg-white text-slate-900 shadow' : 'text-slate-600'}`}
-              >
-                Register
-              </button>
-            </div>
-          </div>
-
-          {/* Body (form) */}
-          <div className="px-5 pb-6 pt-4">
-            <AuthForm
-              tab={selectedTab}
-              onTabChange={(t) => setSelectedTab(t)}
-              hideTabs
-              noWrapper
-              onAuth={(user) => {
-                // Do not auto-close the modal. Show success message and keep modal open so user can review.
-                setAuthResult({ status: 'success', message: 'Authentication successful', user });
-              }}
-            />
-
-            {/* Show result area below the form so users can see messages and errors */}
-            {authResult.status === 'success' && (
-              <div className="mt-4 p-3 rounded-md bg-green-50 border border-green-100 text-sm text-green-800">
-                <div className="font-medium">Success</div>
-                <div className="mt-1">{authResult.message || 'You are signed in.'}</div>
-                <div className="mt-3 text-right">
-                  <button className="px-3 py-1 rounded bg-green-600 text-white" onClick={() => onClose?.()}>
-                    Close
-                  </button>
-                </div>
-              </div>
-            )}
+            <AuthForm onAuth={handleAuth} />
           </div>
         </div>
       </div>
-    </>
-  );
-
-  // Render into document.body to ensure overlay covers everything
-  if (typeof document !== "undefined") {
-    return createPortal(modalContent, document.body);
-  }
-
-  return null;
+    </div>
+  ) : null;
 }

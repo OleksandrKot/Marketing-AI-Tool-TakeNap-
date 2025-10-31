@@ -45,6 +45,12 @@ function loadFromStorage(): FavoritesStore {
 function saveToStorage(state: FavoritesStore) {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state))
+    // notify other hook instances in the same tab
+    try {
+      window.dispatchEvent(new CustomEvent("tn_favorites_updated"))
+    } catch (e) {
+      // ignore if dispatch fails in some environments
+    }
   } catch (e) {
     console.error("Failed to save favorites to storage", e)
   }
@@ -58,7 +64,15 @@ export function useFavorites() {
       if (e.key === STORAGE_KEY) setStore(loadFromStorage())
     }
     window.addEventListener("storage", onStorage)
-    return () => window.removeEventListener("storage", onStorage)
+    // listen for same-tab updates (storage events don't fire in the same tab)
+    function onLocalUpdate() {
+      setStore(loadFromStorage())
+    }
+    window.addEventListener("tn_favorites_updated", onLocalUpdate)
+    return () => {
+      window.removeEventListener("storage", onStorage)
+      window.removeEventListener("tn_favorites_updated", onLocalUpdate)
+    }
   }, [])
 
   useEffect(() => {

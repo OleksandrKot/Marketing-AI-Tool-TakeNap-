@@ -27,8 +27,34 @@ export function ProfileDropdown() {
         const { data } = await supabase.auth.getUser()
         const u = data?.user
         if (mounted && u) {
-          setUser({ email: u.email || "", nickname: localStorage.getItem("nickname") || undefined })
-          setNickname(localStorage.getItem("nickname") || "")
+          // Prefer display name from auth user metadata
+          const metaName = (u as any).user_metadata?.display_name || (u as any).user_metadata?.nickname
+          if (metaName) {
+            setUser({ email: u.email || "", nickname: metaName })
+            setNickname(metaName)
+            localStorage.setItem("nickname", metaName)
+          } else {
+            // Fallback to cached nickname if available
+            const cached = localStorage.getItem("nickname")
+            if (cached) {
+              setUser({ email: u.email || "", nickname: cached })
+              setNickname(cached)
+            } else {
+              // Try to read from profiles table as a last resort
+              try {
+                const { data: profileData } = await supabase.from("profiles").select("nickname").eq("id", u.id).single()
+                if (profileData?.nickname) {
+                  setUser({ email: u.email || "", nickname: profileData.nickname })
+                  setNickname(profileData.nickname)
+                  localStorage.setItem("nickname", profileData.nickname)
+                } else {
+                  setUser({ email: u.email || "", nickname: undefined })
+                }
+              } catch (e) {
+                setUser({ email: u.email || "", nickname: undefined })
+              }
+            }
+          }
         }
       } catch (e) {
         // ignore
@@ -98,11 +124,54 @@ export function ProfileDropdown() {
       {showLogin && (
         <LoginModal
           onClose={() => setShowLogin(false)}
-          onAuth={(userData: any) => {
-            // userData may include email and nickname from AuthForm
-            setUser({ email: userData.email || "", nickname: userData.nickname || localStorage.getItem("nickname") || undefined })
-            if (userData.nickname) setNickname(userData.nickname)
-            setShowLogin(false)
+          onAuth={async (userData: any) => {
+            // Be defensive about the shape of userData. Supabase/auth flows may return
+            // { user } or a flat user object. Normalize accordingly.
+            try {
+              let email = ""
+              let nicknameFromData: string | undefined = undefined
+              let userId: string | undefined = undefined
+
+              if (!userData) {
+                // nothing to do
+              } else if (userData.user) {
+                // shape: { user: { id, email, ... }, ... }
+                email = userData.user.email || ""
+                userId = userData.user.id || userData.user.sub || undefined
+                nicknameFromData = userData.nickname || (userData.user as any).nickname
+              } else {
+                // flat shape: { id, email, nickname }
+                email = userData.email || ""
+                userId = userData.id || undefined
+                nicknameFromData = userData.nickname
+              }
+
+              // Prefer nickname from the auth response, then localStorage, then DB lookup
+              if (nicknameFromData) {
+                setNickname(nicknameFromData)
+                localStorage.setItem("nickname", nicknameFromData)
+              } else {
+                const cached = localStorage.getItem("nickname")
+                if (cached) {
+                  setNickname(cached)
+                } else if (userId) {
+                  try {
+                    const { data: profileData, error } = await supabase.from("profiles").select("nickname").eq("id", userId).single()
+                    if (!error && profileData?.nickname) {
+                      setNickname(profileData.nickname)
+                      localStorage.setItem("nickname", profileData.nickname)
+                      nicknameFromData = profileData.nickname
+                    }
+                  } catch (e) {
+                    // ignore
+                  }
+                }
+              }
+
+              setUser({ email, nickname: nicknameFromData || localStorage.getItem("nickname") || undefined })
+            } finally {
+              setShowLogin(false)
+            }
           }}
         />
       )}

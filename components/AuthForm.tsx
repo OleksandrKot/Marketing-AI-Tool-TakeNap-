@@ -1,11 +1,12 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 
 export default function AuthForm({ onAuth }: { onAuth?: (user: any) => void }) {
   const [tab, setTab] = useState<'login' | 'register'>('login');
   const [email, setEmail] = useState("");
+  const emailRef = useRef<HTMLInputElement | null>(null);
   const [password, setPassword] = useState("");
   const [nickname, setNickname] = useState("");
   const [loading, setLoading] = useState(false);
@@ -15,6 +16,11 @@ export default function AuthForm({ onAuth }: { onAuth?: (user: any) => void }) {
   useEffect(() => {
     if (tab === "login") setNickname("");
   }, [tab]);
+
+  // Autofocus email input on mount to help keyboard users
+  useEffect(() => {
+    emailRef.current?.focus();
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -37,11 +43,23 @@ export default function AuthForm({ onAuth }: { onAuth?: (user: any) => void }) {
             .single();
           profile = profileData;
         }
-        if (onAuth) onAuth({ ...user, nickname: profile?.nickname });
+          // If profile nickname exists but auth user metadata does not match, try to update auth metadata
+          if (user && profile?.nickname) {
+            try {
+              const currentDisplay = (user as any).user_metadata?.display_name || (user as any).user_metadata?.nickname
+              if (currentDisplay !== profile.nickname) {
+                await supabase.auth.updateUser({ data: { display_name: profile.nickname } })
+              }
+            } catch (e) {
+              // ignore
+            }
+          }
+
+          if (onAuth) onAuth({ ...user, nickname: profile?.nickname });
         if (profile?.nickname) localStorage.setItem("nickname", profile.nickname);
       }
     } else {
-      // Register user
+      // Register user - include display_name in auth user metadata
       const { data, error } = await supabase.auth.signUp({ email, password });
       if (error) setError(error.message);
       else {
@@ -51,6 +69,15 @@ export default function AuthForm({ onAuth }: { onAuth?: (user: any) => void }) {
         if (user && nickname) {
           await supabase.from("profiles").upsert({ id: user.id, nickname });
           localStorage.setItem("nickname", nickname);
+
+          // If user is immediately available in the response, attempt to ensure the
+          // auth user's metadata is set (some auth flows sign the user in immediately).
+          try {
+            // Attempt to set auth user metadata to keep display_name in sync
+            await supabase.auth.updateUser({ data: { display_name: nickname } });
+          } catch (e) {
+            // ignore - updateUser may fail if user is not immediately authenticated
+          }
         }
         if (onAuth) onAuth({ ...user, nickname });
       }
@@ -76,6 +103,7 @@ export default function AuthForm({ onAuth }: { onAuth?: (user: any) => void }) {
       </div>
       <form onSubmit={handleSubmit} className="space-y-4">
         <input
+          ref={emailRef}
           type="email"
           required
           placeholder="Email"
