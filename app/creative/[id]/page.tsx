@@ -24,15 +24,10 @@ async function getAdById(id: string) {
         cta_text,
         cta_type,
         display_format,
-    link_url,
-    title,
-    video_hd_url,
-    video_preview_image_url,
-    concept,
-    realisation,
-    topic,
-    hook,
-    character,
+        link_url,
+        title,
+        video_hd_url,
+        video_preview_image_url,
         publisher_platform,
         audio_script,
         video_script,
@@ -181,11 +176,6 @@ The lighting is natural and golden, coming through large windows in the backgrou
 
 The overall mood is authentic, romantic, and aspirational - showing the kind of meaningful connection that the app promises to deliver. The couple appears relaxed and genuinely happy, not posed or artificial.`,
       new_scenario: "New dating scenario added for ad 1",
-      concept: "Modern Dating",
-      realisation: "Video Ad",
-      topic: "Dating App",
-      hook: "Find meaningful connections",
-      character: "Sarah, 28",
     },
     "2": {
       id: 2,
@@ -208,11 +198,6 @@ The overall mood is authentic, romantic, and aspirational - showing the kind of 
       image_url: "/placeholder-hm5r5.png",
       image_description: "Image of a healthy protein-rich meal.",
       new_scenario: null,
-      concept: "Health & Fitness",
-      realisation: "Video Ad",
-      topic: "Nutrition",
-      hook: "High protein for busy women",
-      character: "Coach",
     },
     "3": {
       id: 3,
@@ -235,11 +220,6 @@ The overall mood is authentic, romantic, and aspirational - showing the kind of 
       image_url: "/stylish-sneakers.png",
       image_description: "Close-up of Nike Air Max shoes on a running track.",
       new_scenario: null,
-      concept: "Fashion",
-      realisation: "Image Ad",
-      topic: "Sneakers",
-      hook: "Step into greatness",
-      character: "Athlete",
     },
   }
 
@@ -323,7 +303,7 @@ export default async function CreativePage({ params, searchParams }: CreativePag
 
   return (
     <Suspense fallback={<AdDetailsSkeleton />}>
-      <AdDetails ad={ad as Ad} relatedAds={relatedAds as Ad[] | null} />
+      <AdDetails ad={ad} relatedAds={relatedAds} />
     </Suspense>
   )
 }

@@ -110,8 +110,6 @@ export default function FilteredContainer() {
         // Фільтр концепції
         if (filters.conceptFormat) {
             filtered = filtered.filter(ad => ad.concept === filters.conceptFormat);
-            console.log("ewklrgmweogowerg" + filtered);
-            alert("gkweog");
         }
         // Фільтр реалізації
         if (filters.realizationFormat) {
