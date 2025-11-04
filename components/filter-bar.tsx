@@ -93,8 +93,8 @@ export function FilterBar({
 
   return (
     <div className={`bg-white border border-slate-200 rounded-2xl p-3 shadow-sm ${className || ""}`}>
-      <div className="flex justify-between items-center w-full">
-        <div className="grid grid-cols-3 gap-2 flex-1">
+      <div className="flex flex-col md:flex-row md:justify-between  md:items-center w-full space-y-2 md:space-y-0">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-2 flex-1">
           {/* Placements Filter */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -283,7 +283,7 @@ export function FilterBar({
         {/* Clear button moved to the right */}
         <Button
           variant="ghost"
-          className="text-orange-600 hover:text-orange-700 hover:bg-orange-50 font-medium h-9 px-3 rounded-xl transition-all duration-200 ml-2"
+          className="text-orange-600 hover:text-orange-700 hover:bg-orange-50 font-medium h-9 px-3 rounded-xl transition-all duration-200 ml-0 md:ml-2"
           onClick={clearFilters}
         >
           <X className="h-4 w-4 mr-1" />

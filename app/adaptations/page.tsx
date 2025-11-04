@@ -3,7 +3,7 @@
 import { Layers, Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { ProfileDropdown } from "@/components/profile-dropdown"
+import { ProfileDropdown } from "@/app/login-auth/components/profile-dropdown"
 import { PageNavigation } from "@/components/page-navigation"
 
 export default function AdaptationsPage() {

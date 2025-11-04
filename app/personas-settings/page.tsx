@@ -7,8 +7,9 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
-import { ProfileDropdown } from "@/components/profile-dropdown"
+import { ProfileDropdown } from "@/app/login-auth/components/profile-dropdown"
 import { PageNavigation } from "@/components/page-navigation"
+import ModalWrapper from "@/components/modals/ModalWrapper"
 
 interface Persona {
   id: number
@@ -308,7 +309,7 @@ export default function PersonasSettingsPage() {
 
         {/* Edit Persona Modal */}
         {editingPersona && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <ModalWrapper isOpen={!!editingPersona} onClose={() => setEditingPersona(null)} panelClassName="w-full max-w-4xl max-h-[90vh] overflow-y-auto p-4">
             <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto">
               <CardHeader className="border-b border-slate-200">
                 <div className="flex items-center justify-between">
@@ -449,7 +450,7 @@ export default function PersonasSettingsPage() {
                 </div>
               </CardContent>
             </Card>
-          </div>
+          </ModalWrapper>
         )}
 
         {/* Existing Personas */}

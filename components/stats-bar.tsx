@@ -30,9 +30,9 @@ export function StatsBar({ totalAds, videoAds, uniquePages, columnIndex, value, 
   if (columnIndex === 0) {
     // Competitor Link
     return (
-      <Card className="border-slate-200 rounded-2xl hover:shadow-md transition-all duration-300 hover:border-slate-300">
-        <CardContent className="p-6 flex items-center space-x-4">
-          <div className="p-3 bg-blue-50 rounded-xl">
+      <Card className="border-slate-200 items-center rounded-2xl hover:shadow-md transition-all duration-300 hover:border-slate-300">
+        <CardContent className="p-6 pt-6 flex items-center space-x-4">
+          <div className="p-3  bg-blue-50 rounded-xl">
             <Eye className="h-6 w-6 text-blue-600" />
           </div>
           <div className="flex-1">
@@ -66,7 +66,7 @@ export function StatsBar({ totalAds, videoAds, uniquePages, columnIndex, value, 
     // Creative Format only
     return (
       <Card className="border-slate-200 rounded-2xl hover:shadow-md transition-all duration-300 hover:border-slate-300">
-        <CardContent className="p-6 flex items-center space-x-4">
+        <CardContent className="p-6 pt-6 flex items-center space-x-4">
           <div className="p-3 bg-emerald-50 rounded-xl">
             <Video className="h-6 w-6 text-emerald-600" />
           </div>
@@ -144,7 +144,7 @@ export function StatsBar({ totalAds, videoAds, uniquePages, columnIndex, value, 
     return (
       <Card className="border-slate-200 rounded-2xl hover:shadow-md transition-all duration-300 hover:border-slate-300">
         <CardContent className="p-6 flex items-center space-x-4">
-          <div className="p-3 bg-orange-50 rounded-xl">
+          <div className="p-3 bg-white rounded-xl">
             <Calendar className="h-6 w-6 text-orange-600" />
           </div>
           <div className="flex-1">

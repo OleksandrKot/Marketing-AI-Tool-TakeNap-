@@ -11,6 +11,10 @@ import { Badge } from "@/components/ui/badge"
 import { Plus, Edit3, Trash2, ArrowLeft, User, Folder, Save, X } from "lucide-react"
 import placeholder from "../../public/placeholder.svg"
 import { truncateText } from "@/lib/utils"
+import NoteModal from "../../components/modals/note-modal"
+import ConfirmModal from "../../components/modals/confirm-modal"
+import ModalWrapper from "@/components/modals/ModalWrapper"
+import FolderItemCard from "./components/FolderItemCard"
 
 export default function FoldersPage() {
   const { favorites } = useFavorites()
@@ -27,12 +31,16 @@ export default function FoldersPage() {
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [adMap, setAdMap] = useState<Record<string, any>>({})
   const [addId, setAddId] = useState("")
+  const [noteModalOpen, setNoteModalOpen] = useState(false)
+  const [noteTargetId, setNoteTargetId] = useState<string | null>(null)
+  const [noteDraft, setNoteDraft] = useState("")
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false)
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null)
 
   // pre-load users so we can display owner display names next to folders
   // owners are shown from user info when available; we no longer fetch users for owner transfer in the UI
 
   useEffect(() => {
-    // prefetch ad metadata for items in collections
     let ids: string[] = []
     for (const c of collections) ids = ids.concat((c.folder_items || []).map((i: any) => i.creative_id))
     ids = Array.from(new Set(ids)).filter((i) => !!i && !adMap[i])
@@ -120,10 +128,28 @@ export default function FoldersPage() {
     setAddId("")
   }
 
-  function setNote(creativeId: string) {
-    const note = window.prompt("Add a note for this item:")
-    if (note === null) return
-    setItemNote(creativeId, note || undefined)
+  function openNoteModal(creativeId: string) {
+    // Find the folder_items row for this creative so we can edit by item id
+    const item = selected?.folder_items?.find((it: any) => it.creative_id === creativeId)
+    const existing = item?.note || ""
+    // store the folder_items.id (not creative id) because setItemNote expects the item id
+    setNoteTargetId(item?.id ?? null)
+    setNoteDraft(existing)
+    setNoteModalOpen(true)
+  }
+
+  async function handleSaveNote(value?: string) {
+    if (!noteTargetId) return
+    try {
+      await setItemNote(noteTargetId, value)
+      setNoteModalOpen(false)
+      setNoteTargetId(null)
+      setNoteDraft("")
+    } catch (e: any) {
+      console.error('Failed to save note', e)
+      setStatusMessage(`Failed to save note: ${e?.message || String(e)}`)
+      setTimeout(() => setStatusMessage(null), 5000)
+    }
   }
 
   return (
@@ -171,7 +197,7 @@ export default function FoldersPage() {
                       <div className="flex items-center gap-2">
                         <Button variant="ghost" size="sm" onClick={() => setSelectedId(c.id)} className="px-2">Open</Button>
                         <Button variant="ghost" size="sm" onClick={() => startEdit(c)} className="px-2"><Edit3 className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="sm" onClick={() => { if (confirm('Delete folder?')) deleteCollection(c.id) }} className="px-2 text-red-600"><Trash2 className="h-4 w-4" /></Button>
+                        <Button variant="ghost" size="sm" onClick={() => { setDeleteTargetId(c.id); setConfirmDeleteOpen(true) }} className="px-2 text-red-600"><Trash2 className="h-4 w-4" /></Button>
                       </div>
                     </div>
                   ))}
@@ -211,31 +237,15 @@ export default function FoldersPage() {
                         const id = it.creative_id
                         const ad = adMap[id]
                         const fav = favorites.find((f) => f.creativeId === id)
-                        const thumb = ad?.video_preview_image_url || ad?.image_url || null
                         return (
-                          <Card key={id} className="bg-white border border-slate-100 rounded-2xl overflow-hidden">
-                            <CardContent className="flex items-center gap-4 p-4">
-                              <div className="w-28 h-20 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center">
-                                {thumb ? (
-                                  <div className="relative w-full h-full">
-                                    <Image src={thumb} alt={ad?.title || 'preview'} fill className="object-cover" sizes="96px" />
-                                  </div>
-                                ) : (
-                                  <Image src={placeholder.src || '/placeholder.svg'} alt="placeholder" width={48} height={48} className="opacity-40" />
-                                )}
-                              </div>
-                              <div className="flex-1">
-                                <div className="font-medium text-slate-900">{truncateText(ad?.title || `Creative ${id}`, 60)}</div>
-                                <div className="text-sm text-slate-500">{ad?.page_name || 'Unknown source'}</div>
-                                {it?.note && <div className="text-xs text-slate-600 mt-1">Note: {it.note}</div>}
-                              </div>
-                              <div className="flex flex-col gap-2">
-                                <Link href={`/creative/${id}`}><Button variant="outline" className="w-full">View</Button></Link>
-                                <Button variant="ghost" onClick={() => setNote(id)}>Note</Button>
-                                <Button variant="ghost" onClick={() => removeFromCollection(selected.id, id)} className="text-red-600">Remove</Button>
-                              </div>
-                            </CardContent>
-                          </Card>
+                          <FolderItemCard
+                            key={id}
+                            it={it}
+                            ad={ad}
+                            fav={fav}
+                            onOpenNote={openNoteModal}
+                            onRemove={(creativeId: string) => selected && removeFromCollection(selected.id, creativeId)}
+                          />
                         )
                       })}
                     </div>
@@ -258,11 +268,10 @@ export default function FoldersPage() {
           </div>
         </div>
 
-        {/* Create modal simple inline */}
+        {/* Create modal using ModalWrapper */}
         {creating && (
-          <div className="fixed inset-0 flex items-center justify-center z-50">
-            <div className="absolute inset-0 bg-black/40" onClick={() => setCreating(false)} />
-              <div className="bg-white rounded-2xl p-6 z-10 w-full max-w-md">
+          <ModalWrapper isOpen={creating} onClose={() => setCreating(false)} panelClassName="w-full max-w-md p-4">
+            <div className="bg-white rounded-2xl p-6 z-10 w-full max-w-md">
               <h3 className="text-lg font-semibold mb-2">Create Folder</h3>
               <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Folder name" className="w-full px-3 py-2 border rounded-md mb-2" />
               <input value={newDescription} onChange={(e) => setNewDescription(e.target.value)} placeholder="Folder description (optional)" className="w-full px-3 py-2 border rounded-md mb-2" />
@@ -272,8 +281,32 @@ export default function FoldersPage() {
                 <Button onClick={handleCreate}><Plus className="h-4 w-4 mr-2" />Create</Button>
               </div>
             </div>
-          </div>
+          </ModalWrapper>
         )}
+
+                <ConfirmModal
+                  isOpen={confirmDeleteOpen}
+                  title="Delete folder"
+                  message="This will permanently delete the folder and its references. Are you sure?"
+                  confirmLabel="Delete"
+                  cancelLabel="Cancel"
+                  onConfirm={async () => {
+                    if (!deleteTargetId) return
+                    try {
+                      await deleteCollection(deleteTargetId)
+                      setStatusMessage('Folder deleted')
+                      setTimeout(() => setStatusMessage(null), 2000)
+                    } catch (e: any) {
+                      setStatusMessage(`Delete failed: ${e?.message || String(e)}`)
+                    } finally {
+                      setConfirmDeleteOpen(false)
+                      setDeleteTargetId(null)
+                    }
+                  }}
+                  onCancel={() => { setConfirmDeleteOpen(false); setDeleteTargetId(null) }}
+                />
+
+                <NoteModal isOpen={noteModalOpen} initialValue={noteDraft} onClose={() => setNoteModalOpen(false)} onSave={handleSaveNote} />
 
       </div>
     </div>

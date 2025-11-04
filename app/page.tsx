@@ -1,5 +1,5 @@
 import { getAds, getUniquePages } from "./actions"
-import { AdArchiveBrowser } from "./ad-archive-browser"
+import { AdArchiveBrowser } from "./ad-archive-browser/ad-archive-browser"
 
 export default async function Home() {
   const initialAds = await getAds()

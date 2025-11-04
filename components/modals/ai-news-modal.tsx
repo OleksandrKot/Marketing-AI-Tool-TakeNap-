@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react"
 import { X, Sparkles, TrendingUp, Zap, Smartphone, Search, Video, Brain } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
+import ModalWrapper from "./ModalWrapper"
 
 interface AINewsModalProps {
   isOpen: boolean
@@ -121,7 +122,7 @@ export function AINewsModal({ isOpen, onClose, processingMessage }: AINewsModalP
   const IconComponent = currentNews?.icon || TrendingUp
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <ModalWrapper isOpen={isOpen} onClose={onClose} panelClassName="p-4">
       <Card className="w-full max-w-2xl">
         <CardContent className="p-0">
           {/* Header */}
@@ -236,6 +237,6 @@ export function AINewsModal({ isOpen, onClose, processingMessage }: AINewsModalP
           </div>
         </CardContent>
       </Card>
-    </div>
+    </ModalWrapper>
   )
 }

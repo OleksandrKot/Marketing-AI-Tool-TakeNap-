@@ -26,7 +26,7 @@ import {
   Check,
   Layers,
 } from "lucide-react"
-import CollectionModal from "@/components/collection-modal"
+import CollectionModal from "@/components/modals/collection-modal"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"

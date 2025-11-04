@@ -5,6 +5,7 @@ import { X, Copy, Check } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import type { Ad } from "@/lib/types"
+import ModalWrapper from "@/components/modals/ModalWrapper"
 
 interface ShareModalProps {
   ad: Ad
@@ -27,7 +28,7 @@ export default function ShareModal({ ad, onClose }: ShareModalProps) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+    <ModalWrapper isOpen={true} onClose={onClose} panelClassName="p-4">
       <Card className="w-full max-w-md">
         <CardHeader className="flex flex-row items-center justify-between pb-4">
           <h3 className="text-lg font-semibold">Share Creative</h3>
@@ -60,6 +61,6 @@ export default function ShareModal({ ad, onClose }: ShareModalProps) {
           </div>
         </CardContent>
       </Card>
-    </div>
+    </ModalWrapper>
   )
 }
