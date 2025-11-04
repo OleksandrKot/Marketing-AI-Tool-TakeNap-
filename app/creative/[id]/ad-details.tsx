@@ -2,7 +2,7 @@
 
 import { useState, useCallback, memo } from "react"
 // favorites handled by HeartButton component
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import dynamic from "next/dynamic"
 import { ArrowLeft, Share2, Layers } from "lucide-react"
 import CollectionModal from "@/components/modals/collection-modal"
@@ -34,9 +34,26 @@ const AdDetails = memo(function AdDetails({ ad, relatedAds }: AdDetailsProps) {
   const [activeTab, setActiveTab] = useState<"content" | "info" | "adaptations">("content")
   const [copiedAdId, setCopiedAdId] = useState(false)
 
+  const searchParams = useSearchParams()
+
   const handleBack = useCallback(() => {
-    router.push("/") // Замість router.back()
-  }, [router])
+    try {
+      const from = searchParams?.get?.("from")
+      if (from === "advance-filter") {
+        router.push("/advance-filter")
+        return
+      }
+    } catch (e) {
+      // ignore and fallback to router.back()
+    }
+
+    // Prefer navigating back in history; fallback to root
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back()
+    } else {
+      router.push("/")
+    }
+  }, [router, searchParams])
 
   const handleShare = useCallback(() => {
     setShowShareModal(true)
@@ -88,22 +105,39 @@ const AdDetails = memo(function AdDetails({ ad, relatedAds }: AdDetailsProps) {
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center">
             <Button
-              onClick={handleBack}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl h-11 px-4 mr-4"
-            >
-              <ArrowLeft className="h-5 w-5 mr-2" />
-              Back to Library
-            </Button>
+                onClick={handleBack}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl h-11 px-4 mr-3"
+              >
+                <ArrowLeft className="h-5 w-5 mr-2" />
+                Return Back
+              </Button>
             <div>
+              <div className="flex items-center gap-3 mb-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => router.push(`/advance-filter?from=creative&page=${encodeURIComponent(ad.page_name || "")}`)}
+                  className="p-0 text-sm italic text-slate-500 font-medium hover:underline"
+                  title={`Show other ads from ${ad.page_name}`}
+                  aria-label={`Filter by page ${ad.page_name}`}
+                >
+                  {ad.page_name}
+                </Button>
+              </div>
               <h1 className="text-3xl font-bold text-slate-900 mb-1">{ad.title || "Creative Details"}</h1>
-              {/* simplified header: no ad metadata shown here */}
-              <div />
             </div>
           </div>
-
           <div className="flex items-center space-x-4">
-            {/* Actions: favorite and share/collection (stylized in blue) */}
             <div className="flex items-center space-x-2">
+              
+              <Button
+                variant="ghost"
+                onClick={() => router.push("/")}
+                className="text-slate-700 hover:text-slate-900 bg-white border border-slate-100 rounded-xl h-11 px-4"
+                title="Go to Library"
+              >
+                Back to Library
+              </Button>
               <HeartButton creativeId={creativeId} />
               <Button
                 variant="ghost"

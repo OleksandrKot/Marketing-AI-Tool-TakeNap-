@@ -13,9 +13,10 @@ import { formatDate, truncateText } from "@/lib/utils"
 interface AdCardProps {
   ad: Ad
   relatedAds?: Ad[]
+  from?: string
 }
 
-export function AdCard({ ad, relatedAds = [] }: AdCardProps) {
+export function AdCard({ ad, relatedAds = [], from }: AdCardProps) {
   const router = useRouter()
   const [imageLoaded, setImageLoaded] = useState(false)
   const title = ad.title || "Untitled Ad"
@@ -29,7 +30,10 @@ export function AdCard({ ad, relatedAds = [] }: AdCardProps) {
   const handleViewDetails = () => {
     // Переходимо на реальну сторінку деталей з ID креативу та передаємо relatedAds через URL
     const relatedAdsIds = relatedAds.map(relatedAd => relatedAd.id).join(',')
-    const url = relatedAdsIds ? `/creative/${ad.id}?related=${relatedAdsIds}` : `/creative/${ad.id}`
+    let url = relatedAdsIds ? `/creative/${ad.id}?related=${relatedAdsIds}` : `/creative/${ad.id}`
+    if (from) {
+      url += url.includes('?') ? `&from=${encodeURIComponent(from)}` : `?from=${encodeURIComponent(from)}`
+    }
     router.push(url)
   }
 

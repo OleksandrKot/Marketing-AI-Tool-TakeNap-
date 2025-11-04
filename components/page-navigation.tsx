@@ -5,7 +5,7 @@ import { LayoutGrid, Layers, User, Heart, Menu, X } from "lucide-react"
 import { useRouter } from "next/navigation"
 
 interface PageNavigationProps {
-  currentPage: "library" | "adaptations" | "personas" | "favorites"
+  currentPage: "library" | "adaptations" | "personas" | "favorites" | "folders"
 }
 
 export function PageNavigation({ currentPage }: PageNavigationProps) {
@@ -41,6 +41,9 @@ export function PageNavigation({ currentPage }: PageNavigationProps) {
         case "favorites":
           router.push("/favorites")
           break
+      case "folders":
+        router.push("/folders")
+        break
       case "adaptations":
         router.push("/adaptations")
         break
@@ -79,15 +82,13 @@ export function PageNavigation({ currentPage }: PageNavigationProps) {
           <Button variant="ghost" role="menuitem" onClick={() => { setOpen(false); handleNavigation("library") }} className={`justify-start`}>
             <LayoutGrid className="h-4 w-4 mr-2" /> Creative Library
           </Button>
-          <Button variant="ghost" role="menuitem" onClick={() => { setOpen(false); handleNavigation("adaptations") }} className={`justify-start`}>
-            <Layers className="h-4 w-4 mr-2" /> My Adaptations
+          <Button variant="ghost" role="menuitem" onClick={() => { setOpen(false); handleNavigation("folders") }} className={`justify-start`}>
+            <Layers className="h-4 w-4 mr-2" /> My Folders
           </Button>
           <Button variant="ghost" role="menuitem" onClick={() => { setOpen(false); handleNavigation("favorites") }} className={`justify-start`}>
             <Heart className="h-4 w-4 mr-2" /> Favorites
           </Button>
-          <Button variant="ghost" role="menuitem" onClick={() => { setOpen(false); handleNavigation("personas") }} className={`justify-start`}>
-            <User className="h-4 w-4 mr-2" /> Personas Settings
-          </Button>
+          {/* removed Personas Settings from mobile nav (WIP elsewhere) */}
         </div>
       </div>
 
@@ -106,15 +107,15 @@ export function PageNavigation({ currentPage }: PageNavigationProps) {
       </Button>
       <Button
         variant="ghost"
-        onClick={() => handleNavigation("adaptations")}
+        onClick={() => handleNavigation("folders")}
         className={`h-11 px-4 rounded-none font-medium transition-all duration-200 ${
-          currentPage === "adaptations"
+          currentPage === "folders"
             ? "bg-blue-100 text-blue-700 border-r border-slate-200 hover:bg-blue-500 hover:text-white"
             : "bg-white text-slate-600 hover:bg-slate-700 hover:text-white border-r border-slate-200"
         }`}
       >
         <Layers className="h-4 w-4 mr-2" />
-        My Adaptations
+        My Folders
       </Button>
       <Button
         variant="ghost"
@@ -128,18 +129,7 @@ export function PageNavigation({ currentPage }: PageNavigationProps) {
         <Heart className="h-4 w-4 mr-2" />
         Favorites
       </Button>
-      <Button
-        variant="ghost"
-        onClick={() => handleNavigation("personas")}
-        className={`h-11 px-4 rounded-none font-medium transition-all duration-200 ${
-          currentPage === "personas"
-            ? "bg-blue-100 text-blue-700 hover:bg-blue-500 hover:text-white"
-            : "bg-white text-slate-600 hover:bg-slate-700 hover:text-white"
-        }`}
-      >
-        <User className="h-4 w-4 mr-2" />
-        Personas Settings
-      </Button>
+      {/* Personas Settings removed from main navigation (WIP) */}
       </div>
     </div>
   )

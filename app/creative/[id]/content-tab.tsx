@@ -1,9 +1,10 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import Image from "next/image"
 import { Video, Download, RotateCcw, ExternalLink, Copy, Check, Mic, Film, Eye } from "lucide-react"
+import ScriptRenderer from "@/components/script-renderer"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import type { Ad } from "@/lib/types"
@@ -15,6 +16,8 @@ interface ContentTabProps {
 
 export function ContentTab({ ad, relatedAds }: ContentTabProps) {
   const router = useRouter()
+  const leftColRef = useRef<HTMLDivElement | null>(null)
+  const [leftHeight, setLeftHeight] = useState<number | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [imageLoaded, setImageLoaded] = useState(false)
   const [videoLoaded, setVideoLoaded] = useState(false)
@@ -63,6 +66,8 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
     }
   }, [])
 
+  // use shared ScriptRenderer component
+
   // Логіка для preview картинки:
   // - Для відео: використовуємо video_preview_image_url або image_url як fallback
   // - Для статичних: використовуємо image_url (сам креатив)
@@ -76,10 +81,29 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
   console.log("duplicates_preview_image:", ad.duplicates_preview_image);
   console.log("imageArray:", imageArray);
   
+  useEffect(() => {
+    const measure = () => {
+      const h = leftColRef.current?.offsetHeight ?? null
+      setLeftHeight(h)
+    }
+
+    measure()
+    let t: any = null
+    const onResize = () => {
+      clearTimeout(t)
+      t = setTimeout(measure, 120)
+    }
+    window.addEventListener("resize", onResize)
+    return () => {
+      window.removeEventListener("resize", onResize)
+      clearTimeout(t)
+    }
+  }, [])
+
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
       {/* Left Column - Media & Content */}
-      <div className="lg:col-span-2 space-y-6">
+      <div ref={leftColRef} className="lg:col-span-2 space-y-6">
         {/* Media Player */}
         <Card className="overflow-hidden border-slate-200 rounded-2xl">
           <CardContent className="p-0">
@@ -392,8 +416,11 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
 
         {/* Video Script */}
         {ad.video_script && (
-          <Card className="border-slate-200 rounded-2xl">
-            <CardContent className="p-0">
+          <Card
+            className="border-slate-200 rounded-2xl"
+            style={leftHeight ? { height: `${leftHeight}px` } : undefined}
+          >
+            <CardContent className="p-0 flex flex-col h-full">
               <div className="bg-red-50 p-6 border-b border-slate-200">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
@@ -410,8 +437,8 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
                   </Button>
                 </div>
               </div>
-              <div className="p-6">
-                <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{ad.video_script}</p>
+              <div className="p-6 overflow-y-auto">
+                <ScriptRenderer script={ad.video_script} copyPrefix="video_script" />
               </div>
             </CardContent>
           </Card>

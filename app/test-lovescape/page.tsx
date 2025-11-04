@@ -1,5 +1,6 @@
 "use client"
 
+import React, { Suspense } from "react"
 import { AdDetails } from "../creative/[id]/ad-details"
 import type { Ad } from "@/lib/types"
 
@@ -88,5 +89,18 @@ The overall mood is authentic, romantic, and aspirational - showing the kind of 
 }
 
 export default function TestLovescapePage() {
-  return <AdDetails ad={lovescapeAd} />
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="h-6 w-48 bg-slate-200 rounded animate-pulse mb-2"></div>
+            <div className="h-4 w-64 bg-slate-200 rounded animate-pulse"></div>
+          </div>
+        </div>
+      }
+    >
+      <AdDetails ad={lovescapeAd} />
+    </Suspense>
+  )
 }

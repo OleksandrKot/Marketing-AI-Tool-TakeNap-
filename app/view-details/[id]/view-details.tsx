@@ -2,11 +2,12 @@
 
 import { useState, useCallback, memo } from "react"
 import { useFavorites } from "@/lib/hooks/useFavorites"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import dynamic from "next/dynamic"
 import Image from "next/image"
 import {
   ArrowLeft,
+  X,
   Video,
   Download,
   Share2,
@@ -26,6 +27,7 @@ import {
   Check,
   Layers,
 } from "lucide-react"
+import ScriptRenderer from "@/components/script-renderer"
 import CollectionModal from "@/components/modals/collection-modal"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -44,6 +46,7 @@ interface ViewDetailsProps {
 
 const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const [isLoading, setIsLoading] = useState(false)
   const { isFavorite, toggleFavorite } = useFavorites()
   const creativeId = ad.ad_archive_id || ad.id.toString()
@@ -62,8 +65,22 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
   const activeDays = Math.floor((today.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24))
 
   const handleBack = useCallback(() => {
+    // If the caller provided a `from` param (for example ?from=advance-filter)
+    // we prefer returning to that specific page. Otherwise, attempt a history
+    // back and fall back to the library root.
+    const from = searchParams?.get?.("from")
+    if (from === "advance-filter" || from === "filter" || from === "filter-constructor") {
+      router.push("/advance-filter")
+      return
+    }
+
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back()
+      return
+    }
+
     router.push("/")
-  }, [router])
+  }, [router, searchParams])
 
   const handleDownload = useCallback(async () => {
     const urlToDownload = isVideo ? ad.video_hd_url : ad.image_url
@@ -119,6 +136,8 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
     }
   }, [])
 
+  // use shared ScriptRenderer component
+
   const previewImage = ad.image_url || ad.video_preview_image_url || "/placeholder.svg"
 
   return (
@@ -127,17 +146,42 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center">
-            <Button
-              variant="ghost"
-              onClick={handleBack}
-              className="mr-4 text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-            >
-              <ArrowLeft className="h-5 w-5 mr-2" />
-              Back to Library
-            </Button>
+            <div className="flex items-center gap-2 mr-4">
+              <Button
+                variant="ghost"
+                onClick={handleBack}
+                className="text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+              >
+                <ArrowLeft className="h-5 w-5 mr-2" />
+                Back
+              </Button>
+              {/* If we arrived from Filter Constructor, surface a compact close action */}
+              {searchParams?.get?.("from") === "advance-filter" && (
+                <Button
+                  variant="ghost"
+                  onClick={() => router.push("/advance-filter")}
+                  className="text-slate-500 hover:text-slate-700"
+                  title="Close and return to Filter Constructor"
+                >
+                  <X className="h-5 w-5" />
+                </Button>
+              )}
+            </div>
             <div>
+              {/* Competitor name (page_name) shown above the title for clarity */}
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => router.push(`/advance-filter?from=view-details&page=${encodeURIComponent(ad.page_name || "")}`)}
+                  className="p-0 text-sm italic text-slate-500 font-medium hover:underline"
+                  title={`Show other ads from ${ad.page_name}`}
+                  aria-label={`Filter by page ${ad.page_name}`}
+                >
+                  {ad.page_name}
+                </Button>
+              </div>
               <h1 className="text-3xl font-bold text-slate-900 mb-1">{ad.title || "Creative Details"}</h1>
-              <p className="text-slate-500 font-medium">{ad.page_name}</p>
             </div>
           </div>
 
@@ -535,9 +579,9 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                       </Button>
                     </div>
                   </div>
-                  <div className="p-6">
-                    <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{ad.video_script}</p>
-                  </div>
+                      <div className="p-6">
+                        <ScriptRenderer script={ad.video_script} copyPrefix="video_script" />
+                      </div>
                 </CardContent>
               </Card>
             )}
