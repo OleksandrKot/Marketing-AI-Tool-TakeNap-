@@ -101,11 +101,27 @@ export function ProfileDropdown() {
                 <LogOut className="h-4 w-4 mr-2" />
                 Logout
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => router.push('/folders')} className="hover:bg-slate-100 cursor-pointer">
-                My Folders
-              </DropdownMenuItem>
+
+              {/* Main menu items */}
               <DropdownMenuItem onClick={() => router.push('/profile')} className="hover:bg-slate-100 cursor-pointer">
                 My Profile
+              </DropdownMenuItem>
+
+              {/* WIP items placed below Logout as requested (navigate to WIP stub pages; show tooltip) */}
+              <DropdownMenuSeparator className="bg-slate-200 mt-1" />
+              <DropdownMenuItem
+                onClick={() => router.push('/wip/my-adaptations')}
+                title="Coming soon"
+                className="hover:bg-slate-100 cursor-pointer text-slate-700"
+              >
+                My Adaptations <span className="ml-2 text-xs font-medium bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full">WIP</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => router.push('/wip/personas-settings')}
+                title="Coming soon"
+                className="hover:bg-slate-100 cursor-pointer text-slate-700"
+              >
+                Personas settings <span className="ml-2 text-xs font-medium bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full">WIP</span>
               </DropdownMenuItem>
             </>
           ) : (

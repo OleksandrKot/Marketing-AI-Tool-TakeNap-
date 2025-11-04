@@ -1,7 +1,7 @@
 "use client";
 
 import { Concert_One } from "next/font/google";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface FilterOptions {
     pageName: string;
@@ -30,9 +30,10 @@ interface FilterPanelProps {
         hookFormats: string[];
         characterFormats: string[];
     };
+    initialPageName?: string;
 }
 
-export default function FilterPanel({ onFiltersChange, availableOptions }: FilterPanelProps) {
+export default function FilterPanel({ onFiltersChange, availableOptions, initialPageName = "" }: FilterPanelProps) {
     const [filters, setFilters] = useState<FilterOptions>({
         pageName: "",
         publisherPlatform: "",
@@ -46,6 +47,17 @@ export default function FilterPanel({ onFiltersChange, availableOptions }: Filte
         hookFormat: "",
         characterFormat: "",
     });
+
+    // Initialize pageName from prop when component mounts
+    useEffect(() => {
+        if (initialPageName) {
+            const newFilters = { ...filters, pageName: initialPageName }
+            setFilters(newFilters)
+            // Inform parent about initial filter
+            onFiltersChange(newFilters)
+        }
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialPageName])
 
     const handleFilterChange = (key: keyof FilterOptions, value: string) => {
         const newFilters = { ...filters, [key]: value };

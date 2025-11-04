@@ -1,4 +1,10 @@
 import { NextResponse } from "next/server"
+
+// This API route relies on the incoming request URL / query and external
+// service keys, so mark it as force-dynamic to avoid issues during static
+// export. Next will treat it as a dynamic route and won't attempt to render
+// it statically.
+export const dynamic = "force-dynamic"
 import { createServerSupabaseClient } from "@/lib/supabase"
 
 export async function GET(request: Request) {

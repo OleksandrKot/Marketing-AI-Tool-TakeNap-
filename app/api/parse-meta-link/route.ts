@@ -1,4 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
+
+export const dynamic = "force-dynamic"
 import { detectProductFromUrl, getWebhookUrl } from "@/lib/product-webhooks"
 
 // API для парсингу Meta Ad Library посилань

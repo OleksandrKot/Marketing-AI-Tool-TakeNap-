@@ -20,7 +20,11 @@ interface FilterOptions {
     characterFormat: string;
 }
 
-export default function FilteredContainer() {
+interface FilteredContainerProps {
+    initialPageName?: string
+}
+
+export default function FilteredContainer({ initialPageName = "" }: FilteredContainerProps) {
     const [ads, setAds] = useState<Ad[]>([]);
     const [filteredAds, setFilteredAds] = useState<Ad[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -42,7 +46,6 @@ export default function FilteredContainer() {
             try {
                 const allAds = await getAds();
                 setAds(allAds);
-                setFilteredAds(allAds);
                 
                 // Створюємо доступні опції для фільтрів
                 const pageNames = Array.from(new Set(allAds.map(ad => ad.page_name).filter(Boolean))).sort();
@@ -65,6 +68,13 @@ export default function FilteredContainer() {
                     hookFormats,
                     characterFormats,
                 });
+                // Apply initial page filter if present
+                if (initialPageName) {
+                    const filteredByPage = allAds.filter((ad) => ad.page_name === initialPageName)
+                    setFilteredAds(filteredByPage)
+                } else {
+                    setFilteredAds(allAds)
+                }
             } catch (error) {
                 console.error("Error loading ads:", error);
             } finally {
@@ -175,6 +185,7 @@ export default function FilteredContainer() {
             <FilterPanel 
                 onFiltersChange={handleFiltersChange}
                 availableOptions={availableOptions}
+                initialPageName={initialPageName}
             />
             
             {/* Результати */}
@@ -205,7 +216,7 @@ export default function FilteredContainer() {
                 ) : (
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                         {filteredAds.map((ad) => (
-                            <AdCard key={ad.id} ad={ad} />
+                            <AdCard key={ad.id} ad={ad} from="advance-filter" />
                         ))}
                     </div>
                 )}

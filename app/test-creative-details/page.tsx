@@ -1,11 +1,13 @@
+import React, { Suspense } from "react"
 import { createServerSupabaseClient } from "@/lib/supabase"
 import { AdDetails } from "../creative/[id]/ad-details"
 
 // Отримуємо перший доступний креатив з бази даних
 async function getFirstAd() {
-  const supabase = createServerSupabaseClient()
+  try {
+    const supabase = createServerSupabaseClient()
 
-  const { data, error } = await supabase
+    const { data, error } = await supabase
     .from("ads_library")
     .select(`
       id,
@@ -32,12 +34,16 @@ async function getFirstAd() {
     .limit(1)
     .single()
 
-  if (error || !data) {
-    console.error("Error fetching ad:", error)
+    if (error || !data) {
+      console.error("Error fetching ad:", error)
+      return null
+    }
+
+    return data
+  } catch (err) {
+    console.warn("getFirstAd: supabase client unavailable or failed, falling back to null", err)
     return null
   }
-
-  return data
 }
 
 export default async function TestCreativeDetailsPage() {
@@ -54,5 +60,18 @@ export default async function TestCreativeDetailsPage() {
     )
   }
 
-  return <AdDetails ad={ad} />
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+          <div className="text-center">
+            <div className="h-6 w-48 bg-slate-200 rounded animate-pulse mb-2"></div>
+            <div className="h-4 w-64 bg-slate-200 rounded animate-pulse"></div>
+          </div>
+        </div>
+      }
+    >
+      <AdDetails ad={ad} />
+    </Suspense>
+  )
 }

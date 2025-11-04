@@ -14,7 +14,15 @@ interface TagFilterProps {
 }
 
 export function TagFilter({ availableTags, selectedTags, onTagsChange, className }: TagFilterProps) {
+  // Quick feature flag: hide tag filter UI while WIP
+  const SHOW_TAGS = false
+
   const [isOpen, setIsOpen] = useState(false)
+
+  if (!SHOW_TAGS) {
+    // temporarily hide tag filter UI
+    return null
+  }
 
   const handleTagToggle = (tag: string) => {
     if (selectedTags.includes(tag)) {
