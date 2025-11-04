@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { AdCard } from "@/components/ad-card";
-import FilterPanel from "@/components/FilterPanel";
+import FilterPanel from "@/app/filter-bar/components/FilterPanel";
 import { getAds } from "@/app/actions";
 import type { Ad } from "@/lib/types";
 
@@ -110,8 +110,6 @@ export default function FilteredContainer() {
         // Фільтр концепції
         if (filters.conceptFormat) {
             filtered = filtered.filter(ad => ad.concept === filters.conceptFormat);
-            console.log("ewklrgmweogowerg" + filtered);
-            alert("gkweog");
         }
         // Фільтр реалізації
         if (filters.realizationFormat) {

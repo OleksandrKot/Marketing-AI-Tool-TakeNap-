@@ -12,8 +12,6 @@ type Collection = {
   id: string
   name: string
   itemIds: string[]
-  owner?: string
-  description?: string
   createdAt: string
   updatedAt?: string
 }
@@ -65,33 +63,41 @@ export function useFavorites() {
     saveToStorage(store)
   }, [store])
 
+  // normalize incoming ids to string to avoid mismatches between numeric ids
+  // and stored string ids (some callers pass numbers, some pass strings)
   const isFavorite = useCallback(
-    (creativeId: string) => store.favorites.some((f) => f.creativeId === creativeId),
+    (creativeId: string | number) => {
+      const id = String(creativeId)
+      return store.favorites.some((f) => f.creativeId === id)
+    },
     [store.favorites],
   )
 
-  const addFavorite = useCallback((creativeId: string, note?: string) => {
+  const addFavorite = useCallback((creativeId: string | number, note?: string) => {
+    const id = String(creativeId)
     setStore((prev) => {
-      if (prev.favorites.some((f) => f.creativeId === creativeId)) return prev
-      const fav: FavoriteItem = { creativeId, createdAt: new Date().toISOString(), note }
+      if (prev.favorites.some((f) => f.creativeId === id)) return prev
+      const fav: FavoriteItem = { creativeId: id, createdAt: new Date().toISOString(), note }
       const next = { ...prev, favorites: [...prev.favorites, fav] }
       saveToStorage(next)
       return next
     })
   }, [])
 
-  const removeFavorite = useCallback((creativeId: string) => {
+  const removeFavorite = useCallback((creativeId: string | number) => {
+    const id = String(creativeId)
     setStore((prev) => {
-      const next = { ...prev, favorites: prev.favorites.filter((f) => f.creativeId !== creativeId) }
+      const next = { ...prev, favorites: prev.favorites.filter((f) => f.creativeId !== id) }
       saveToStorage(next)
       return next
     })
   }, [])
 
   const toggleFavorite = useCallback(
-    (creativeId: string) => {
-      if (isFavorite(creativeId)) removeFavorite(creativeId)
-      else addFavorite(creativeId)
+    (creativeId: string | number) => {
+      const id = String(creativeId)
+      if (isFavorite(id)) removeFavorite(id)
+      else addFavorite(id)
     },
     [isFavorite, addFavorite, removeFavorite],
   )
@@ -107,16 +113,6 @@ export function useFavorites() {
     })
   }, [])
 
-  const createCollectionWithOwner = useCallback((name: string, owner?: string, description?: string) => {
-    const id = typeof crypto !== "undefined" && (crypto as any).randomUUID ? (crypto as any).randomUUID() : `${Date.now()}-${Math.random()}`
-    setStore((prev) => {
-      const col: Collection = { id, name, itemIds: [], owner, description, createdAt: new Date().toISOString() }
-      const next = { ...prev, collections: [...prev.collections, col] }
-      saveToStorage(next)
-      return next
-    })
-  }, [])
-
   const deleteCollection = useCallback((collectionId: string) => {
     setStore((prev) => {
       const next = { ...prev, collections: prev.collections.filter((c) => c.id !== collectionId) }
@@ -125,12 +121,13 @@ export function useFavorites() {
     })
   }, [])
 
-  const addToCollection = useCallback((collectionId: string, creativeId: string) => {
+  const addToCollection = useCallback((collectionId: string, creativeId: string | number) => {
+    const id = String(creativeId)
     setStore((prev) => {
       const next = {
         ...prev,
         collections: prev.collections.map((c) =>
-          c.id === collectionId ? { ...c, itemIds: Array.from(new Set([...c.itemIds, creativeId])), updatedAt: new Date().toISOString() } : c,
+          c.id === collectionId ? { ...c, itemIds: Array.from(new Set([...c.itemIds, id])), updatedAt: new Date().toISOString() } : c,
         ),
       }
       saveToStorage(next)
@@ -138,34 +135,12 @@ export function useFavorites() {
     })
   }, [])
 
-  const updateCollection = useCallback((collectionId: string, updates: { name?: string; owner?: string; description?: string }) => {
+  const removeFromCollection = useCallback((collectionId: string, creativeId: string | number) => {
+    const id = String(creativeId)
     setStore((prev) => {
       const next = {
         ...prev,
-        collections: prev.collections.map((c) => (c.id === collectionId ? { ...c, ...updates, updatedAt: new Date().toISOString() } : c)),
-      }
-      saveToStorage(next)
-      return next
-    })
-  }, [])
-
-  // allow setting a note for a favorite item (global per creative id)
-  const setItemNote = useCallback((creativeId: string, note?: string) => {
-    setStore((prev) => {
-      const next = {
-        ...prev,
-        favorites: prev.favorites.map((f) => (f.creativeId === creativeId ? { ...f, note } : f)),
-      }
-      saveToStorage(next)
-      return next
-    })
-  }, [])
-
-  const removeFromCollection = useCallback((collectionId: string, creativeId: string) => {
-    setStore((prev) => {
-      const next = {
-        ...prev,
-        collections: prev.collections.map((c) => (c.id === collectionId ? { ...c, itemIds: c.itemIds.filter((i) => i !== creativeId), updatedAt: new Date().toISOString() } : c)),
+        collections: prev.collections.map((c) => (c.id === collectionId ? { ...c, itemIds: c.itemIds.filter((i) => i !== id), updatedAt: new Date().toISOString() } : c)),
       }
       saveToStorage(next)
       return next
@@ -196,11 +171,8 @@ export function useFavorites() {
     removeFavorite,
     toggleFavorite,
     createCollection,
-    createCollectionWithOwner,
     deleteCollection,
     addToCollection,
-    updateCollection,
-    setItemNote,
     removeFromCollection,
     exportJSON,
     importJSON,

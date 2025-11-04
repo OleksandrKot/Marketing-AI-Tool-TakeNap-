@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { useFavorites } from "@/lib/hooks/useFavorites"
-import { useFolders } from "@/lib/hooks/useFolders"
+import ModalWrapper from "./ModalWrapper"
 
 interface CollectionModalProps {
   isOpen: boolean
@@ -15,48 +15,41 @@ interface CollectionModalProps {
 }
 
 export function CollectionModal({ isOpen, onClose, creativeId }: CollectionModalProps) {
-  const { collections } = useFavorites()
-  const { folders: serverCollections, createFolder, addItemToFolder, removeItemFromFolder } = useFolders()
-  // prefer server-backed collections when available
-  const cols = serverCollections && serverCollections.length ? serverCollections : collections
+  const { collections, createCollection, addToCollection, removeFromCollection } = useFavorites()
   const [newName, setNewName] = useState("")
 
   const membership = useMemo(() => {
     const map: Record<string, boolean> = {}
-    for (const c of cols) {
-      const anyc: any = c
-      const ids = (anyc.folder_items || anyc.itemIds || []).map((i: any) => i.creative_id || i)
-      map[c.id] = ids.includes(creativeId)
-    }
+    for (const c of collections) map[c.id] = c.itemIds.includes(creativeId)
     return map
-  }, [cols, creativeId])
+  }, [collections, creativeId])
 
   const handleToggle = useCallback(
     (collectionId: string) => {
-      if (membership[collectionId]) removeItemFromFolder(collectionId, creativeId)
-      else addItemToFolder(collectionId, creativeId)
+      if (membership[collectionId]) removeFromCollection(collectionId, creativeId)
+      else addToCollection(collectionId, creativeId)
     },
-    [membership, addItemToFolder, removeItemFromFolder, creativeId],
+    [membership, addToCollection, removeFromCollection, creativeId],
   )
 
   const handleCreate = useCallback(async () => {
     const name = newName.trim()
     if (!name) return
-    try {
-      const created = await createFolder(name)
-      if (created) await addItemToFolder(created.id, creativeId)
-    } catch (e) {
-      console.error(e)
-    }
+    createCollection(name)
+    // small timeout to allow collection to appear in store and then add
+    setTimeout(() => {
+      const created = (collections.find((c) => c.name === name) || null)
+      if (created) addToCollection(created.id, creativeId)
+    }, 50)
     setNewName("")
-  }, [newName, createFolder, addItemToFolder, creativeId, cols])
+  }, [newName, createCollection, collections, addToCollection, creativeId])
 
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+    <ModalWrapper isOpen={isOpen} onClose={onClose} panelClassName="p-4">
       <Card className="w-full max-w-md">
-        <CardContent className="p-0">
+        <CardContent className="p-6">
           <div className="flex items-center justify-between p-4 border-b">
             <h3 className="text-lg font-semibold">Manage Collections</h3>
             <Button variant="ghost" size="icon" onClick={onClose} className="text-slate-600">
@@ -79,8 +72,8 @@ export function CollectionModal({ isOpen, onClose, creativeId }: CollectionModal
             <div>
               <label className="text-sm text-slate-600 mb-2 block">Your collections</label>
               <div className="space-y-2 max-h-48 overflow-auto">
-                {cols.length === 0 && <div className="text-sm text-slate-500">No collections yet</div>}
-                {cols.map((c) => (
+                {collections.length === 0 && <div className="text-sm text-slate-500">No collections yet</div>}
+                {collections.map((c) => (
                   <div key={c.id} className="flex items-center justify-between bg-slate-50 p-3 rounded-md border">
                     <div className="flex items-center gap-3">
                       <input
@@ -92,13 +85,10 @@ export function CollectionModal({ isOpen, onClose, creativeId }: CollectionModal
                       />
                       <div>
                         <div className="font-medium text-slate-900">{c.name}</div>
-                        <div className="text-xs text-slate-500">{(((c as any).folder_items || (c as any).itemIds || []) as any).length} items</div>
+                        <div className="text-xs text-slate-500">{c.itemIds.length} items</div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <a href={`/folders/${c.id}`} className="text-sm text-slate-500 hover:underline">Open</a>
-                      <div className="text-sm text-slate-500">{new Date(((c as any).createdAt || (c as any).created_at) as any).toLocaleDateString()}</div>
-                    </div>
+                    <div className="text-sm text-slate-500">{new Date(c.createdAt).toLocaleDateString()}</div>
                   </div>
                 ))}
               </div>
@@ -106,7 +96,7 @@ export function CollectionModal({ isOpen, onClose, creativeId }: CollectionModal
           </div>
         </CardContent>
       </Card>
-    </div>
+    </ModalWrapper>
   )
 }
 

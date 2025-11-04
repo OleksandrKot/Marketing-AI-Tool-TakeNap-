@@ -3,15 +3,10 @@
 @layer utilities {
   .modal-open {
     overflow: hidden !important;
-    padding-right: var(--scrollbar-width) !important;
   }
 }
 
 /* Apply to html when modal is open */
-html.modal-open {
-  overflow: hidden !important;
-}
-
 /* Ensure modal content can scroll if needed */
 .modal-content {
   max-height: calc(100vh - 2rem);

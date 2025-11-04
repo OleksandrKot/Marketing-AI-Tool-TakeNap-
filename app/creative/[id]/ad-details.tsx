@@ -1,17 +1,18 @@
 "use client"
 
 import { useState, useCallback, memo } from "react"
-import { useFavorites } from "@/lib/hooks/useFavorites"
+// favorites handled by HeartButton component
 import { useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
-import { ArrowLeft, Share2, Heart, Copy, Check, Layers } from "lucide-react"
-import CollectionModal from "@/components/collection-modal"
+import { ArrowLeft, Share2, Layers } from "lucide-react"
+import CollectionModal from "@/components/modals/collection-modal"
+import { HeartButton } from "@/app/favorites/components/HeartButton"
 import { Button } from "@/components/ui/button"
 import { CreativeTabs } from "@/components/creative-tabs"
 import { ContentTab } from "./content-tab"
 import { InfoTab } from "./info-tab"
 import { AdaptationsTab } from "./adaptations-tab"
-import { TagManager } from "./tag-manager"
+// tag manager removed from header for simplified detail view
 import type { Ad } from "@/lib/types"
 
 // Динамічне завантаження компонентів, які не потрібні одразу
@@ -26,9 +27,8 @@ interface AdDetailsProps {
 
 const AdDetails = memo(function AdDetails({ ad, relatedAds }: AdDetailsProps) {
   const router = useRouter()
-  const { isFavorite, toggleFavorite } = useFavorites()
-  const creativeId = ad.ad_archive_id || ad.id.toString()
-  const isLiked = isFavorite(creativeId)
+  // Normalize creative id to string to avoid mismatches (some ads have numeric ad_archive_id)
+  const creativeId = String(ad.ad_archive_id ?? ad.id)
   const [showShareModal, setShowShareModal] = useState(false)
   const [showCollectionsModal, setShowCollectionsModal] = useState(false)
   const [activeTab, setActiveTab] = useState<"content" | "info" | "adaptations">("content")
@@ -37,10 +37,6 @@ const AdDetails = memo(function AdDetails({ ad, relatedAds }: AdDetailsProps) {
   const handleBack = useCallback(() => {
     router.push("/") // Замість router.back()
   }, [router])
-
-  const handleLike = useCallback(() => {
-    toggleFavorite(creativeId)
-  }, [toggleFavorite, creativeId])
 
   const handleShare = useCallback(() => {
     setShowShareModal(true)
@@ -92,59 +88,33 @@ const AdDetails = memo(function AdDetails({ ad, relatedAds }: AdDetailsProps) {
         <div className="flex items-center justify-between mb-8">
           <div className="flex items-center">
             <Button
-              variant="ghost"
               onClick={handleBack}
-              className="mr-4 text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+              className="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl h-11 px-4 mr-4"
             >
               <ArrowLeft className="h-5 w-5 mr-2" />
               Back to Library
             </Button>
             <div>
               <h1 className="text-3xl font-bold text-slate-900 mb-1">{ad.title || "Creative Details"}</h1>
-              <div className="flex items-center space-x-2">
-                <p className="text-slate-500 font-medium">Ad ID: {ad.ad_archive_id || ad.id}</p>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleCopyAdId}
-                  className="text-slate-500 hover:text-slate-700 h-6 w-6 p-0"
-                >
-                  {copiedAdId ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                </Button>
-              </div>
+              {/* simplified header: no ad metadata shown here */}
+              <div />
             </div>
           </div>
 
           <div className="flex items-center space-x-4">
-            {/* Tag Manager - показуємо тільки на content tab */}
-            {activeTab === "content" && (
-              <div className="relative group">
-                <TagManager ad={ad} onTagsUpdate={handleTagsUpdate} />
-              </div>
-            )}
-
-            {/* Like and Share buttons */}
+            {/* Actions: favorite and share/collection (stylized in blue) */}
             <div className="flex items-center space-x-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleLike}
-                className={`transition-colors ${
-                  isLiked ? "text-red-500 hover:text-red-600" : "text-slate-400 hover:text-slate-600"
-                }`}
-              >
-                <Heart className={`h-5 w-5 ${isLiked ? "fill-current" : ""}`} />
-              </Button>
+              <HeartButton creativeId={creativeId} />
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => setShowCollectionsModal(true)}
-                className="text-slate-400 hover:text-slate-600"
+                className="text-blue-600 hover:text-blue-800"
                 title="Add to collections"
               >
                 <Layers className="h-5 w-5" />
               </Button>
-              <Button variant="ghost" size="icon" onClick={handleShare} className="text-slate-400 hover:text-slate-600">
+              <Button variant="ghost" size="icon" onClick={handleShare} className="text-blue-600 hover:text-blue-800">
                 <Share2 className="h-5 w-5" />
               </Button>
             </div>

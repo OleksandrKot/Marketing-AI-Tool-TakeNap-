@@ -58,7 +58,7 @@ export function AdaptationsTab({ ad }: AdaptationsTabProps) {
         </div>
         <Button
           onClick={() => setShowCreateModal(true)}
-          className="bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-xl h-11 px-6 transition-all duration-200"
+          className="bg-white-400 hover:bg-white-700 text-white font-medium rounded-xl h-11 px-6 transition-all duration-200"
         >
           <Zap className="h-4 w-4 mr-2" />
           Create Adaptation

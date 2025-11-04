@@ -16,8 +16,8 @@ export const PRODUCT_WEBHOOKS: ProductWebhooks = {
     page_id: "553223604546344",
     name: "Replika",
     webhooks: {
-      all: "https://hook.us2.make.com/k1n547jesq5mfp0nlnr86k21cb8expsv",
-      video: "https://hook.us2.make.com/5tg2s82i4a6uw7eko2ug5wau3rwqd7df",
+      all: "https://hook.us2.make.com/o3mat9a4q1v186mdhi7xu1sjamublb28",
+      video: "https://hook.us2.make.com/o3mat9a4q1v186mdhi7xu1sjamublb28",
       image: "https://hook.us2.make.com/o3mat9a4q1v186mdhi7xu1sjamublb28",
     },
   },
