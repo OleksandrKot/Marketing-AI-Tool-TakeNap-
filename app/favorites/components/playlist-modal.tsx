@@ -1,111 +1,117 @@
-"use client"
+'use client';
 
-import { useCallback, useMemo, useState, useEffect } from "react"
-import { X, Plus, Heart } from "lucide-react"
-import { supabase } from "@/lib/supabase"
-import LoginModal from "@/app/login-auth/LoginModal"
-import ModalWrapper from "../../../components/modals/ModalWrapper"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { useFolders } from "@/lib/hooks/useFolders"
-import { useFavorites } from "@/lib/hooks/useFavorites"
+import { useCallback, useMemo, useState, useEffect } from 'react';
+import { X, Plus, Heart } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+import dynamic from 'next/dynamic';
+const LoginModal = dynamic(() => import('@/app/login-auth/LoginModal'), {
+  ssr: false,
+  loading: () => null,
+});
+import ModalWrapper from '../../../components/modals/ModalWrapper';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { useFolders } from '@/lib/hooks/useFolders';
+import { useFavorites } from '@/lib/hooks/useFavorites';
 
 interface PlaylistModalProps {
-  isOpen: boolean
-  onClose: () => void
-  creativeId: string
+  isOpen: boolean;
+  onClose: () => void;
+  creativeId: string;
 }
 
 export default function PlaylistModal({ isOpen, onClose, creativeId }: PlaylistModalProps) {
-  const { folders, createFolder, addItemToFolder, removeItemFromFolder } = useFolders()
-  const { isFavorite, toggleFavorite } = useFavorites()
-  const [newName, setNewName] = useState("")
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
-  const [showLogin, setShowLogin] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
+  const { folders, createFolder, addItemToFolder, removeItemFromFolder } = useFolders();
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const [newName, setNewName] = useState('');
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [showLogin, setShowLogin] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
-  const favState = isFavorite(creativeId)
+  const favState = isFavorite(creativeId);
 
   const handleFavoriteToggle = useCallback(() => {
     try {
-      toggleFavorite(creativeId)
-      setToast(isFavorite(creativeId) ? "Removed from favorites" : "Added to favorites")
-      setTimeout(() => setToast(null), 1800)
+      toggleFavorite(creativeId);
+      setToast(isFavorite(creativeId) ? 'Removed from favorites' : 'Added to favorites');
+      setTimeout(() => setToast(null), 1800);
     } catch (e) {
-      console.error("favorite toggle failed", e)
+      console.error('favorite toggle failed', e);
     }
-  }, [toggleFavorite, creativeId])
+  }, [toggleFavorite, creativeId]);
 
   const membership = useMemo(() => {
-    const map: Record<string, boolean> = {}
+    const map: Record<string, boolean> = {};
     for (const f of folders) {
-      const has = (f.folder_items || []).some((it) => it.creative_id === creativeId || it.creative_id === creativeId.toString())
-      map[f.id] = has
+      const has = (f.folder_items || []).some(
+        (it) => it.creative_id === creativeId || it.creative_id === creativeId.toString()
+      );
+      map[f.id] = has;
     }
-    return map
-  }, [folders, creativeId])
+    return map;
+  }, [folders, creativeId]);
 
   const handleToggle = useCallback(
     async (folderId: string) => {
       try {
         if (isAuthenticated === false) {
-          setShowLogin(true)
-          return
+          setShowLogin(true);
+          return;
         }
         if (membership[folderId]) {
-          await removeItemFromFolder(folderId, creativeId)
-          setToast("Removed from folder")
-          setTimeout(() => setToast(null), 1800)
+          await removeItemFromFolder(folderId, creativeId);
+          setToast('Removed from folder');
+          setTimeout(() => setToast(null), 1800);
         } else {
-          await addItemToFolder(folderId, creativeId)
-          setToast("Added to folder")
-          setTimeout(() => setToast(null), 1800)
+          await addItemToFolder(folderId, creativeId);
+          setToast('Added to folder');
+          setTimeout(() => setToast(null), 1800);
         }
       } catch (e) {
-        console.error("Folder add/remove failed", e)
+        console.error('Folder add/remove failed', e);
       }
     },
-    [membership, addItemToFolder, removeItemFromFolder, creativeId, isAuthenticated],
-  )
+    [membership, addItemToFolder, removeItemFromFolder, creativeId, isAuthenticated]
+  );
 
   const handleCreate = useCallback(async () => {
-    const name = newName.trim()
-    if (!name) return
+    const name = newName.trim();
+    if (!name) return;
     try {
       if (isAuthenticated === false) {
-        setShowLogin(true)
-        return
+        setShowLogin(true);
+        return;
       }
-      const created = await createFolder(name)
-      if (created?.id) await addItemToFolder(created.id, creativeId)
-      setNewName("")
-      setToast("Folder created and item added")
-      setTimeout(() => setToast(null), 1800)
+      const created = await createFolder(name);
+      if (created?.id) await addItemToFolder(created.id, creativeId);
+      setNewName('');
+      setToast('Folder created and item added');
+      setTimeout(() => setToast(null), 1800);
     } catch (e) {
-      console.error("Create folder failed", e)
+      console.error('Create folder failed', e);
     }
-  }, [newName, createFolder, addItemToFolder, creativeId, isAuthenticated])
+  }, [newName, createFolder, addItemToFolder, creativeId, isAuthenticated]);
 
   useEffect(() => {
-    let mounted = true
-    ;(async () => {
+    let mounted = true;
+    (async () => {
       try {
-        const res: any = await supabase.auth.getUser()
-        if (!mounted) return
-        const user = res?.data?.user
-        setIsAuthenticated(!!user)
+        const res = await supabase.auth.getUser();
+        if (!mounted) return;
+        const user = res?.data?.user;
+        setIsAuthenticated(!!user);
       } catch (e) {
-        if (!mounted) return
-        setIsAuthenticated(false)
+        if (!mounted) return;
+        setIsAuthenticated(false);
       }
-    })()
+    })();
     return () => {
-      mounted = false
-    }
-  }, [])
+      mounted = false;
+    };
+  }, []);
 
-  if (!isOpen) return null
+  if (!isOpen) return null;
 
   return (
     <ModalWrapper isOpen={isOpen} onClose={onClose} panelClassName="p-4">
@@ -114,7 +120,9 @@ export default function PlaylistModal({ isOpen, onClose, creativeId }: PlaylistM
           <div className="flex items-center justify-between p-4 border-b">
             <div>
               <h3 className="text-lg font-semibold">Add to playlist</h3>
-              <p className="text-sm text-slate-500">Add this ad to favorites or to one of your folders.</p>
+              <p className="text-sm text-slate-500">
+                Add this ad to favorites or to one of your folders.
+              </p>
             </div>
             <Button variant="ghost" size="icon" onClick={onClose} className="text-slate-600">
               <X className="h-4 w-4" />
@@ -124,19 +132,32 @@ export default function PlaylistModal({ isOpen, onClose, creativeId }: PlaylistM
           <div className="p-4 space-y-4">
             <div className="flex items-center justify-between">
               <div>
-                <label className="text-sm text-slate-600 mb-1 block">Favorites</label>
+                <div className="text-sm text-slate-600 mb-1 block">Favorites</div>
                 <p className="text-xs text-slate-500">Saved locally in your browser</p>
               </div>
-              <Button onClick={handleFavoriteToggle} variant="ghost" className={`flex items-center gap-2 ${favState ? 'text-red-600' : 'text-slate-700'}`}>
+              <Button
+                onClick={handleFavoriteToggle}
+                variant="ghost"
+                className={`flex items-center gap-2 ${
+                  favState ? 'text-red-600' : 'text-slate-700'
+                }`}
+              >
                 <Heart className="h-4 w-4" />
                 <span className="text-sm">{favState ? 'Remove' : 'Add'}</span>
               </Button>
             </div>
 
             <div>
-              <label className="text-sm text-slate-600 mb-2 block">Create new folder</label>
+              <label htmlFor="new-folder-name" className="text-sm text-slate-600 mb-2 block">
+                Create new folder
+              </label>
               <div className="flex gap-2">
-                <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Folder name" />
+                <Input
+                  id="new-folder-name"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                  placeholder="Folder name"
+                />
                 <Button onClick={handleCreate} className="px-4">
                   <Plus className="h-4 w-4 mr-2" />
                   Create
@@ -145,19 +166,34 @@ export default function PlaylistModal({ isOpen, onClose, creativeId }: PlaylistM
             </div>
 
             <div>
-              <label className="text-sm text-slate-600 mb-2 block">Your folders</label>
+              <div className="text-sm text-slate-600 mb-2 block">Your folders</div>
               <div className="space-y-2 max-h-48 overflow-auto">
-                {folders.length === 0 && <div className="text-sm text-slate-500">No folders yet</div>}
+                {folders.length === 0 && (
+                  <div className="text-sm text-slate-500">No folders yet</div>
+                )}
                 {folders.map((f) => (
-                  <div key={f.id} className="flex items-center justify-between bg-slate-50 p-3 rounded-md border">
+                  <div
+                    key={f.id}
+                    className="flex items-center justify-between bg-slate-50 p-3 rounded-md border"
+                  >
                     <div className="flex items-center gap-3">
-                      <input id={`folder-${f.id}`} type="checkbox" checked={!!membership[f.id]} onChange={() => handleToggle(f.id)} className="w-4 h-4" />
+                      <input
+                        id={`folder-${f.id}`}
+                        type="checkbox"
+                        checked={!!membership[f.id]}
+                        onChange={() => handleToggle(f.id)}
+                        className="w-4 h-4"
+                      />
                       <div>
                         <div className="font-medium text-slate-900">{f.name}</div>
-                        <div className="text-xs text-slate-500">{(f.folder_items || []).length} items</div>
+                        <div className="text-xs text-slate-500">
+                          {(f.folder_items || []).length} items
+                        </div>
                       </div>
                     </div>
-                    <div className="text-sm text-slate-500">{new Date(f.created_at).toLocaleDateString()}</div>
+                    <div className="text-sm text-slate-500">
+                      {new Date(f.created_at).toLocaleDateString()}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -176,7 +212,7 @@ export default function PlaylistModal({ isOpen, onClose, creativeId }: PlaylistM
       {/* login modal for folder actions */}
       {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
     </ModalWrapper>
-  )
+  );
 }
 
-export { PlaylistModal }
+export { PlaylistModal };

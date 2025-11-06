@@ -1,30 +1,38 @@
-"use client"
+'use client';
 
-import { useState } from "react"
-import { Eye, Calendar, ChevronDown, Video, X, Search } from "lucide-react"
-import { Card, CardContent } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { DatePicker } from "@/components/date-picker"
+import React, { useState, memo } from 'react';
+import { Eye, Calendar, ChevronDown, Video, X, Search } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { DatePicker } from '@/components/date-picker';
 
 interface StatsBarProps {
-  totalAds: number
-  videoAds: number
-  uniquePages: number
-  columnIndex: number // 0 for Competitor Link, 1 for Creative Format, 2 for Date of Creation
+  totalAds: number;
+  videoAds: number;
+  uniquePages: number;
+  columnIndex: number; // 0 for Competitor Link, 1 for Creative Format, 2 for Date of Creation
   // Optional controlled input props for the competitor link
-  value?: string
-  onChange?: (value: string) => void
-  onEnterPress?: () => void
+  value?: string;
+  onChange?: (value: string) => void;
+  onEnterPress?: () => void;
 }
 
-export function StatsBar({ totalAds, videoAds, uniquePages, columnIndex, value, onChange, onEnterPress }: StatsBarProps) {
-  const [competitorLink, setCompetitorLink] = useState("")
-  const [selectedFormat, setSelectedFormat] = useState<string | null>(null)
-  const [selectedDateRange, setSelectedDateRange] = useState<string | null>(null)
-  const [isFormatDropdownOpen, setIsFormatDropdownOpen] = useState(false)
-  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false)
+function StatsBarComponent({
+  totalAds,
+  videoAds,
+  uniquePages,
+  columnIndex,
+  value,
+  onChange,
+  onEnterPress,
+}: StatsBarProps) {
+  const [competitorLink, setCompetitorLink] = useState('');
+  const [selectedFormat, setSelectedFormat] = useState<string | null>(null);
+  const [selectedDateRange, setSelectedDateRange] = useState<string | null>(null);
+  const [isFormatDropdownOpen, setIsFormatDropdownOpen] = useState(false);
+  const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
 
-  const formatOptions = ["All Formats", "Video", "Image"]
+  const formatOptions = ['All Formats', 'Video', 'Image'];
 
   // Render only the column corresponding to the columnIndex
   if (columnIndex === 0) {
@@ -37,22 +45,25 @@ export function StatsBar({ totalAds, videoAds, uniquePages, columnIndex, value, 
           </div>
           <div className="flex-1">
             <p className="text-sm text-slate-500 font-medium mb-2">Search Products</p>
+            <p className="text-xs text-slate-400 mb-2">
+              {totalAds} ads • {videoAds} videos • {uniquePages} pages
+            </p>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
                 placeholder="Product name or Meta Ad Library link..."
                 value={value !== undefined ? value : competitorLink}
                 onChange={(e) => {
-                  const v = e.target.value
+                  const v = e.target.value;
                   if (onChange) {
-                    onChange(v)
+                    onChange(v);
                   } else {
-                    setCompetitorLink(v)
+                    setCompetitorLink(v);
                   }
                 }}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    onEnterPress?.()
+                  if (e.key === 'Enter') {
+                    onEnterPress?.();
                   }
                 }}
                 className="border-slate-200 rounded-lg h-9 text-sm text-slate-700 placeholder:text-slate-500 bg-slate-50 pl-10"
@@ -61,7 +72,7 @@ export function StatsBar({ totalAds, videoAds, uniquePages, columnIndex, value, 
           </div>
         </CardContent>
       </Card>
-    )
+    );
   } else if (columnIndex === 1) {
     // Creative Format only
     return (
@@ -74,14 +85,22 @@ export function StatsBar({ totalAds, videoAds, uniquePages, columnIndex, value, 
             <p className="text-sm text-slate-500 font-medium mb-2">Creative Format</p>
             <div className="relative">
               <div
+                role="button"
+                tabIndex={0}
                 className={`w-full h-9 px-3 py-2 border-2 ${
-                  isFormatDropdownOpen ? "border-blue-500" : "border-slate-200"
+                  isFormatDropdownOpen ? 'border-blue-500' : 'border-slate-200'
                 } rounded-lg bg-white flex items-center justify-between cursor-pointer text-sm text-slate-700`}
                 onClick={() => setIsFormatDropdownOpen(!isFormatDropdownOpen)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setIsFormatDropdownOpen(!isFormatDropdownOpen);
+                  }
+                }}
               >
                 <div className="flex items-center space-x-2">
                   <Video className="h-4 w-4 text-slate-400" />
-                  <span>{selectedFormat || "All Formats"}</span>
+                  <span>{selectedFormat || 'All Formats'}</span>
                 </div>
                 <div className="flex items-center space-x-2">
                   {selectedFormat && (
@@ -89,8 +108,8 @@ export function StatsBar({ totalAds, videoAds, uniquePages, columnIndex, value, 
                       aria-label="Clear selected format"
                       title="Clear selected format"
                       onClick={(e) => {
-                        e.stopPropagation()
-                        setSelectedFormat(null)
+                        e.stopPropagation();
+                        setSelectedFormat(null);
                       }}
                       className="text-slate-400 hover:text-slate-600"
                     >
@@ -98,7 +117,9 @@ export function StatsBar({ totalAds, videoAds, uniquePages, columnIndex, value, 
                     </button>
                   )}
                   <ChevronDown
-                    className={`h-4 w-4 text-slate-400 transition-transform ${isFormatDropdownOpen ? "rotate-180" : ""}`}
+                    className={`h-4 w-4 text-slate-400 transition-transform ${
+                      isFormatDropdownOpen ? 'rotate-180' : ''
+                    }`}
                   />
                 </div>
               </div>
@@ -108,18 +129,34 @@ export function StatsBar({ totalAds, videoAds, uniquePages, columnIndex, value, 
                   {formatOptions.map((format) => (
                     <div
                       key={format}
+                      role="button"
+                      tabIndex={0}
                       className={`flex items-center justify-between px-3 py-2 hover:bg-blue-100 cursor-pointer text-sm ${
-                        selectedFormat === format || (!selectedFormat && format === "All Formats") ? "bg-blue-100" : ""
+                        selectedFormat === format || (!selectedFormat && format === 'All Formats')
+                          ? 'bg-blue-100'
+                          : ''
                       }`}
                       onClick={() => {
-                        setSelectedFormat(format === "All Formats" ? null : format)
-                        setIsFormatDropdownOpen(false)
+                        setSelectedFormat(format === 'All Formats' ? null : format);
+                        setIsFormatDropdownOpen(false);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setSelectedFormat(format === 'All Formats' ? null : format);
+                          setIsFormatDropdownOpen(false);
+                        }
                       }}
                     >
                       <div className="flex items-center space-x-2">
-                        {(selectedFormat === format || (!selectedFormat && format === "All Formats")) && (
+                        {(selectedFormat === format ||
+                          (!selectedFormat && format === 'All Formats')) && (
                           <div className="w-5 h-5 bg-blue-500 rounded flex items-center justify-center">
-                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <svg
+                              className="w-3 h-3 text-white"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
                               <path
                                 fillRule="evenodd"
                                 d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
@@ -138,7 +175,7 @@ export function StatsBar({ totalAds, videoAds, uniquePages, columnIndex, value, 
           </div>
         </CardContent>
       </Card>
-    )
+    );
   } else {
     // Date of Creation
     return (
@@ -158,6 +195,9 @@ export function StatsBar({ totalAds, videoAds, uniquePages, columnIndex, value, 
           </div>
         </CardContent>
       </Card>
-    )
+    );
   }
 }
+
+export const StatsBar = memo(StatsBarComponent);
+StatsBar.displayName = 'StatsBar';

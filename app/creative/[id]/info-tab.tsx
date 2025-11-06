@@ -1,34 +1,34 @@
-"use client"
+'use client';
 
-import { useState, useCallback } from "react"
-import { Calendar, Clock, Info, Play, ImageIcon, Copy, Check } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { formatDate } from "@/lib/utils"
-import type { Ad } from "@/lib/types"
+import { useState, useCallback } from 'react';
+import { Calendar, Clock, Info, Play, ImageIcon, Copy, Check } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { formatDate } from '@/lib/utils';
+import type { Ad } from '@/lib/types';
 
 interface InfoTabProps {
-  ad: Ad
+  ad: Ad;
 }
 
 export function InfoTab({ ad }: InfoTabProps) {
-  const [copiedField, setCopiedField] = useState<string | null>(null)
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
-  const isVideo = ad.display_format === "VIDEO"
-  const createdDate = new Date(ad.created_at)
-  const today = new Date()
-  const activeDays = Math.floor((today.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24))
+  const isVideo = ad.display_format === 'VIDEO';
+  const createdDate = new Date(ad.created_at);
+  const today = new Date();
+  const activeDays = Math.floor((today.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24));
 
   const handleCopyToClipboard = useCallback(async (text: string, fieldName: string) => {
     try {
-      await navigator.clipboard.writeText(text)
-      setCopiedField(fieldName)
-      setTimeout(() => setCopiedField(null), 2000)
+      await navigator.clipboard.writeText(text);
+      setCopiedField(fieldName);
+      setTimeout(() => setCopiedField(null), 2000);
     } catch (error) {
-      console.error("Failed to copy:", error)
+      console.error('Failed to copy:', error);
     }
-  }, [])
+  }, []);
 
   return (
     <div className="max-w-2xl">
@@ -48,8 +48,8 @@ export function InfoTab({ ad }: InfoTabProps) {
                 <Badge
                   className={`${
                     isVideo
-                      ? "bg-blue-50 text-blue-700 border-blue-200"
-                      : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      ? 'bg-blue-50 text-blue-700 border-blue-200'
+                      : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                   } font-medium px-3 py-1.5 rounded-full border`}
                 >
                   {isVideo ? (
@@ -84,7 +84,7 @@ export function InfoTab({ ad }: InfoTabProps) {
 
               <div className="bg-slate-50 rounded-xl p-4">
                 <h3 className="text-sm font-medium text-slate-500 mb-2">Platform</h3>
-                <p className="text-slate-900 font-medium">{ad.publisher_platform || "N/A"}</p>
+                <p className="text-slate-900 font-medium">{ad.publisher_platform || 'N/A'}</p>
               </div>
 
               {ad.ad_archive_id && (
@@ -95,10 +95,14 @@ export function InfoTab({ ad }: InfoTabProps) {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleCopyToClipboard(ad.ad_archive_id, "archive_id")}
+                      onClick={() => handleCopyToClipboard(ad.ad_archive_id, 'archive_id')}
                       className="text-slate-500 hover:text-slate-700 ml-2"
                     >
-                      {copiedField === "archive_id" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                      {copiedField === 'archive_id' ? (
+                        <Check className="h-4 w-4" />
+                      ) : (
+                        <Copy className="h-4 w-4" />
+                      )}
                     </Button>
                   </div>
                 </div>
@@ -108,5 +112,5 @@ export function InfoTab({ ad }: InfoTabProps) {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

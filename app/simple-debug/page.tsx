@@ -12,13 +12,15 @@ export default function SimpleDebugPage() {
 
           <div className="bg-green-100 p-4 rounded">
             <h2 className="text-xl font-semibold text-green-900">🎨 Tailwind Test</h2>
-            <p className="text-green-800">Якщо кольори відображаються правильно, то Tailwind працює!</p>
+            <p className="text-green-800">
+              Якщо кольори відображаються правильно, то Tailwind працює!
+            </p>
           </div>
 
           <div className="bg-yellow-100 p-4 rounded">
             <h2 className="text-xl font-semibold text-yellow-900">📋 Environment Variables</h2>
             <p className="text-yellow-800">
-              SUPABASE_URL: {process.env.NEXT_PUBLIC_SUPABASE_URL ? "✅ Set" : "❌ Missing"}
+              SUPABASE_URL: {process.env.NEXT_PUBLIC_SUPABASE_URL ? '✅ Set' : '❌ Missing'}
             </p>
           </div>
         </div>
@@ -45,5 +47,5 @@ export default function SimpleDebugPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

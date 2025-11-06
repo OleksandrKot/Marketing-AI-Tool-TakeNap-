@@ -1,18 +1,18 @@
-"use client"
+'use client';
 
-import { X } from "lucide-react"
-import { Button } from "@/components/ui/button"
+import { X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 interface ProductFilterIndicatorProps {
-  productName: string
-  onClear: () => void
+  productName: string;
+  onClear: () => void;
 }
 
 export function ProductFilterIndicator({ productName, onClear }: ProductFilterIndicatorProps) {
   return (
     <div className="flex items-center space-x-2 bg-blue-50 border border-blue-200 rounded-xl px-4 py-2 mb-4">
       <span className="text-sm text-blue-700">
-        Showing results for: <span className="font-semibold">"{productName}"</span>
+        Showing results for: <span className="font-semibold">&quot;{productName}&quot;</span>
       </span>
       <Button
         variant="ghost"
@@ -23,5 +23,5 @@ export function ProductFilterIndicator({ productName, onClear }: ProductFilterIn
         <X className="h-3 w-3" />
       </Button>
     </div>
-  )
+  );
 }

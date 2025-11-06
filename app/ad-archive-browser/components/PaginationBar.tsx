@@ -1,24 +1,26 @@
-"use client"
+'use client';
 
-import { Button } from "@/components/ui/button"
-import { ChevronLeft, ChevronRight } from "lucide-react"
-import { ViewToggle } from "@/components/view-toggle"
+import React, { memo } from 'react';
+import { Button } from '@/components/ui/button';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { ViewToggle } from '@/components/view-toggle';
+import type { ViewMode } from '@/lib/types';
 
 type Props = {
-  visibleAdsCount: number
-  totalAds: number
-  currentPageAdsCount: number
-  currentPage: number
-  totalPages: number
-  onPageChange: (p: number) => void
-  viewMode: string
-  setViewMode: (v: any) => void
-  selectedCreativeType: string
-  productFilter: string
-  selectedTags: string[]
-}
+  visibleAdsCount: number;
+  totalAds: number;
+  currentPageAdsCount: number;
+  currentPage: number;
+  totalPages: number;
+  onPageChange: (p: number) => void;
+  viewMode: ViewMode;
+  setViewMode: (v: ViewMode) => void;
+  selectedCreativeType: string;
+  productFilter: string;
+  selectedTags: string[];
+};
 
-export default function PaginationBar({
+function PaginationBar({
   visibleAdsCount,
   totalAds,
   currentPageAdsCount,
@@ -34,12 +36,16 @@ export default function PaginationBar({
   return (
     <div className="flex items-center justify-between w-full gap-4 mb-8">
       <p className="text-slate-500 text-sm font-medium">
-        Showing <span className="font-semibold text-slate-700">{visibleAdsCount}</span> of {" "}
-        <span className="font-semibold text-slate-700">{totalAds}</span> ads {" "}
+        Showing <span className="font-semibold text-slate-700">{visibleAdsCount}</span> of{' '}
+        <span className="font-semibold text-slate-700">{totalAds}</span> ads{' '}
         <span className="text-slate-400">({currentPageAdsCount} on this page)</span>
-        {selectedCreativeType !== "all" && <span className="text-blue-600"> ({selectedCreativeType} only)</span>}
-        {productFilter && <span className="text-blue-600"> for "{productFilter}"</span>}
-        {selectedTags.length > 0 && <span className="text-purple-600"> with tags: {selectedTags.join(", ")}</span>}
+        {selectedCreativeType !== 'all' && (
+          <span className="text-blue-600"> ({selectedCreativeType} only)</span>
+        )}
+        {productFilter && <span className="text-blue-600"> for &quot;{productFilter}&quot;</span>}
+        {selectedTags.length > 0 && (
+          <span className="text-purple-600"> with tags: {selectedTags.join(', ')}</span>
+        )}
       </p>
 
       <div className="flex items-center gap-4">
@@ -53,7 +59,9 @@ export default function PaginationBar({
           >
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <span className="text-sm text-slate-600 font-medium px-2">Page {currentPage} of {totalPages}</span>
+          <span className="text-sm text-slate-600 font-medium px-2">
+            Page {currentPage} of {totalPages}
+          </span>
           <Button
             variant="ghost"
             size="sm"
@@ -65,8 +73,11 @@ export default function PaginationBar({
           </Button>
         </div>
 
-        <ViewToggle currentView={viewMode as any} onViewChange={setViewMode as any} />
+        <ViewToggle currentView={viewMode} onViewChange={setViewMode} />
       </div>
     </div>
-  )
+  );
 }
+
+export default memo(PaginationBar);
+PaginationBar.displayName = 'PaginationBar';

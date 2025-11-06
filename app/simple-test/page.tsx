@@ -13,14 +13,16 @@ export default function SimpleTestPage() {
               <div className="bg-blue-50 p-4 rounded-xl">
                 <h3 className="font-semibold text-blue-900 mb-2">📱 Ad Text</h3>
                 <p className="text-blue-800">
-                  Ready to find your perfect match? 💕 Lovescape uses advanced AI to connect you with people who truly
-                  understand you.
+                  Ready to find your perfect match? 💕 Lovescape uses advanced AI to connect you
+                  with people who truly understand you.
                 </p>
               </div>
 
               <div className="bg-emerald-50 p-4 rounded-xl">
                 <h3 className="font-semibold text-emerald-900 mb-2">📝 Caption</h3>
-                <p className="text-emerald-800">Your love story starts here. Join Lovescape today! 💕 #LovescapeApp</p>
+                <p className="text-emerald-800">
+                  Your love story starts here. Join Lovescape today! 💕 #LovescapeApp
+                </p>
               </div>
             </div>
 
@@ -29,14 +31,16 @@ export default function SimpleTestPage() {
               <div className="bg-purple-50 p-4 rounded-xl">
                 <h3 className="font-semibold text-purple-900 mb-2">🎤 Audio Script</h3>
                 <p className="text-purple-800">
-                  [Upbeat romantic music starts] Narrator: "Tired of meaningless swipes? Ready for something real?"
+                  [Upbeat romantic music starts] Narrator: &quot;Tired of meaningless swipes? Ready
+                  for something real?&quot;
                 </p>
               </div>
 
               <div className="bg-red-50 p-4 rounded-xl">
                 <h3 className="font-semibold text-red-900 mb-2">🎬 Video Script</h3>
                 <p className="text-red-800">
-                  00:00 - 00:02: Close-up of a young woman looking frustrated while swiping through a dating app.
+                  00:00 - 00:02: Close-up of a young woman looking frustrated while swiping through
+                  a dating app.
                 </p>
               </div>
 
@@ -67,5 +71,5 @@ export default function SimpleTestPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

@@ -1,7 +1,7 @@
-"use client"
+'use client';
 
-import { PageNavigation } from "@/components/page-navigation"
-import { ProfileDropdown } from "@/app/login-auth/components/profile-dropdown"
+import { PageNavigation } from '@/components/page-navigation';
+import { ProfileDropdown } from '@/app/login-auth/components/profile-dropdown';
 
 export function Header() {
   return (
@@ -17,7 +17,7 @@ export function Header() {
         <ProfileDropdown />
       </div>
     </div>
-  )
+  );
 }
 
-export default Header
+export default Header;

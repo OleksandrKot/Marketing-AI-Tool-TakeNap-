@@ -1,51 +1,70 @@
-"use client"
+'use client';
 
-import { useScrollbarWidth } from "@/lib/utils"
-import { useEffect } from "react"
+import { useScrollbarWidth } from '@/lib/utils';
+import { useEffect } from 'react';
 
 type Props = {
-    isOpen: boolean
-    onClose?: () => void
-    children: React.ReactNode
-    panelClassName?: string
-}
+  isOpen: boolean;
+  onClose?: () => void;
+  children: React.ReactNode;
+  panelClassName?: string;
+};
 
 export default function ModalWrapper({ isOpen, onClose, children, panelClassName }: Props) {
-    const scrollbarWidth = useScrollbarWidth();
-    useEffect(() => {
-        if (typeof document === "undefined") return
-        const html = document.documentElement
-        const body = document.body
-        const prevOverflow = body.style.overflow
-        const hadHtmlClass = html.classList.contains("modal-open")
-        const hadBodyClass = body.classList.contains("modal-open")
-        console.log(scrollbarWidth);
-        html.style.setProperty("padding-right", `${scrollbarWidth}px`)
+  const scrollbarWidth = useScrollbarWidth();
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const html = document.documentElement;
+    const body = document.body;
+    const prevOverflow = body.style.overflow;
+    const hadHtmlClass = html.classList.contains('modal-open');
+    const hadBodyClass = body.classList.contains('modal-open');
+    console.log(scrollbarWidth);
+    html.style.setProperty('padding-right', `${scrollbarWidth}px`);
 
-        if (isOpen) {
-            html.classList.add("modal-open")
-            body.classList.add("modal-open")
-        }
+    if (isOpen) {
+      html.classList.add('modal-open');
+      body.classList.add('modal-open');
+    }
 
-        return () => {
-            if (!hadHtmlClass) html.classList.remove("modal-open")
-            if (!hadBodyClass) body.classList.remove("modal-open")
-            html.style.removeProperty("padding-right")
-            body.style.overflow = prevOverflow || ""
-        }
-    }, [isOpen])
+    return () => {
+      if (!hadHtmlClass) html.classList.remove('modal-open');
+      if (!hadBodyClass) body.classList.remove('modal-open');
+      html.style.removeProperty('padding-right');
+      body.style.overflow = prevOverflow || '';
+    };
+  }, [isOpen]);
 
+  // Close on Escape key when modal is open (attach to document to avoid adding
+  // keyboard handlers on non-interactive elements).
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose?.();
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [isOpen, onClose]);
 
-    return (
-        <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 !m-0 !mx-0"
-            role="dialog"
-            aria-modal="true"
-            onClick={(e) => { if (e.target === e.currentTarget) onClose?.() }}
-        >
-            <div className={panelClassName ?? "max-w-md w-full"} onClick={(e) => e.stopPropagation()}>
-                {children}
-            </div>
+  return (
+    <>
+      {/* Backdrop uses click to close when clicking outside the panel. We handle Escape on document.
+          This is a presentational overlay; keyboard handling is handled globally to avoid adding
+          tabIndex/keyboard handlers to a non-interactive element. */}
+      {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 !m-0 !mx-0"
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose?.();
+        }}
+      >
+        {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}
+        <div className={panelClassName ?? 'max-w-md w-full'} onClick={(e) => e.stopPropagation()}>
+          {children}
         </div>
-    )
+      </div>
+    </>
+  );
 }

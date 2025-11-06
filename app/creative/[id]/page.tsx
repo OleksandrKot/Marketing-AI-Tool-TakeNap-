@@ -1,20 +1,21 @@
-import { createServerSupabaseClient } from "@/lib/supabase"
-import { AdDetails } from "./ad-details"
-import { notFound } from "next/navigation"
-import { Suspense } from "react"
-import { AdDetailsSkeleton } from "./ad-details-skeleton"
-import type { Metadata } from "next"
-import type { Ad } from "@/lib/types"
+import { createServerSupabaseClient } from '@/lib/supabase';
+import { AdDetails } from './ad-details';
+import { notFound } from 'next/navigation';
+import { Suspense } from 'react';
+import { AdDetailsSkeleton } from './ad-details-skeleton';
+import type { Metadata } from 'next';
+import type { Ad } from '@/lib/types';
 
 // Кешування даних креативу
 async function getAdById(id: string) {
   try {
-    const supabase = createServerSupabaseClient()
+    const supabase = createServerSupabaseClient();
 
     // Оптимізований запит - вибираємо тільки потрібні поля
     const { data, error } = await supabase
-      .from("ads_library")
-      .select(`
+      .from('ads_library')
+      .select(
+        `
         id,
         created_at,
         ad_archive_id,
@@ -38,32 +39,34 @@ async function getAdById(id: string) {
         duplicates_ad_text,
         duplicates_links,
         duplicates_preview_image
-      `)
-      .eq("id", id)
-      .single()
+      `
+      )
+      .eq('id', id)
+      .single();
 
     if (error) {
-      console.error("Error fetching ad:", error)
+      console.error('Error fetching ad:', error);
       // Якщо помилка з базою даних, повертаємо фейкові дані для тестування
-      return getFakeAdById(id)
+      return getFakeAdById(id);
     }
 
-    return data
+    return data;
   } catch (error) {
-    console.error("Database connection error:", error)
+    console.error('Database connection error:', error);
     // Якщо проблема з підключенням, повертаємо фейкові дані
-    return getFakeAdById(id)
+    return getFakeAdById(id);
   }
 }
 
 // Функція для отримання related ads по ID
 async function getRelatedAdsByIds(ids: string[]): Promise<Ad[] | null> {
   try {
-    const supabase = createServerSupabaseClient()
+    const supabase = createServerSupabaseClient();
 
     const { data, error } = await supabase
-      .from("ads_library")
-      .select(`
+      .from('ads_library')
+      .select(
+        `
         id,
         created_at,
         ad_archive_id,
@@ -87,39 +90,41 @@ async function getRelatedAdsByIds(ids: string[]): Promise<Ad[] | null> {
         duplicates_ad_text,
         duplicates_links,
         duplicates_preview_image
-      `)
-      .in("id", ids)
+      `
+      )
+      .in('id', ids);
 
     if (error) {
-      console.error("Error fetching related ads:", error)
-      return null
+      console.error('Error fetching related ads:', error);
+      return null;
     }
 
-    return data as Ad[] | null
+    return data as Ad[] | null;
   } catch (error) {
-    console.error("Database connection error for related ads:", error)
-    return null
+    console.error('Database connection error for related ads:', error);
+    return null;
   }
 }
 
 // Фейкові дані для тестування, коли база даних недоступна
 function getFakeAdById(id: string) {
   const fakeAds = {
-    "1": {
+    '1': {
       id: 1,
-      created_at: "2024-01-15T10:30:00Z",
-      ad_archive_id: "LSC789456123",
-      page_name: "Lovescape - Dating App",
-      text: "Ready to find your perfect match? 💕\n\nLovescape uses advanced AI to connect you with people who truly understand you. No more endless swiping - just meaningful connections.\n\n✨ Smart matching algorithm\n💬 Video chat before you meet\n🔒 Verified profiles only\n🎯 Find love, not just dates\n\nJoin 2M+ singles who found love on Lovescape!\n\nDownload now and get 7 days premium FREE! 🎁",
-      caption: "Your love story starts here. Join Lovescape today! 💕 #LovescapeApp #Dating #FindLove #TrueLove",
-      cta_text: "Download Free",
-      cta_type: "INSTALL_MOBILE_APP",
-      display_format: "VIDEO",
-      link_url: "https://lovescape.app/download",
-      title: "Find Your Perfect Match with Lovescape AI",
-      video_hd_url: "/generic-dating-app-video.png",
-      video_preview_image_url: "/lovescape-app-preview-couple-smiling.png",
-      publisher_platform: "Facebook",
+      created_at: '2024-01-15T10:30:00Z',
+      ad_archive_id: 'LSC789456123',
+      page_name: 'Lovescape - Dating App',
+      text: 'Ready to find your perfect match? 💕\n\nLovescape uses advanced AI to connect you with people who truly understand you. No more endless swiping - just meaningful connections.\n\n✨ Smart matching algorithm\n💬 Video chat before you meet\n🔒 Verified profiles only\n🎯 Find love, not just dates\n\nJoin 2M+ singles who found love on Lovescape!\n\nDownload now and get 7 days premium FREE! 🎁',
+      caption:
+        'Your love story starts here. Join Lovescape today! 💕 #LovescapeApp #Dating #FindLove #TrueLove',
+      cta_text: 'Download Free',
+      cta_type: 'INSTALL_MOBILE_APP',
+      display_format: 'VIDEO',
+      link_url: 'https://lovescape.app/download',
+      title: 'Find Your Perfect Match with Lovescape AI',
+      video_hd_url: '/generic-dating-app-video.png',
+      video_preview_image_url: '/lovescape-app-preview-couple-smiling.png',
+      publisher_platform: 'Facebook',
       audio_script: `[Upbeat romantic music starts]
 
 Narrator (warm, friendly female voice): "Tired of meaningless swipes? Ready for something real?"
@@ -168,142 +173,144 @@ Narrator: "Lovescape. Where love finds you."
 00:25 - 00:28: App download screen with "7 days premium FREE" badge pulsing. 
 
 00:28 - 00:30: Final logo animation: "Lovescape - Where love finds you" with download button.`,
-      meta_ad_url: "https://www.facebook.com/ads/library/?id=LSC789456123",
-      image_url: "/lovescape-coffee-date.png",
+      meta_ad_url: 'https://www.facebook.com/ads/library/?id=LSC789456123',
+      image_url: '/lovescape-coffee-date.png',
       image_description: `A warm, inviting image showing a diverse couple in their late twenties having coffee at a modern café. The woman has curly brown hair and is wearing a soft pink sweater, while the man has short dark hair and a casual blue button-down shirt. They're both smiling genuinely and leaning slightly toward each other across a small round table with two coffee cups.
 
 The lighting is natural and golden, coming through large windows in the background. The café has a cozy, modern aesthetic with exposed brick walls and hanging plants. In the bottom right corner, there's a subtle Lovescape app logo overlay.
 
 The overall mood is authentic, romantic, and aspirational - showing the kind of meaningful connection that the app promises to deliver. The couple appears relaxed and genuinely happy, not posed or artificial.`,
-      new_scenario: "New dating scenario added for ad 1",
+      new_scenario: 'New dating scenario added for ad 1',
     },
-    "2": {
+    '2': {
       id: 2,
-      created_at: "2024-01-14T15:20:00Z",
-      ad_archive_id: "BM123789456",
-      page_name: "BetterMe",
-      text: "How to hit enough protein for weight loss and gain muscle? High Protein Meal Plan for Busy Women on a Weight Loss Journey",
-      caption: "Transform your body with our meal plan",
-      cta_text: "Try now!",
-      cta_type: "LEARN_MORE",
-      display_format: "VIDEO",
-      link_url: "https://betterme.world",
-      title: "High Protein Meal Plan",
-      video_hd_url: "/video-placeholder.png",
-      video_preview_image_url: "/placeholder.svg?height=400&width=600",
-      publisher_platform: "Facebook",
-      audio_script: "How to hit enough protein for weight loss and gain muscle. In a week, you'll start to feel it...",
-      video_script: "00:00 – 00:02: A hand uses a spoon to scoop a spoonful of a fruit-and-yogurt-based meal.",
-      meta_ad_url: "https://www.facebook.com/ads/library/ad_archive/?id=123456789",
-      image_url: "/placeholder-hm5r5.png",
-      image_description: "Image of a healthy protein-rich meal.",
+      created_at: '2024-01-14T15:20:00Z',
+      ad_archive_id: 'BM123789456',
+      page_name: 'BetterMe',
+      text: 'How to hit enough protein for weight loss and gain muscle? High Protein Meal Plan for Busy Women on a Weight Loss Journey',
+      caption: 'Transform your body with our meal plan',
+      cta_text: 'Try now!',
+      cta_type: 'LEARN_MORE',
+      display_format: 'VIDEO',
+      link_url: 'https://betterme.world',
+      title: 'High Protein Meal Plan',
+      video_hd_url: '/video-placeholder.png',
+      video_preview_image_url: '/placeholder.svg?height=400&width=600',
+      publisher_platform: 'Facebook',
+      audio_script:
+        "How to hit enough protein for weight loss and gain muscle. In a week, you'll start to feel it...",
+      video_script:
+        '00:00 – 00:02: A hand uses a spoon to scoop a spoonful of a fruit-and-yogurt-based meal.',
+      meta_ad_url: 'https://www.facebook.com/ads/library/ad_archive/?id=123456789',
+      image_url: '/placeholder-hm5r5.png',
+      image_description: 'Image of a healthy protein-rich meal.',
       new_scenario: null,
     },
-    "3": {
+    '3': {
       id: 3,
-      created_at: "2024-01-13T09:15:00Z",
-      ad_archive_id: "NK987654321",
-      page_name: "Nike",
-      text: "Just Do It. New collection available now.",
-      caption: "Nike Air Max - Step into greatness",
-      cta_text: "Shop Now",
-      cta_type: "SHOP_NOW",
-      display_format: "IMAGE",
-      link_url: "https://nike.com",
-      title: "Nike Air Max Collection",
+      created_at: '2024-01-13T09:15:00Z',
+      ad_archive_id: 'NK987654321',
+      page_name: 'Nike',
+      text: 'Just Do It. New collection available now.',
+      caption: 'Nike Air Max - Step into greatness',
+      cta_text: 'Shop Now',
+      cta_type: 'SHOP_NOW',
+      display_format: 'IMAGE',
+      link_url: 'https://nike.com',
+      title: 'Nike Air Max Collection',
       video_hd_url: null,
-      video_preview_image_url: "/placeholder.svg?height=400&width=600",
-      publisher_platform: "Instagram",
+      video_preview_image_url: '/placeholder.svg?height=400&width=600',
+      publisher_platform: 'Instagram',
       audio_script: null,
       video_script: null,
-      meta_ad_url: "https://www.facebook.com/ads/library/ad_archive/?id=987654321",
-      image_url: "/stylish-sneakers.png",
-      image_description: "Close-up of Nike Air Max shoes on a running track.",
+      meta_ad_url: 'https://www.facebook.com/ads/library/ad_archive/?id=987654321',
+      image_url: '/stylish-sneakers.png',
+      image_description: 'Close-up of Nike Air Max shoes on a running track.',
       new_scenario: null,
     },
-  }
+  };
 
-  return fakeAds[id as keyof typeof fakeAds] || null
+  return fakeAds[id as keyof typeof fakeAds] || null;
 }
 
 // Генерація метаданих для SEO та соціальних мереж
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
-  const ad = await getAdById(params.id)
+  const ad = await getAdById(params.id);
 
   if (!ad) {
     return {
-      title: "Creative Not Found",
-      description: "The requested creative could not be found.",
-    }
+      title: 'Creative Not Found',
+      description: 'The requested creative could not be found.',
+    };
   }
 
   return {
-    title: `${ad.title || "Creative"} - ${ad.page_name} | TakeNap`,
+    title: `${ad.title || 'Creative'} - ${ad.page_name} | TakeNap`,
     description: ad.text ? ad.text.substring(0, 160) : `Creative from ${ad.page_name}`,
     openGraph: {
-      title: ad.title || "Creative",
+      title: ad.title || 'Creative',
       description: ad.text?.substring(0, 160),
       images: ad.video_preview_image_url ? [ad.video_preview_image_url] : [],
     },
     twitter: {
-      card: "summary_large_image",
-      title: ad.title || "Creative",
+      card: 'summary_large_image',
+      title: ad.title || 'Creative',
       description: ad.text?.substring(0, 160),
       images: ad.video_preview_image_url ? [ad.video_preview_image_url] : [],
     },
-  }
+  };
 }
 
 // Статична генерація для популярних креативів (опціонально)
 export async function generateStaticParams() {
   try {
-    const supabase = createServerSupabaseClient()
+    const supabase = createServerSupabaseClient();
 
     // Генеруємо статичні сторінки для топ-100 креативів
     const { data } = await supabase
-      .from("ads_library")
-      .select("id")
-      .order("created_at", { ascending: false })
-      .limit(100)
+      .from('ads_library')
+      .select('id')
+      .order('created_at', { ascending: false })
+      .limit(100);
 
     return (
       data?.map((ad) => ({
         id: ad.id.toString(),
       })) || []
-    )
+    );
   } catch (error) {
-    console.error("Error generating static params:", error)
+    console.error('Error generating static params:', error);
     // Повертаємо базові ID для фейкових даних
-    return [{ id: "1" }, { id: "2" }, { id: "3" }]
+    return [{ id: '1' }, { id: '2' }, { id: '3' }];
   }
 }
 
 interface CreativePageProps {
   params: {
-    id: string
-  }
+    id: string;
+  };
   searchParams: {
-    related?: string
-  }
+    related?: string;
+  };
 }
 
 export default async function CreativePage({ params, searchParams }: CreativePageProps) {
-  const ad = await getAdById(params.id)
+  const ad = await getAdById(params.id);
 
   if (!ad) {
-    notFound()
+    notFound();
   }
 
   // Отримуємо related ads якщо є параметр related в URL
-  let relatedAds = null
+  let relatedAds = null;
   if (searchParams.related) {
-    const relatedIds = searchParams.related.split(',')
-    relatedAds = await getRelatedAdsByIds(relatedIds)
+    const relatedIds = searchParams.related.split(',');
+    relatedAds = await getRelatedAdsByIds(relatedIds);
   }
 
   return (
     <Suspense fallback={<AdDetailsSkeleton />}>
       <AdDetails ad={ad} relatedAds={relatedAds} />
     </Suspense>
-  )
+  );
 }

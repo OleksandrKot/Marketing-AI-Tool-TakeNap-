@@ -1,10 +1,11 @@
-"use client"
+'use client';
 
-import { useState, useCallback, memo } from "react"
-import { useFavorites } from "@/lib/hooks/useFavorites"
-import { useRouter, useSearchParams } from "next/navigation"
-import dynamic from "next/dynamic"
-import Image from "next/image"
+import { useState, useCallback, memo } from 'react';
+import { useFavorites } from '@/lib/hooks/useFavorites';
+import { useRouter, useSearchParams } from 'next/navigation';
+import dynamic from 'next/dynamic';
+import ModalLoading from '@/components/ui/modal-loading';
+import Image from 'next/image';
 import {
   ArrowLeft,
   X,
@@ -26,119 +27,126 @@ import {
   Copy,
   Check,
   Layers,
-} from "lucide-react"
-import ScriptRenderer from "@/components/script-renderer"
-import CollectionModal from "@/components/modals/collection-modal"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { formatDate } from "@/lib/utils"
-import type { Ad } from "@/lib/types"
+} from 'lucide-react';
+import ScriptRenderer from '@/components/script-renderer';
+const CollectionModal = dynamic(
+  () => import('@/components/modals/collection-modal').then((m) => m.default),
+  {
+    loading: () => <ModalLoading />,
+    ssr: false,
+  }
+);
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { formatDate } from '@/lib/utils';
+import type { Ad } from '@/lib/types';
 
 // Динамічне завантаження компонентів
-const ShareModal = dynamic(() => import("../../creative/[id]/share-modal"), {
-  loading: () => <div className="w-4 h-4 bg-slate-200 rounded animate-pulse" />,
-})
+const ShareModal = dynamic(() => import('../../creative/[id]/share-modal'), {
+  loading: () => <ModalLoading />,
+  ssr: false,
+});
 
 interface ViewDetailsProps {
-  ad: Ad
+  ad: Ad;
 }
 
 const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const [isLoading, setIsLoading] = useState(false)
-  const { isFavorite, toggleFavorite } = useFavorites()
-  const creativeId = ad.ad_archive_id || ad.id.toString()
-  const [isLikedLocal, setIsLikedLocal] = useState(false)
-  const [showCollectionsModal, setShowCollectionsModal] = useState(false)
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [isLoading, setIsLoading] = useState(false);
+  const { isFavorite, toggleFavorite } = useFavorites();
+  const creativeId = ad.ad_archive_id || ad.id.toString();
+  const [isLikedLocal, setIsLikedLocal] = useState(false);
+  const [showCollectionsModal, setShowCollectionsModal] = useState(false);
   // derive persistent liked state from store
-  const isLiked = isFavorite(creativeId) || isLikedLocal
-  const [showShareModal, setShowShareModal] = useState(false)
-  const [imageLoaded, setImageLoaded] = useState(false)
-  const [videoLoaded, setVideoLoaded] = useState(false)
-  const [copiedField, setCopiedField] = useState<string | null>(null)
+  const isLiked = isFavorite(creativeId) || isLikedLocal;
+  const [showShareModal, setShowShareModal] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const [videoLoaded, setVideoLoaded] = useState(false);
+  const [copiedField, setCopiedField] = useState<string | null>(null);
 
-  const isVideo = ad.display_format === "VIDEO"
-  const createdDate = new Date(ad.created_at)
-  const today = new Date()
-  const activeDays = Math.floor((today.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24))
+  const isVideo = ad.display_format === 'VIDEO';
+  const createdDate = new Date(ad.created_at);
+  const today = new Date();
+  const activeDays = Math.floor((today.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24));
 
   const handleBack = useCallback(() => {
     // If the caller provided a `from` param (for example ?from=advance-filter)
     // we prefer returning to that specific page. Otherwise, attempt a history
     // back and fall back to the library root.
-    const from = searchParams?.get?.("from")
-    if (from === "advance-filter" || from === "filter" || from === "filter-constructor") {
-      router.push("/advance-filter")
-      return
+    const from = searchParams?.get?.('from');
+    if (from === 'advance-filter' || from === 'filter' || from === 'filter-constructor') {
+      router.push('/advance-filter');
+      return;
     }
 
-    if (typeof window !== "undefined" && window.history.length > 1) {
-      router.back()
-      return
+    if (typeof window !== 'undefined' && window.history.length > 1) {
+      router.back();
+      return;
     }
 
-    router.push("/")
-  }, [router, searchParams])
+    router.push('/');
+  }, [router, searchParams]);
 
   const handleDownload = useCallback(async () => {
-    const urlToDownload = isVideo ? ad.video_hd_url : ad.image_url
-    if (!urlToDownload) return
+    const urlToDownload = isVideo ? ad.video_hd_url : ad.image_url;
+    if (!urlToDownload) return;
 
-    setIsLoading(true)
+    setIsLoading(true);
     try {
-      const response = await fetch(urlToDownload)
-      const blob = await response.blob()
-      const url = window.URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `${ad.title || "creative"}.${isVideo ? "mp4" : "jpg"}`
-      document.body.appendChild(a)
-      a.click()
-      window.URL.revokeObjectURL(url)
-      document.body.removeChild(a)
+      const response = await fetch(urlToDownload);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${ad.title || 'creative'}.${isVideo ? 'mp4' : 'jpg'}`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
     } catch (error) {
-      console.error("Download failed:", error)
+      console.error('Download failed:', error);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }, [ad.video_hd_url, ad.image_url, ad.title, isVideo])
+  }, [ad.video_hd_url, ad.image_url, ad.title, isVideo]);
 
   const handleLike = useCallback(() => {
     // toggle persistent favorite
-    toggleFavorite(creativeId)
+    toggleFavorite(creativeId);
     // keep a tiny local flicker for immediate UI when storage events are slow
-    setIsLikedLocal((p) => !p)
+    setIsLikedLocal((p) => !p);
     // clear the local flicker after a short time so store value is authoritative
-    setTimeout(() => setIsLikedLocal(false), 500)
-  }, [toggleFavorite, creativeId])
+    setTimeout(() => setIsLikedLocal(false), 500);
+  }, [toggleFavorite, creativeId]);
 
   const handleShare = useCallback(() => {
-    setShowShareModal(true)
-  }, [])
+    setShowShareModal(true);
+  }, []);
 
   const handleRestartVideo = useCallback(() => {
-    const video = document.querySelector("video")
+    const video = document.querySelector('video');
     if (video) {
-      video.currentTime = 0
-      video.play()
+      video.currentTime = 0;
+      video.play();
     }
-  }, [])
+  }, []);
 
   const handleCopyToClipboard = useCallback(async (text: string, fieldName: string) => {
     try {
-      await navigator.clipboard.writeText(text)
-      setCopiedField(fieldName)
-      setTimeout(() => setCopiedField(null), 2000)
+      await navigator.clipboard.writeText(text);
+      setCopiedField(fieldName);
+      setTimeout(() => setCopiedField(null), 2000);
     } catch (error) {
-      console.error("Failed to copy:", error)
+      console.error('Failed to copy:', error);
     }
-  }, [])
+  }, []);
 
   // use shared ScriptRenderer component
 
-  const previewImage = ad.image_url || ad.video_preview_image_url || "/placeholder.svg"
+  const previewImage = ad.image_url || ad.video_preview_image_url || '/placeholder.svg';
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -156,10 +164,10 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                 Back
               </Button>
               {/* If we arrived from Filter Constructor, surface a compact close action */}
-              {searchParams?.get?.("from") === "advance-filter" && (
+              {searchParams?.get?.('from') === 'advance-filter' && (
                 <Button
                   variant="ghost"
-                  onClick={() => router.push("/advance-filter")}
+                  onClick={() => router.push('/advance-filter')}
                   className="text-slate-500 hover:text-slate-700"
                   title="Close and return to Filter Constructor"
                 >
@@ -173,7 +181,13 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => router.push(`/advance-filter?from=view-details&page=${encodeURIComponent(ad.page_name || "")}`)}
+                  onClick={() =>
+                    router.push(
+                      `/advance-filter?from=view-details&page=${encodeURIComponent(
+                        ad.page_name || ''
+                      )}`
+                    )
+                  }
                   className="p-0 text-sm italic text-slate-500 font-medium hover:underline"
                   title={`Show other ads from ${ad.page_name}`}
                   aria-label={`Filter by page ${ad.page_name}`}
@@ -181,7 +195,9 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                   {ad.page_name}
                 </Button>
               </div>
-              <h1 className="text-3xl font-bold text-slate-900 mb-1">{ad.title || "Creative Details"}</h1>
+              <h1 className="text-3xl font-bold text-slate-900 mb-1">
+                {ad.title || 'Creative Details'}
+              </h1>
             </div>
           </div>
 
@@ -190,9 +206,11 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
               variant="ghost"
               size="icon"
               onClick={handleLike}
-              className={`transition-colors ${isLiked ? "text-red-500 hover:text-red-600" : "text-slate-400 hover:text-slate-600"}`}
+              className={`transition-colors ${
+                isLiked ? 'text-red-500 hover:text-red-600' : 'text-slate-400 hover:text-slate-600'
+              }`}
             >
-              <Heart className={`h-5 w-5 ${isLiked ? "fill-current" : ""}`} />
+              <Heart className={`h-5 w-5 ${isLiked ? 'fill-current' : ''}`} />
             </Button>
             <Button
               variant="ghost"
@@ -203,7 +221,12 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
             >
               <Layers className="h-5 w-5" />
             </Button>
-            <Button variant="ghost" size="icon" onClick={handleShare} className="text-slate-400 hover:text-slate-600">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleShare}
+              className="text-slate-400 hover:text-slate-600"
+            >
               <Share2 className="h-5 w-5" />
             </Button>
           </div>
@@ -225,13 +248,16 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                       preload="metadata"
                       className="w-full h-full object-contain"
                       onLoadedData={() => setVideoLoaded(true)}
-                      style={{ display: videoLoaded ? "block" : "none" }}
-                    />
+                      style={{ display: videoLoaded ? 'block' : 'none' }}
+                    >
+                      {/* include an empty captions track element to satisfy a11y checks; if you have a real VTT URL add it to ad.captions_vtt_url */}
+                      <track kind="captions" srcLang="en" src="" />
+                    </video>
                   ) : previewImage ? (
                     <div className="relative w-full h-full">
                       <Image
-                        src={previewImage || "/placeholder.svg"}
-                        alt={ad.title || "Ad preview"}
+                        src={previewImage || '/placeholder.svg'}
+                        alt={ad.title || 'Ad preview'}
                         fill
                         className="object-contain transition-opacity duration-300"
                         style={{ opacity: imageLoaded ? 1 : 0 }}
@@ -239,7 +265,9 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                         priority
                         sizes="(max-width: 768px) 100vw, (max-width: 1200px) 66vw, 50vw"
                       />
-                      {!imageLoaded && <div className="absolute inset-0 bg-slate-200 animate-pulse" />}
+                      {!imageLoaded && (
+                        <div className="absolute inset-0 bg-slate-200 animate-pulse" />
+                      )}
                     </div>
                   ) : (
                     <div className="w-full h-full flex items-center justify-center">
@@ -280,13 +308,13 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                   className="border-blue-600 text-blue-600 hover:bg-blue-50 font-medium rounded-xl h-11 transition-all duration-200 bg-transparent"
                 >
                   <Download className="h-4 w-4 mr-2" />
-                  {isLoading ? "Downloading..." : `Download ${isVideo ? "Video" : "Image"}`}
+                  {isLoading ? 'Downloading...' : `Download ${isVideo ? 'Video' : 'Image'}`}
                 </Button>
               )}
               {ad.link_url && (
                 <Button
                   variant="outline"
-                  onClick={() => window.open(ad.link_url, "_blank", "noopener,noreferrer")}
+                  onClick={() => window.open(ad.link_url, '_blank', 'noopener,noreferrer')}
                   className="border-emerald-600 text-emerald-600 hover:bg-emerald-50 font-medium rounded-xl h-11 transition-all duration-200"
                 >
                   <ExternalLink className="h-4 w-4 mr-2" />
@@ -305,10 +333,14 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleCopyToClipboard(ad.text, "text")}
+                        onClick={() => handleCopyToClipboard(ad.text, 'text')}
                         className="text-slate-500 hover:text-slate-700"
                       >
-                        {copiedField === "text" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                        {copiedField === 'text' ? (
+                          <Check className="h-4 w-4" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
                       </Button>
                     </div>
                   </div>
@@ -329,15 +361,23 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleCopyToClipboard(ad.duplicates_ad_text!, "duplicates_ad_text")}
+                        onClick={() =>
+                          handleCopyToClipboard(ad.duplicates_ad_text!, 'duplicates_ad_text')
+                        }
                         className="text-slate-500 hover:text-slate-700"
                       >
-                        {copiedField === "duplicates_ad_text" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                        {copiedField === 'duplicates_ad_text' ? (
+                          <Check className="h-4 w-4" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
                       </Button>
                     </div>
                   </div>
                   <div className="p-6">
-                    <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{ad.duplicates_ad_text}</p>
+                    <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
+                      {ad.duplicates_ad_text}
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -353,15 +393,21 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleCopyToClipboard(ad.caption, "caption")}
+                        onClick={() => handleCopyToClipboard(ad.caption, 'caption')}
                         className="text-slate-500 hover:text-slate-700"
                       >
-                        {copiedField === "caption" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                        {copiedField === 'caption' ? (
+                          <Check className="h-4 w-4" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
                       </Button>
                     </div>
                   </div>
                   <div className="p-6">
-                    <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{ad.caption}</p>
+                    <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
+                      {ad.caption}
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -380,7 +426,8 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                         {ad.cta_text}
                       </Button>
                       <div className="text-sm text-slate-500">
-                        Type: <span className="font-medium text-slate-700">{ad.cta_type || "N/A"}</span>
+                        Type:{' '}
+                        <span className="font-medium text-slate-700">{ad.cta_type || 'N/A'}</span>
                       </div>
                     </div>
                   </div>
@@ -406,8 +453,8 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                     <Badge
                       className={`${
                         isVideo
-                          ? "bg-blue-50 text-blue-700 border-blue-200"
-                          : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                          ? 'bg-blue-50 text-blue-700 border-blue-200'
+                          : 'bg-emerald-50 text-emerald-700 border-emerald-200'
                       } font-medium px-3 py-1.5 rounded-full border`}
                     >
                       {isVideo ? (
@@ -442,21 +489,27 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
 
                   <div className="bg-slate-50 rounded-xl p-4">
                     <h3 className="text-sm font-medium text-slate-500 mb-2">Platform</h3>
-                    <p className="text-slate-900 font-medium">{ad.publisher_platform || "N/A"}</p>
+                    <p className="text-slate-900 font-medium">{ad.publisher_platform || 'N/A'}</p>
                   </div>
 
                   {ad.ad_archive_id && (
                     <div className="bg-slate-50 rounded-xl p-4">
                       <h3 className="text-sm font-medium text-slate-500 mb-2">Archive ID</h3>
                       <div className="flex items-center justify-between">
-                        <p className="text-slate-900 font-mono text-sm break-all">{ad.ad_archive_id}</p>
+                        <p className="text-slate-900 font-mono text-sm break-all">
+                          {ad.ad_archive_id}
+                        </p>
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleCopyToClipboard(ad.ad_archive_id, "archive_id")}
+                          onClick={() => handleCopyToClipboard(ad.ad_archive_id, 'archive_id')}
                           className="text-slate-500 hover:text-slate-700 ml-2"
                         >
-                          {copiedField === "archive_id" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                          {copiedField === 'archive_id' ? (
+                            <Check className="h-4 w-4" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
                         </Button>
                       </div>
                     </div>
@@ -491,10 +544,14 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleCopyToClipboard(ad.link_url!, "link_url")}
+                            onClick={() => handleCopyToClipboard(ad.link_url!, 'link_url')}
                             className="text-slate-500 hover:text-slate-700"
                           >
-                            {copiedField === "link_url" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                            {copiedField === 'link_url' ? (
+                              <Check className="h-4 w-4" />
+                            ) : (
+                              <Copy className="h-4 w-4" />
+                            )}
                           </Button>
                         </div>
                       </div>
@@ -515,10 +572,10 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleCopyToClipboard(ad.meta_ad_url!, "meta_ad_url")}
+                            onClick={() => handleCopyToClipboard(ad.meta_ad_url!, 'meta_ad_url')}
                             className="text-slate-500 hover:text-slate-700"
                           >
-                            {copiedField === "meta_ad_url" ? (
+                            {copiedField === 'meta_ad_url' ? (
                               <Check className="h-4 w-4" />
                             ) : (
                               <Copy className="h-4 w-4" />
@@ -545,15 +602,21 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleCopyToClipboard(ad.audio_script!, "audio_script")}
+                        onClick={() => handleCopyToClipboard(ad.audio_script!, 'audio_script')}
                         className="text-slate-500 hover:text-slate-700"
                       >
-                        {copiedField === "audio_script" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                        {copiedField === 'audio_script' ? (
+                          <Check className="h-4 w-4" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
                       </Button>
                     </div>
                   </div>
                   <div className="p-6">
-                    <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{ad.audio_script}</p>
+                    <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
+                      {ad.audio_script}
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -572,16 +635,20 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleCopyToClipboard(ad.video_script!, "video_script")}
+                        onClick={() => handleCopyToClipboard(ad.video_script!, 'video_script')}
                         className="text-slate-500 hover:text-slate-700"
                       >
-                        {copiedField === "video_script" ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                        {copiedField === 'video_script' ? (
+                          <Check className="h-4 w-4" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
                       </Button>
                     </div>
                   </div>
-                      <div className="p-6">
-                        <ScriptRenderer script={ad.video_script} copyPrefix="video_script" />
-                      </div>
+                  <div className="p-6">
+                    <ScriptRenderer script={ad.video_script} copyPrefix="video_script" />
+                  </div>
                 </CardContent>
               </Card>
             )}
@@ -599,10 +666,12 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleCopyToClipboard(ad.image_description!, "image_description")}
+                        onClick={() =>
+                          handleCopyToClipboard(ad.image_description!, 'image_description')
+                        }
                         className="text-slate-500 hover:text-slate-700"
                       >
-                        {copiedField === "image_description" ? (
+                        {copiedField === 'image_description' ? (
                           <Check className="h-4 w-4" />
                         ) : (
                           <Copy className="h-4 w-4" />
@@ -611,7 +680,9 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                     </div>
                   </div>
                   <div className="p-6">
-                    <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{ad.image_description}</p>
+                    <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
+                      {ad.image_description}
+                    </p>
                   </div>
                 </CardContent>
               </Card>
@@ -622,11 +693,15 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
         {/* Share Modal */}
         {showShareModal && <ShareModal ad={ad} onClose={() => setShowShareModal(false)} />}
         {showCollectionsModal && (
-          <CollectionModal isOpen={showCollectionsModal} onClose={() => setShowCollectionsModal(false)} creativeId={creativeId} />
+          <CollectionModal
+            isOpen={showCollectionsModal}
+            onClose={() => setShowCollectionsModal(false)}
+            creativeId={creativeId}
+          />
         )}
       </div>
     </div>
-  )
-})
+  );
+});
 
-export { ViewDetails }
+export { ViewDetails };

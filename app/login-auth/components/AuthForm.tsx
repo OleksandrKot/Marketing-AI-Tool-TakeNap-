@@ -1,23 +1,35 @@
-"use client";
-import { useState, useEffect, useRef } from "react";
-import { supabase } from "@/lib/supabase";
-import { Button } from "@/components/ui/button";
+'use client';
+import { useState, useEffect, useRef } from 'react';
+import { supabase } from '@/lib/supabase';
+import { Button } from '@/components/ui/button';
 
-export default function AuthForm({ onAuth }: { onAuth?: (user: any) => void }) {
+type UserLike = Record<string, unknown> | null;
+
+function getDisplayNameFromUser(u: unknown): string | undefined {
+  if (!u || typeof u !== 'object') return undefined;
+  const meta = (u as Record<string, unknown>)['user_metadata'];
+  if (!meta || typeof meta !== 'object') return undefined;
+  const m = meta as Record<string, unknown>;
+  if (typeof m.display_name === 'string') return m.display_name as string;
+  if (typeof m.nickname === 'string') return m.nickname as string;
+  return undefined;
+}
+
+export default function AuthForm({ onAuth }: { onAuth?: (user: UserLike) => void }) {
   const [tab, setTab] = useState<'login' | 'register'>('login');
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState('');
   const emailRef = useRef<HTMLInputElement | null>(null);
-  const [password, setPassword] = useState("");
-  const [nickname, setNickname] = useState("");
+  const [password, setPassword] = useState('');
+  const [nickname, setNickname] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
-  const [success, setSuccess] = useState("");
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
-  const [registeredEmail, setRegisteredEmail] = useState("");
+  const [registeredEmail, setRegisteredEmail] = useState('');
   const [resendLoading, setResendLoading] = useState(false);
 
   useEffect(() => {
-    if (tab === "login") setNickname("");
+    if (tab === 'login') setNickname('');
   }, [tab]);
 
   // Autofocus email input on mount to help keyboard users
@@ -28,50 +40,52 @@ export default function AuthForm({ onAuth }: { onAuth?: (user: any) => void }) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    setError("");
-    setSuccess("");
-    if (tab === "login") {
+    setError('');
+    setSuccess('');
+    if (tab === 'login') {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) setError(error.message);
       else {
-        setSuccess("Logged in!");
+        setSuccess('Logged in!');
         // Fetch user profile (nickname)
-        const user = data.user;
-        let profile = null;
+        const user = (data as unknown as Record<string, unknown>)['user'] as unknown;
+        let profile: { nickname?: string | null } | null = null;
         if (user) {
-          const { data: profileData } = await supabase
-            .from("profiles")
-            .select("nickname")
-            .eq("id", user.id)
+          const profileResp = await supabase
+            .from('profiles')
+            .select('nickname')
+            .eq('id', (user as Record<string, unknown>)['id'])
             .single();
-          profile = profileData;
+          profile = (profileResp as unknown as Record<string, unknown>)['data'] as {
+            nickname?: string | null;
+          } | null;
         }
-          // If profile nickname exists but auth user metadata does not match, try to update auth metadata
-          if (user && profile?.nickname) {
-            try {
-              const currentDisplay = (user as any).user_metadata?.display_name || (user as any).user_metadata?.nickname
-              if (currentDisplay !== profile.nickname) {
-                await supabase.auth.updateUser({ data: { display_name: profile.nickname } })
-              }
-            } catch (e) {
-              // ignore
+        // If profile nickname exists but auth user metadata does not match, try to update auth metadata
+        if (user && profile?.nickname) {
+          try {
+            const currentDisplay = getDisplayNameFromUser(user);
+            if (currentDisplay !== profile.nickname) {
+              await supabase.auth.updateUser({ data: { display_name: profile.nickname } });
             }
+          } catch (e: unknown) {
+            // ignore
           }
+        }
 
-          if (onAuth) onAuth({ ...user, nickname: profile?.nickname });
-        if (profile?.nickname) localStorage.setItem("nickname", profile.nickname);
+        onAuth?.({ ...(user as Record<string, unknown>), nickname: profile?.nickname } as UserLike);
+        if (profile?.nickname) localStorage.setItem('nickname', profile.nickname);
       }
     } else {
       // Register user - include display_name in auth user metadata
-      const { data, error } = await supabase.auth.signUp({ email, password });
+      const { error } = await supabase.auth.signUp({ email, password });
       if (error) setError(error.message);
       else {
         // Don't auto-sign-in. Show explicit confirmation notice and keep modal open
-        setSuccess("Registration successful — check your email to confirm your account.");
+        setSuccess('Registration successful — check your email to confirm your account.');
         setNeedsConfirmation(true);
         setRegisteredEmail(email);
         // Store nickname locally so we can persist it after confirmation if needed
-        if (nickname) localStorage.setItem("nickname", nickname);
+        if (nickname) localStorage.setItem('nickname', nickname);
       }
     }
     setLoading(false);
@@ -80,23 +94,24 @@ export default function AuthForm({ onAuth }: { onAuth?: (user: any) => void }) {
   async function handleResend() {
     if (!registeredEmail) return;
     setResendLoading(true);
-    setError("");
-    setSuccess("");
+    setError('');
+    setSuccess('');
     try {
       // Call server endpoint that uses the service role key to attempt resend reliably.
-      const r = await fetch("/api/auth/resend-confirmation", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+      const r = await fetch('/api/auth/resend-confirmation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: registeredEmail, password }),
-      })
-      const payload = await r.json()
+      });
+      const payload = await r.json();
       if (!r.ok) {
-        setError(payload?.error || "Failed to resend confirmation")
+        setError(payload?.error || 'Failed to resend confirmation');
       } else {
-        setSuccess("Confirmation email resent. Check your inbox.")
+        setSuccess('Confirmation email resent. Check your inbox.');
       }
-    } catch (e: any) {
-      setError(e?.message || String(e));
+    } catch (e: unknown) {
+      const err = e as Error | undefined;
+      setError(err?.message || String(e));
     } finally {
       setResendLoading(false);
     }
@@ -106,13 +121,17 @@ export default function AuthForm({ onAuth }: { onAuth?: (user: any) => void }) {
     <div className="max-w-md mx-auto mt-8 bg-white rounded-3xl p-8 relative">
       <div className="flex mb-6">
         <button
-          className={`border border-black-500 flex-1 py-2 font-semibold rounded-l-xl ${tab === 'login' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'}`}
+          className={`border border-black-500 flex-1 py-2 font-semibold rounded-l-xl ${
+            tab === 'login' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'
+          }`}
           onClick={() => setTab('login')}
         >
           Login
         </button>
         <button
-          className={`flex-1 py-2 font-semibold rounded-r-xl ${tab === 'register' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'}`}
+          className={`flex-1 py-2 font-semibold rounded-r-xl ${
+            tab === 'register' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-700'
+          }`}
           onClick={() => setTab('register')}
         >
           Register
@@ -121,21 +140,26 @@ export default function AuthForm({ onAuth }: { onAuth?: (user: any) => void }) {
       {needsConfirmation ? (
         <div className="space-y-4">
           <div className="p-4 bg-yellow-50 border border-yellow-100 rounded-lg">
-            <p className="text-sm text-slate-700">We sent a confirmation email to <strong>{registeredEmail}</strong>. Please confirm your email before signing in.</p>
-            <p className="text-sm text-slate-500 mt-2">If you didn't receive the email, click "Resend confirmation".</p>
+            <p className="text-sm text-slate-700">
+              We sent a confirmation email to <strong>{registeredEmail}</strong>. Please confirm
+              your email before signing in.
+            </p>
+            <p className="text-sm text-slate-500 mt-2">
+              If you didn&apos;t receive the email, click &quot;Resend confirmation&quot;.
+            </p>
           </div>
 
           <div className="flex gap-3">
             <Button onClick={handleResend} disabled={resendLoading} className="flex-1">
-              {resendLoading ? "Sending..." : "Resend confirmation"}
+              {resendLoading ? 'Sending...' : 'Resend confirmation'}
             </Button>
             <Button
               variant="ghost"
               onClick={() => {
                 // User claims they already confirmed; switch to login tab so they can sign in manually.
                 setNeedsConfirmation(false);
-                setTab("login");
-                setSuccess("You can now log in after confirming your email.");
+                setTab('login');
+                setSuccess('You can now log in after confirming your email.');
               }}
               className="flex-1"
             >
@@ -154,7 +178,7 @@ export default function AuthForm({ onAuth }: { onAuth?: (user: any) => void }) {
             required
             placeholder="Email"
             value={email}
-            onChange={e => setEmail(e.target.value)}
+            onChange={(e) => setEmail(e.target.value)}
             className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
           <input
@@ -162,21 +186,25 @@ export default function AuthForm({ onAuth }: { onAuth?: (user: any) => void }) {
             required
             placeholder="Password"
             value={password}
-            onChange={e => setPassword(e.target.value)}
+            onChange={(e) => setPassword(e.target.value)}
             className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
-          {tab === "register" && (
+          {tab === 'register' && (
             <input
               type="text"
               required
               placeholder="Nickname"
               value={nickname}
-              onChange={e => setNickname(e.target.value)}
+              onChange={(e) => setNickname(e.target.value)}
               className="w-full px-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           )}
-          <Button type="submit" className="w-full h-10 bg-blue-600 hover:bg-blue-400 text-white rounded-xl" disabled={loading}>
-            {loading ? "Please wait..." : tab === "login" ? "Login" : "Register"}
+          <Button
+            type="submit"
+            className="w-full h-10 bg-blue-600 hover:bg-blue-400 text-white rounded-xl"
+            disabled={loading}
+          >
+            {loading ? 'Please wait...' : tab === 'login' ? 'Login' : 'Register'}
           </Button>
           {error && <div className="text-red-500 text-sm mt-2">{error}</div>}
           {success && <div className="text-green-600 text-sm mt-2">{success}</div>}

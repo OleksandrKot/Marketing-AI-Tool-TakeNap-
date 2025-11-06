@@ -1,43 +1,55 @@
-"use client"
+'use client';
 
-import { useState } from "react"
-import { Tag, ChevronDown, X } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { useState } from 'react';
+import { Tag, ChevronDown, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 interface TagFilterProps {
-  availableTags: string[]
-  selectedTags: string[]
-  onTagsChange: (tags: string[]) => void
-  className?: string
+  availableTags: string[];
+  selectedTags: string[];
+  onTagsChange: (tags: string[]) => void;
+  className?: string;
 }
 
-export function TagFilter({ availableTags, selectedTags, onTagsChange, className }: TagFilterProps) {
+export function TagFilter({
+  availableTags,
+  selectedTags,
+  onTagsChange,
+  className,
+}: TagFilterProps) {
   // Quick feature flag: hide tag filter UI while WIP
-  const SHOW_TAGS = false
+  const SHOW_TAGS = false;
 
-  const [isOpen, setIsOpen] = useState(false)
+  const [isOpen, setIsOpen] = useState(false);
 
   if (!SHOW_TAGS) {
     // temporarily hide tag filter UI
-    return null
+    return null;
   }
 
   const handleTagToggle = (tag: string) => {
     if (selectedTags.includes(tag)) {
-      onTagsChange(selectedTags.filter((t) => t !== tag))
+      onTagsChange(selectedTags.filter((t) => t !== tag));
     } else {
-      onTagsChange([...selectedTags, tag])
+      onTagsChange([...selectedTags, tag]);
     }
-  }
+  };
 
   const clearAllTags = () => {
-    onTagsChange([])
-  }
+    onTagsChange([]);
+  };
 
   return (
-    <div className={`bg-white border border-slate-200 rounded-2xl p-3 shadow-sm ${className || ""}`}>
+    <div
+      className={`bg-white border border-slate-200 rounded-2xl p-3 shadow-sm ${className || ''}`}
+    >
       <div className="flex items-center justify-between">
         <div className="flex items-center space-x-2 flex-1">
           {/* Selected Tags */}
@@ -50,7 +62,10 @@ export function TagFilter({ availableTags, selectedTags, onTagsChange, className
                 >
                   <Tag className="h-3 w-3 mr-1" />
                   {tag}
-                  <button onClick={() => handleTagToggle(tag)} className="ml-1 text-blue-500 hover:text-blue-700">
+                  <button
+                    onClick={() => handleTagToggle(tag)}
+                    className="ml-1 text-blue-500 hover:text-blue-700"
+                  >
                     <X className="h-3 w-3" />
                   </button>
                 </Badge>
@@ -70,7 +85,7 @@ export function TagFilter({ availableTags, selectedTags, onTagsChange, className
                 <div className="flex items-center space-x-2">
                   <Tag className="h-4 w-4 text-slate-400" />
                   <span className="truncate">
-                    {selectedTags.length > 0 ? `${selectedTags.length} tags` : "Filter by tags"}
+                    {selectedTags.length > 0 ? `${selectedTags.length} tags` : 'Filter by tags'}
                   </span>
                 </div>
                 <ChevronDown className="h-4 w-4 ml-2 flex-shrink-0" />
@@ -85,7 +100,7 @@ export function TagFilter({ availableTags, selectedTags, onTagsChange, className
                       key={tag}
                       onClick={() => handleTagToggle(tag)}
                       className={`hover:bg-blue-100 cursor-pointer rounded-lg ${
-                        selectedTags.includes(tag) ? "bg-blue-100" : ""
+                        selectedTags.includes(tag) ? 'bg-blue-100' : ''
                       }`}
                     >
                       <div className="flex items-center justify-between w-full">
@@ -95,7 +110,11 @@ export function TagFilter({ availableTags, selectedTags, onTagsChange, className
                         </div>
                         {selectedTags.includes(tag) && (
                           <div className="w-4 h-4 bg-blue-500 rounded flex items-center justify-center">
-                            <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                            <svg
+                              className="w-3 h-3 text-white"
+                              fill="currentColor"
+                              viewBox="0 0 20 20"
+                            >
                               <path
                                 fillRule="evenodd"
                                 d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
@@ -128,5 +147,5 @@ export function TagFilter({ availableTags, selectedTags, onTagsChange, className
         )}
       </div>
     </div>
-  )
+  );
 }

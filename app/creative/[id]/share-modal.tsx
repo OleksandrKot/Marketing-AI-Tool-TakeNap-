@@ -1,31 +1,31 @@
-"use client"
+'use client';
 
-import { useState } from "react"
-import { X, Copy, Check } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import type { Ad } from "@/lib/types"
-import ModalWrapper from "@/components/modals/ModalWrapper"
+import { useState } from 'react';
+import { X, Copy, Check } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import type { Ad } from '@/lib/types';
+import ModalWrapper from '@/components/modals/ModalWrapper';
 
 interface ShareModalProps {
-  ad: Ad
-  onClose: () => void
+  ad: Ad;
+  onClose: () => void;
 }
 
 export default function ShareModal({ ad, onClose }: ShareModalProps) {
-  const [copied, setCopied] = useState(false)
+  const [copied, setCopied] = useState(false);
 
-  const shareUrl = `${window.location.origin}/creative/${ad.id}`
+  const shareUrl = `${window.location.origin}/creative/${ad.id}`;
 
   const handleCopyLink = async () => {
     try {
-      await navigator.clipboard.writeText(shareUrl)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
     } catch (error) {
-      console.error("Failed to copy:", error)
+      console.error('Failed to copy:', error);
     }
-  }
+  };
 
   return (
     <ModalWrapper isOpen={true} onClose={onClose} panelClassName="p-4">
@@ -54,7 +54,7 @@ export default function ShareModal({ ad, onClose }: ShareModalProps) {
                   className="flex items-center space-x-1 border-blue-600 text-blue-600 hover:bg-blue-50"
                 >
                   {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                  <span>{copied ? "Copied!" : "Copy"}</span>
+                  <span>{copied ? 'Copied!' : 'Copy'}</span>
                 </Button>
               </div>
             </div>
@@ -62,5 +62,5 @@ export default function ShareModal({ ad, onClose }: ShareModalProps) {
         </CardContent>
       </Card>
     </ModalWrapper>
-  )
+  );
 }
