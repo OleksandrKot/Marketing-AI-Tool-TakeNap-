@@ -1,50 +1,62 @@
-"use client"
+'use client';
 
-import { useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { Zap, ExternalLink, Edit, Trash2, Share, User, Mic, Video, Palette, Copy, Check } from "lucide-react"
-import dynamic from "next/dynamic"
-import type { Ad, AdaptationScenario } from "@/lib/types"
+import { useState } from 'react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import {
+  Zap,
+  ExternalLink,
+  Edit,
+  Trash2,
+  Share,
+  User,
+  Mic,
+  Video,
+  Palette,
+  Copy,
+  Check,
+} from 'lucide-react';
+import dynamic from 'next/dynamic';
+import type { Ad, AdaptationScenario } from '@/lib/types';
 
 // Динамічне завантаження модального вікна
-const CreateAdaptationModal = dynamic(() => import("./create-adaptation-modal"), {
+const CreateAdaptationModal = dynamic(() => import('./create-adaptation-modal'), {
   loading: () => <div className="w-4 h-4 bg-slate-200 rounded animate-pulse" />,
-})
+});
 
 interface AdaptationsTabProps {
-  ad: Ad
+  ad: Ad;
 }
 
 export function AdaptationsTab({ ad }: AdaptationsTabProps) {
-  const [copiedField, setCopiedField] = useState<string | null>(null)
-  const [showCreateModal, setShowCreateModal] = useState(false)
+  const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   // Парсимо JSON з new_scenario
   const parseScenarios = (): AdaptationScenario[] => {
-    if (!ad.new_scenario) return []
+    if (!ad.new_scenario) return [];
 
     try {
       // Видаляємо ```json та ``` якщо вони є
-      const cleanJson = ad.new_scenario.replace(/^```json\n?/, "").replace(/\n?```$/, "")
-      return JSON.parse(cleanJson)
+      const cleanJson = ad.new_scenario.replace(/^```json\n?/, '').replace(/\n?```$/, '');
+      return JSON.parse(cleanJson);
     } catch (error) {
-      console.error("Error parsing new_scenario JSON:", error)
-      return []
+      console.error('Error parsing new_scenario JSON:', error);
+      return [];
     }
-  }
+  };
 
-  const scenarios = parseScenarios()
+  const scenarios = parseScenarios();
 
   const handleCopyToClipboard = async (text: string, fieldName: string) => {
     try {
-      await navigator.clipboard.writeText(text)
-      setCopiedField(fieldName)
-      setTimeout(() => setCopiedField(null), 2000)
+      await navigator.clipboard.writeText(text);
+      setCopiedField(fieldName);
+      setTimeout(() => setCopiedField(null), 2000);
     } catch (error) {
-      console.error("Failed to copy:", error)
+      console.error('Failed to copy:', error);
     }
-  }
+  };
 
   return (
     <div className="space-y-8">
@@ -76,13 +88,23 @@ export function AdaptationsTab({ ad }: AdaptationsTabProps) {
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">
                       <User className="h-5 w-5 text-blue-600 mr-2" />
-                      <h3 className="text-xl font-semibold text-slate-900">{scenario.persona_adapted_for}</h3>
+                      <h3 className="text-xl font-semibold text-slate-900">
+                        {scenario.persona_adapted_for}
+                      </h3>
                     </div>
                     <div className="flex items-center space-x-2">
-                      <Button variant="ghost" size="sm" className="text-slate-500 hover:text-slate-700">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-slate-500 hover:text-slate-700"
+                      >
                         <Edit className="h-4 w-4" />
                       </Button>
-                      <Button variant="ghost" size="sm" className="text-slate-500 hover:text-slate-700">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-slate-500 hover:text-slate-700"
+                      >
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>
@@ -97,7 +119,9 @@ export function AdaptationsTab({ ad }: AdaptationsTabProps) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleCopyToClipboard(scenario.ad_script_title, `title-${index}`)}
+                        onClick={() =>
+                          handleCopyToClipboard(scenario.ad_script_title, `title-${index}`)
+                        }
                         className="text-slate-500 hover:text-slate-700"
                       >
                         {copiedField === `title-${index}` ? (
@@ -117,10 +141,16 @@ export function AdaptationsTab({ ad }: AdaptationsTabProps) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleCopyToClipboard(scenario.ad_script_full_text, `text-${index}`)}
+                        onClick={() =>
+                          handleCopyToClipboard(scenario.ad_script_full_text, `text-${index}`)
+                        }
                         className="text-slate-500 hover:text-slate-700"
                       >
-                        {copiedField === `text-${index}` ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
+                        {copiedField === `text-${index}` ? (
+                          <Check className="h-4 w-4" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
                       </Button>
                     </div>
                     <p className="text-slate-700 leading-relaxed">{scenario.ad_script_full_text}</p>
@@ -146,8 +176,8 @@ export function AdaptationsTab({ ad }: AdaptationsTabProps) {
                           size="sm"
                           onClick={() =>
                             handleCopyToClipboard(
-                              scenario.technical_task_json.visual_elements.join("\n"),
-                              `visual-${index}`,
+                              scenario.technical_task_json.visual_elements.join('\n'),
+                              `visual-${index}`
                             )
                           }
                           className="text-slate-500 hover:text-slate-700 ml-auto"
@@ -178,7 +208,10 @@ export function AdaptationsTab({ ad }: AdaptationsTabProps) {
                           variant="ghost"
                           size="sm"
                           onClick={() =>
-                            handleCopyToClipboard(scenario.technical_task_json.audio_style, `audio-${index}`)
+                            handleCopyToClipboard(
+                              scenario.technical_task_json.audio_style,
+                              `audio-${index}`
+                            )
                           }
                           className="text-slate-500 hover:text-slate-700 ml-auto"
                         >
@@ -189,7 +222,9 @@ export function AdaptationsTab({ ad }: AdaptationsTabProps) {
                           )}
                         </Button>
                       </div>
-                      <p className="text-sm text-slate-600">{scenario.technical_task_json.audio_style}</p>
+                      <p className="text-sm text-slate-600">
+                        {scenario.technical_task_json.audio_style}
+                      </p>
                     </div>
                   </div>
 
@@ -237,7 +272,9 @@ export function AdaptationsTab({ ad }: AdaptationsTabProps) {
       )}
 
       {/* Create Adaptation Modal */}
-      {showCreateModal && <CreateAdaptationModal ad={ad} onClose={() => setShowCreateModal(false)} />}
+      {showCreateModal && (
+        <CreateAdaptationModal ad={ad} onClose={() => setShowCreateModal(false)} />
+      )}
     </div>
-  )
+  );
 }

@@ -1,104 +1,104 @@
-"use client"
+'use client';
 
-import { useState } from "react"
-import { User, Plus, Edit, Trash2, Save, X, DollarSign, Users, Heart, Target } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
-import { Badge } from "@/components/ui/badge"
-import { ProfileDropdown } from "@/app/login-auth/components/profile-dropdown"
-import { PageNavigation } from "@/components/page-navigation"
-import ModalWrapper from "@/components/modals/ModalWrapper"
+import { useState } from 'react';
+import { User, Plus, Edit, Trash2, Save, X, DollarSign, Users, Heart, Target } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge';
+import { ProfileDropdown } from '@/app/login-auth/components/profile-dropdown';
+import { PageNavigation } from '@/components/page-navigation';
+import ModalWrapper from '@/components/modals/ModalWrapper';
 
 interface Persona {
-  id: number
-  name: string
-  needs: string
-  profile: string
-  ageRange: string
-  income: string
-  status: string
-  goals: string[]
+  id: number;
+  name: string;
+  needs: string;
+  profile: string;
+  ageRange: string;
+  income: string;
+  status: string;
+  goals: string[];
 }
 
 const initialPersonas: Persona[] = [
   {
     id: 1,
-    name: "The Seeker of Connection",
-    needs: "Emotional support, companionship, and a sense of being valued.",
+    name: 'The Seeker of Connection',
+    needs: 'Emotional support, companionship, and a sense of being valued.',
     profile:
-      "A man, 18+, single or divorced, who feels lonely and seeks meaningful communication with an AI companion to feel needed and understood.",
-    ageRange: "18+",
-    income: "Not specified",
-    status: "Single or divorced",
-    goals: ["Emotional support", "Companionship", "Feel valued", "Meaningful communication"],
+      'A man, 18+, single or divorced, who feels lonely and seeks meaningful communication with an AI companion to feel needed and understood.',
+    ageRange: '18+',
+    income: 'Not specified',
+    status: 'Single or divorced',
+    goals: ['Emotional support', 'Companionship', 'Feel valued', 'Meaningful communication'],
   },
   {
     id: 2,
-    name: "The Social Strategist",
-    needs: "Self-improvement in social skills and casual, stimulating conversation.",
+    name: 'The Social Strategist',
+    needs: 'Self-improvement in social skills and casual, stimulating conversation.',
     profile:
-      "A man, 18+, with an income of ~$4k/month, who wants to learn to flirt and practice engaging, casual dialogue with an AI to boost his confidence and satisfy social needs.",
-    ageRange: "18+",
-    income: "~$4k/month",
-    status: "Single",
-    goals: ["Learn to flirt", "Practice dialogue", "Boost confidence", "Social skills improvement"],
+      'A man, 18+, with an income of ~$4k/month, who wants to learn to flirt and practice engaging, casual dialogue with an AI to boost his confidence and satisfy social needs.',
+    ageRange: '18+',
+    income: '~$4k/month',
+    status: 'Single',
+    goals: ['Learn to flirt', 'Practice dialogue', 'Boost confidence', 'Social skills improvement'],
   },
-]
+];
 
 export default function PersonasSettingsPage() {
-  const [personas, setPersonas] = useState<Persona[]>(initialPersonas)
-  const [isCreating, setIsCreating] = useState(false)
-  const [editingPersona, setEditingPersona] = useState<Persona | null>(null)
-  const [newPersona, setNewPersona] = useState<Omit<Persona, "id">>({
-    name: "",
-    needs: "",
-    profile: "",
-    ageRange: "",
-    income: "",
-    status: "",
+  const [personas, setPersonas] = useState<Persona[]>(initialPersonas);
+  const [isCreating, setIsCreating] = useState(false);
+  const [editingPersona, setEditingPersona] = useState<Persona | null>(null);
+  const [newPersona, setNewPersona] = useState<Omit<Persona, 'id'>>({
+    name: '',
+    needs: '',
+    profile: '',
+    ageRange: '',
+    income: '',
+    status: '',
     goals: [],
-  })
+  });
 
   const handleCreatePersona = () => {
-    if (!newPersona.name.trim()) return
+    if (!newPersona.name.trim()) return;
 
     const persona: Persona = {
       id: Date.now(),
       ...newPersona,
-      goals: newPersona.goals.filter((goal) => goal.trim() !== ""),
-    }
+      goals: newPersona.goals.filter((goal) => goal.trim() !== ''),
+    };
 
-    setPersonas([...personas, persona])
+    setPersonas([...personas, persona]);
     setNewPersona({
-      name: "",
-      needs: "",
-      profile: "",
-      ageRange: "",
-      income: "",
-      status: "",
+      name: '',
+      needs: '',
+      profile: '',
+      ageRange: '',
+      income: '',
+      status: '',
       goals: [],
-    })
-    setIsCreating(false)
-  }
+    });
+    setIsCreating(false);
+  };
 
   const handleEditPersona = (persona: Persona) => {
-    setEditingPersona({ ...persona })
-  }
+    setEditingPersona({ ...persona });
+  };
 
   const handleSaveEdit = () => {
-    if (!editingPersona) return
+    if (!editingPersona) return;
 
-    setPersonas(personas.map((p) => (p.id === editingPersona.id ? editingPersona : p)))
-    setEditingPersona(null)
-  }
+    setPersonas(personas.map((p) => (p.id === editingPersona.id ? editingPersona : p)));
+    setEditingPersona(null);
+  };
 
   const handleDeletePersona = (id: number) => {
-    if (confirm("Are you sure you want to delete this persona?")) {
-      setPersonas(personas.filter((p) => p.id !== id))
+    if (confirm('Are you sure you want to delete this persona?')) {
+      setPersonas(personas.filter((p) => p.id !== id));
     }
-  }
+  };
 
   const handleAddGoal = (goal: string, isEditing = false) => {
     if (goal.trim()) {
@@ -107,32 +107,32 @@ export default function PersonasSettingsPage() {
           setEditingPersona({
             ...editingPersona,
             goals: [...editingPersona.goals, goal.trim()],
-          })
+          });
         }
       } else {
         if (!newPersona.goals.includes(goal.trim())) {
           setNewPersona({
             ...newPersona,
             goals: [...newPersona.goals, goal.trim()],
-          })
+          });
         }
       }
     }
-  }
+  };
 
   const handleRemoveGoal = (goalToRemove: string, isEditing = false) => {
     if (isEditing && editingPersona) {
       setEditingPersona({
         ...editingPersona,
         goals: editingPersona.goals.filter((goal) => goal !== goalToRemove),
-      })
+      });
     } else {
       setNewPersona({
         ...newPersona,
         goals: newPersona.goals.filter((goal) => goal !== goalToRemove),
-      })
+      });
     }
-  }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -140,7 +140,9 @@ export default function PersonasSettingsPage() {
         {/* Hero section */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12">
           <div>
-            <h1 className="text-5xl font-bold text-slate-900 mb-3 tracking-tight">Personas Settings</h1>
+            <h1 className="text-5xl font-bold text-slate-900 mb-3 tracking-tight">
+              Personas Settings
+            </h1>
             <p className="text-slate-600 font-medium text-lg">
               Manage your user personas for targeted creative adaptations
             </p>
@@ -191,8 +193,14 @@ export default function PersonasSettingsPage() {
                 {/* Left Column */}
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Persona Name *</label>
+                    <label
+                      htmlFor="new-persona-name"
+                      className="block text-sm font-medium text-slate-700 mb-2"
+                    >
+                      Persona Name *
+                    </label>
                     <Input
+                      id="new-persona-name"
                       placeholder="e.g., The Ambitious Professional"
                       value={newPersona.name}
                       onChange={(e) => setNewPersona({ ...newPersona, name: e.target.value })}
@@ -201,8 +209,14 @@ export default function PersonasSettingsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Age Range</label>
+                    <label
+                      htmlFor="new-persona-ageRange"
+                      className="block text-sm font-medium text-slate-700 mb-2"
+                    >
+                      Age Range
+                    </label>
                     <Input
+                      id="new-persona-ageRange"
                       placeholder="e.g., 25-35"
                       value={newPersona.ageRange}
                       onChange={(e) => setNewPersona({ ...newPersona, ageRange: e.target.value })}
@@ -211,8 +225,14 @@ export default function PersonasSettingsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Income Level</label>
+                    <label
+                      htmlFor="new-persona-income"
+                      className="block text-sm font-medium text-slate-700 mb-2"
+                    >
+                      Income Level
+                    </label>
                     <Input
+                      id="new-persona-income"
                       placeholder="e.g., $5k-8k/month"
                       value={newPersona.income}
                       onChange={(e) => setNewPersona({ ...newPersona, income: e.target.value })}
@@ -221,8 +241,14 @@ export default function PersonasSettingsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Relationship Status</label>
+                    <label
+                      htmlFor="new-persona-status"
+                      className="block text-sm font-medium text-slate-700 mb-2"
+                    >
+                      Relationship Status
+                    </label>
                     <Input
+                      id="new-persona-status"
                       placeholder="e.g., Single, Married, Divorced"
                       value={newPersona.status}
                       onChange={(e) => setNewPersona({ ...newPersona, status: e.target.value })}
@@ -234,8 +260,14 @@ export default function PersonasSettingsPage() {
                 {/* Right Column */}
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Primary Needs *</label>
+                    <label
+                      htmlFor="new-persona-needs"
+                      className="block text-sm font-medium text-slate-700 mb-2"
+                    >
+                      Primary Needs *
+                    </label>
                     <Textarea
+                      id="new-persona-needs"
                       placeholder="Describe what this persona needs and is looking for..."
                       value={newPersona.needs}
                       onChange={(e) => setNewPersona({ ...newPersona, needs: e.target.value })}
@@ -244,8 +276,14 @@ export default function PersonasSettingsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Profile Description *</label>
+                    <label
+                      htmlFor="new-persona-profile"
+                      className="block text-sm font-medium text-slate-700 mb-2"
+                    >
+                      Profile Description *
+                    </label>
                     <Textarea
+                      id="new-persona-profile"
                       placeholder="Detailed description of this persona's background, characteristics, and behavior..."
                       value={newPersona.profile}
                       onChange={(e) => setNewPersona({ ...newPersona, profile: e.target.value })}
@@ -254,7 +292,12 @@ export default function PersonasSettingsPage() {
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-700 mb-2">Goals & Motivations</label>
+                    <label
+                      htmlFor="new-persona-goal"
+                      className="block text-sm font-medium text-slate-700 mb-2"
+                    >
+                      Goals & Motivations
+                    </label>
                     <div className="flex flex-wrap gap-2 mb-2">
                       {newPersona.goals.map((goal, index) => (
                         <Badge
@@ -272,12 +315,13 @@ export default function PersonasSettingsPage() {
                       ))}
                     </div>
                     <Input
+                      id="new-persona-goal"
                       placeholder="Add a goal and press Enter"
                       onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.preventDefault()
-                          handleAddGoal(e.currentTarget.value)
-                          e.currentTarget.value = ""
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleAddGoal(e.currentTarget.value);
+                          e.currentTarget.value = '';
                         }
                       }}
                       className="border-slate-200 rounded-lg"
@@ -296,7 +340,11 @@ export default function PersonasSettingsPage() {
                 </Button>
                 <Button
                   onClick={handleCreatePersona}
-                  disabled={!newPersona.name.trim() || !newPersona.needs.trim() || !newPersona.profile.trim()}
+                  disabled={
+                    !newPersona.name.trim() ||
+                    !newPersona.needs.trim() ||
+                    !newPersona.profile.trim()
+                  }
                   className="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl h-11 px-6 transition-all duration-200 disabled:opacity-50"
                 >
                   <Save className="h-4 w-4 mr-2" />
@@ -309,7 +357,11 @@ export default function PersonasSettingsPage() {
 
         {/* Edit Persona Modal */}
         {editingPersona && (
-          <ModalWrapper isOpen={!!editingPersona} onClose={() => setEditingPersona(null)} panelClassName="w-full max-w-4xl max-h-[90vh] overflow-y-auto p-4">
+          <ModalWrapper
+            isOpen={!!editingPersona}
+            onClose={() => setEditingPersona(null)}
+            panelClassName="w-full max-w-4xl max-h-[90vh] overflow-y-auto p-4"
+          >
             <Card className="w-full max-w-4xl max-h-[90vh] overflow-y-auto">
               <CardHeader className="border-b border-slate-200">
                 <div className="flex items-center justify-between">
@@ -334,41 +386,73 @@ export default function PersonasSettingsPage() {
                   {/* Left Column */}
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">Persona Name *</label>
+                      <label
+                        htmlFor={`edit-persona-name-${editingPersona.id}`}
+                        className="block text-sm font-medium text-slate-700 mb-2"
+                      >
+                        Persona Name *
+                      </label>
                       <Input
+                        id={`edit-persona-name-${editingPersona.id}`}
                         placeholder="e.g., The Ambitious Professional"
                         value={editingPersona.name}
-                        onChange={(e) => setEditingPersona({ ...editingPersona, name: e.target.value })}
+                        onChange={(e) =>
+                          setEditingPersona({ ...editingPersona, name: e.target.value })
+                        }
                         className="border-slate-200 rounded-lg"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">Age Range</label>
+                      <label
+                        htmlFor={`edit-persona-ageRange-${editingPersona.id}`}
+                        className="block text-sm font-medium text-slate-700 mb-2"
+                      >
+                        Age Range
+                      </label>
                       <Input
+                        id={`edit-persona-ageRange-${editingPersona.id}`}
                         placeholder="e.g., 25-35"
                         value={editingPersona.ageRange}
-                        onChange={(e) => setEditingPersona({ ...editingPersona, ageRange: e.target.value })}
+                        onChange={(e) =>
+                          setEditingPersona({ ...editingPersona, ageRange: e.target.value })
+                        }
                         className="border-slate-200 rounded-lg"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">Income Level</label>
+                      <label
+                        htmlFor={`edit-persona-income-${editingPersona.id}`}
+                        className="block text-sm font-medium text-slate-700 mb-2"
+                      >
+                        Income Level
+                      </label>
                       <Input
+                        id={`edit-persona-income-${editingPersona.id}`}
                         placeholder="e.g., $5k-8k/month"
                         value={editingPersona.income}
-                        onChange={(e) => setEditingPersona({ ...editingPersona, income: e.target.value })}
+                        onChange={(e) =>
+                          setEditingPersona({ ...editingPersona, income: e.target.value })
+                        }
                         className="border-slate-200 rounded-lg"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">Relationship Status</label>
+                      <label
+                        htmlFor={`edit-persona-status-${editingPersona.id}`}
+                        className="block text-sm font-medium text-slate-700 mb-2"
+                      >
+                        Relationship Status
+                      </label>
                       <Input
+                        id={`edit-persona-status-${editingPersona.id}`}
                         placeholder="e.g., Single, Married, Divorced"
                         value={editingPersona.status}
-                        onChange={(e) => setEditingPersona({ ...editingPersona, status: e.target.value })}
+                        onChange={(e) =>
+                          setEditingPersona({ ...editingPersona, status: e.target.value })
+                        }
                         className="border-slate-200 rounded-lg"
                       />
                     </div>
@@ -377,27 +461,48 @@ export default function PersonasSettingsPage() {
                   {/* Right Column */}
                   <div className="space-y-4">
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">Primary Needs *</label>
+                      <label
+                        htmlFor={`edit-persona-needs-${editingPersona.id}`}
+                        className="block text-sm font-medium text-slate-700 mb-2"
+                      >
+                        Primary Needs *
+                      </label>
                       <Textarea
+                        id={`edit-persona-needs-${editingPersona.id}`}
                         placeholder="Describe what this persona needs and is looking for..."
                         value={editingPersona.needs}
-                        onChange={(e) => setEditingPersona({ ...editingPersona, needs: e.target.value })}
+                        onChange={(e) =>
+                          setEditingPersona({ ...editingPersona, needs: e.target.value })
+                        }
                         className="border-slate-200 rounded-lg min-h-[100px] resize-none"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">Profile Description *</label>
+                      <label
+                        htmlFor={`edit-persona-profile-${editingPersona.id}`}
+                        className="block text-sm font-medium text-slate-700 mb-2"
+                      >
+                        Profile Description *
+                      </label>
                       <Textarea
+                        id={`edit-persona-profile-${editingPersona.id}`}
                         placeholder="Detailed description of this persona's background, characteristics, and behavior..."
                         value={editingPersona.profile}
-                        onChange={(e) => setEditingPersona({ ...editingPersona, profile: e.target.value })}
+                        onChange={(e) =>
+                          setEditingPersona({ ...editingPersona, profile: e.target.value })
+                        }
                         className="border-slate-200 rounded-lg min-h-[120px] resize-none"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-sm font-medium text-slate-700 mb-2">Goals & Motivations</label>
+                      <label
+                        htmlFor={`edit-persona-goal-${editingPersona.id}`}
+                        className="block text-sm font-medium text-slate-700 mb-2"
+                      >
+                        Goals & Motivations
+                      </label>
                       <div className="flex flex-wrap gap-2 mb-2">
                         {editingPersona.goals.map((goal, index) => (
                           <Badge
@@ -415,12 +520,13 @@ export default function PersonasSettingsPage() {
                         ))}
                       </div>
                       <Input
+                        id={`edit-persona-goal-${editingPersona.id}`}
                         placeholder="Add a goal and press Enter"
                         onKeyDown={(e) => {
-                          if (e.key === "Enter") {
-                            e.preventDefault()
-                            handleAddGoal(e.currentTarget.value, true)
-                            e.currentTarget.value = ""
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleAddGoal(e.currentTarget.value, true);
+                            e.currentTarget.value = '';
                           }
                         }}
                         className="border-slate-200 rounded-lg"
@@ -440,7 +546,9 @@ export default function PersonasSettingsPage() {
                   <Button
                     onClick={handleSaveEdit}
                     disabled={
-                      !editingPersona.name.trim() || !editingPersona.needs.trim() || !editingPersona.profile.trim()
+                      !editingPersona.name.trim() ||
+                      !editingPersona.needs.trim() ||
+                      !editingPersona.profile.trim()
                     }
                     className="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl h-11 px-6 transition-all duration-200 disabled:opacity-50"
                   >
@@ -456,7 +564,10 @@ export default function PersonasSettingsPage() {
         {/* Existing Personas */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {personas.map((persona) => (
-            <Card key={persona.id} className="border-slate-200 rounded-2xl hover:shadow-lg transition-all duration-300">
+            <Card
+              key={persona.id}
+              className="border-slate-200 rounded-2xl hover:shadow-lg transition-all duration-300"
+            >
               <CardHeader className="border-b border-slate-200">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center">
@@ -521,7 +632,9 @@ export default function PersonasSettingsPage() {
                       <Target className="h-4 w-4 mr-2 text-blue-600" />
                       Primary Needs
                     </h4>
-                    <p className="text-sm text-slate-600 leading-relaxed bg-blue-50 p-3 rounded-lg">{persona.needs}</p>
+                    <p className="text-sm text-slate-600 leading-relaxed bg-blue-50 p-3 rounded-lg">
+                      {persona.needs}
+                    </p>
                   </div>
 
                   {/* Profile */}
@@ -535,7 +648,9 @@ export default function PersonasSettingsPage() {
                   {/* Goals */}
                   {persona.goals.length > 0 && (
                     <div>
-                      <h4 className="text-sm font-medium text-slate-700 mb-2">Goals & Motivations</h4>
+                      <h4 className="text-sm font-medium text-slate-700 mb-2">
+                        Goals & Motivations
+                      </h4>
                       <div className="flex flex-wrap gap-2">
                         {persona.goals.map((goal, index) => (
                           <Badge
@@ -577,5 +692,5 @@ export default function PersonasSettingsPage() {
         )}
       </div>
     </div>
-  )
+  );
 }

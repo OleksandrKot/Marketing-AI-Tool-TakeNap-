@@ -1,41 +1,41 @@
-"use client"
+'use client';
 
-import { useState } from "react"
-import { X, Zap, Sparkles } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader } from "@/components/ui/card"
-import { Textarea } from "@/components/ui/textarea"
-import type { Ad } from "@/lib/types"
-import ModalWrapper from "@/components/modals/ModalWrapper"
+import { useState } from 'react';
+import { X, Zap, Sparkles } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
+import { Textarea } from '@/components/ui/textarea';
+import type { Ad } from '@/lib/types';
+import ModalWrapper from '@/components/modals/ModalWrapper';
 
 interface CreateAdaptationModalProps {
-  ad: Ad
-  onClose: () => void
+  ad: Ad;
+  onClose: () => void;
 }
 
 export default function CreateAdaptationModal({ ad, onClose }: CreateAdaptationModalProps) {
-  const [prompt, setPrompt] = useState("")
-  const [isLoading, setIsLoading] = useState(false)
+  const [prompt, setPrompt] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
   const handleCreateAdaptation = async () => {
-    if (!prompt.trim()) return
+    if (!prompt.trim()) return;
 
-    setIsLoading(true)
+    setIsLoading(true);
 
     // Тут буде логіка відправки до Make.com коли буде готовий ланцюг
     try {
       // Симулюємо API запит
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      await new Promise((resolve) => setTimeout(resolve, 2000));
 
       // Показуємо успішне повідомлення
-      alert("Adaptation request sent! New scenarios will appear shortly.")
-      onClose()
+      alert('Adaptation request sent! New scenarios will appear shortly.');
+      onClose();
     } catch (error) {
-      alert("Error creating adaptation. Please try again.")
+      alert('Error creating adaptation. Please try again.');
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   return (
     <ModalWrapper isOpen={true} onClose={onClose} panelClassName="p-4">
@@ -47,10 +47,17 @@ export default function CreateAdaptationModal({ ad, onClose }: CreateAdaptationM
             </div>
             <div>
               <h3 className="text-xl font-semibold text-slate-900">Create New Adaptation</h3>
-              <p className="text-sm text-slate-500">Generate personalized scenarios for this creative</p>
+              <p className="text-sm text-slate-500">
+                Generate personalized scenarios for this creative
+              </p>
             </div>
           </div>
-          <Button variant="ghost" size="icon" onClick={onClose} className="text-slate-400 hover:text-slate-600">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="text-slate-400 hover:text-slate-600"
+          >
             <X className="h-5 w-5" />
           </Button>
         </CardHeader>
@@ -76,7 +83,7 @@ export default function CreateAdaptationModal({ ad, onClose }: CreateAdaptationM
                 <h4 className="text-sm font-medium text-slate-700">Adaptation Prompt</h4>
               </div>
               <Textarea
-                placeholder="Describe how you want to adapt this creative. For example: 'Create versions for different age groups', 'Adapt for fitness enthusiasts vs beginners', 'Make versions for different emotional states'..."
+                placeholder='Describe how you want to adapt this creative. For example: "Create versions for different age groups", "Adapt for fitness enthusiasts vs beginners", "Make versions for different emotional states"...'
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 className="min-h-[120px] border-slate-200 rounded-xl text-sm resize-none focus:border-orange-500 focus:ring-orange-500"
@@ -97,32 +104,35 @@ export default function CreateAdaptationModal({ ad, onClose }: CreateAdaptationM
                 <button
                   onClick={() =>
                     setPrompt(
-                      "Create adaptations for different age groups: Gen Z (18-24), Millennials (25-40), and Gen X (41-56)",
+                      'Create adaptations for different age groups: Gen Z (18-24), Millennials (25-40), and Gen X (41-56)'
                     )
                   }
                   className="block w-full text-left text-xs text-blue-700 hover:text-blue-900 bg-white rounded-lg p-2 hover:bg-blue-100 transition-colors"
                 >
-                  "Create adaptations for different age groups: Gen Z (18-24), Millennials (25-40), and Gen X (41-56)"
+                  &quot;Create adaptations for different age groups: Gen Z (18-24), Millennials
+                  (25-40), and Gen X (41-56)&quot;
                 </button>
                 <button
                   onClick={() =>
                     setPrompt(
-                      "Adapt this creative for different emotional states: stressed/overwhelmed vs motivated/optimistic",
+                      'Adapt this creative for different emotional states: stressed/overwhelmed vs motivated/optimistic'
                     )
                   }
                   className="block w-full text-left text-xs text-blue-700 hover:text-blue-900 bg-white rounded-lg p-2 hover:bg-blue-100 transition-colors"
                 >
-                  "Adapt this creative for different emotional states: stressed/overwhelmed vs motivated/optimistic"
+                  &quot;Adapt this creative for different emotional states: stressed/overwhelmed vs
+                  motivated/optimistic&quot;
                 </button>
                 <button
                   onClick={() =>
                     setPrompt(
-                      "Create versions targeting different experience levels: complete beginners vs experienced users",
+                      'Create versions targeting different experience levels: complete beginners vs experienced users'
                     )
                   }
                   className="block w-full text-left text-xs text-blue-700 hover:text-blue-900 bg-white rounded-lg p-2 hover:bg-blue-100 transition-colors"
                 >
-                  "Create versions targeting different experience levels: complete beginners vs experienced users"
+                  &quot;Create versions targeting different experience levels: complete beginners vs
+                  experienced users&quot;
                 </button>
               </div>
             </div>
@@ -158,5 +168,5 @@ export default function CreateAdaptationModal({ ad, onClose }: CreateAdaptationM
         </div>
       </Card>
     </ModalWrapper>
-  )
+  );
 }

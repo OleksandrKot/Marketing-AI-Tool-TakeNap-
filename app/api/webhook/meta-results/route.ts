@@ -1,26 +1,26 @@
-import { type NextRequest, NextResponse } from "next/server"
+import { type NextRequest, NextResponse } from 'next/server';
 
-export const dynamic = "force-dynamic"
-import { createServerSupabaseClient } from "@/lib/supabase"
+export const dynamic = 'force-dynamic';
+import { createServerSupabaseClient } from '@/lib/supabase';
 
 // Webhook для отримання результатів від Make.com
 export async function POST(request: NextRequest) {
   try {
     // Перевірка API ключа
-    const apiKey = request.headers.get("x-api-key")
+    const apiKey = request.headers.get('x-api-key');
     if (apiKey !== process.env.MAKE_API_KEY) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const { ads_data } = await request.json()
-    const supabase = createServerSupabaseClient()
+    const { ads_data } = await request.json();
+    const supabase = createServerSupabaseClient();
 
     // Збереження всіх знайдених креативів
-    const results = []
+    const results = [];
 
     for (const adData of ads_data) {
       const { data, error } = await supabase
-        .from("ads_library")
+        .from('ads_library')
         .insert([
           {
             ad_archive_id: adData.ad_archive_id,
@@ -34,14 +34,14 @@ export async function POST(request: NextRequest) {
             title: adData.ad_title,
             video_hd_url: adData.video_url,
             video_preview_image: adData.image_url,
-            publisher_platform: "Facebook",
+            publisher_platform: 'Facebook',
           },
         ])
         .select()
-        .single()
+        .single();
 
       if (!error) {
-        results.push(data)
+        results.push(data);
       }
     }
 
@@ -49,8 +49,8 @@ export async function POST(request: NextRequest) {
       success: true,
       message: `Successfully imported ${results.length} ads`,
       imported_ads: results.length,
-    })
+    });
   } catch (error) {
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

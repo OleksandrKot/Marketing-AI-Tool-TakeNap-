@@ -1,15 +1,15 @@
-"use client"
+'use client';
 
-import React, { Suspense } from "react"
-import { AdDetails } from "../creative/[id]/ad-details"
-import type { Ad } from "@/lib/types"
+import React, { Suspense } from 'react';
+import { AdDetails } from '../creative/[id]/ad-details';
+import type { Ad } from '@/lib/types';
 
 // Фейкові дані про Lovescape
 const lovescapeAd: Ad = {
   id: 999,
-  created_at: "2024-01-15T10:30:00Z",
-  ad_archive_id: "LSC789456123",
-  page_name: "Lovescape - Dating App",
+  created_at: '2024-01-15T10:30:00Z',
+  ad_archive_id: 'LSC789456123',
+  page_name: 'Lovescape - Dating App',
   text: `Ready to find your perfect match? 💕
 
 Lovescape uses advanced AI to connect you with people who truly understand you. No more endless swiping - just meaningful connections.
@@ -22,15 +22,17 @@ Lovescape uses advanced AI to connect you with people who truly understand you. 
 Join 2M+ singles who found love on Lovescape!
 
 Download now and get 7 days premium FREE! 🎁`,
-  caption: "Your love story starts here. Join Lovescape today! 💕 #LovescapeApp #Dating #FindLove #TrueLove",
-  cta_text: "Download Free",
-  cta_type: "INSTALL_MOBILE_APP",
-  display_format: "VIDEO",
-  link_url: "https://lovescape.app/download",
-  title: "Find Your Perfect Match with Lovescape AI",
-  video_hd_url: "https://placeholder.svg?height=720&width=1280&query=lovescape-dating-app-video",
-  video_preview_image_url: "https://placeholder.svg?height=720&width=1280&query=lovescape-app-preview-couple-smiling",
-  publisher_platform: "Facebook",
+  caption:
+    'Your love story starts here. Join Lovescape today! 💕 #LovescapeApp #Dating #FindLove #TrueLove',
+  cta_text: 'Download Free',
+  cta_type: 'INSTALL_MOBILE_APP',
+  display_format: 'VIDEO',
+  link_url: 'https://lovescape.app/download',
+  title: 'Find Your Perfect Match with Lovescape AI',
+  video_hd_url: 'https://placeholder.svg?height=720&width=1280&query=lovescape-dating-app-video',
+  video_preview_image_url:
+    'https://placeholder.svg?height=720&width=1280&query=lovescape-app-preview-couple-smiling',
+  publisher_platform: 'Facebook',
   audio_script: `[Upbeat romantic music starts]
 
 Narrator (warm, friendly female voice): "Tired of meaningless swipes? Ready for something real?"
@@ -79,14 +81,15 @@ Narrator: "Lovescape. Where love finds you."
 00:25 - 00:28: App download screen with "7 days premium FREE" badge pulsing. 
 
 00:28 - 00:30: Final logo animation: "Lovescape - Where love finds you" with download button.`,
-  meta_ad_url: "https://www.facebook.com/ads/library/?id=LSC789456123",
-  image_url: "https://placeholder.svg?height=720&width=1280&query=lovescape-dating-app-couple-coffee-date-smiling",
+  meta_ad_url: 'https://www.facebook.com/ads/library/?id=LSC789456123',
+  image_url:
+    'https://placeholder.svg?height=720&width=1280&query=lovescape-dating-app-couple-coffee-date-smiling',
   image_description: `A warm, inviting image showing a diverse couple in their late twenties having coffee at a modern café. The woman has curly brown hair and is wearing a soft pink sweater, while the man has short dark hair and a casual blue button-down shirt. They're both smiling genuinely and leaning slightly toward each other across a small round table with two coffee cups.
 
 The lighting is natural and golden, coming through large windows in the background. The café has a cozy, modern aesthetic with exposed brick walls and hanging plants. In the bottom right corner, there's a subtle Lovescape app logo overlay.
 
 The overall mood is authentic, romantic, and aspirational - showing the kind of meaningful connection that the app promises to deliver. The couple appears relaxed and genuinely happy, not posed or artificial.`,
-}
+};
 
 export default function TestLovescapePage() {
   return (
@@ -102,5 +105,5 @@ export default function TestLovescapePage() {
     >
       <AdDetails ad={lovescapeAd} />
     </Suspense>
-  )
+  );
 }

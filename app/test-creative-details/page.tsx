@@ -1,15 +1,16 @@
-import React, { Suspense } from "react"
-import { createServerSupabaseClient } from "@/lib/supabase"
-import { AdDetails } from "../creative/[id]/ad-details"
+import React, { Suspense } from 'react';
+import { createServerSupabaseClient } from '@/lib/supabase';
+import { AdDetails } from '../creative/[id]/ad-details';
 
 // Отримуємо перший доступний креатив з бази даних
 async function getFirstAd() {
   try {
-    const supabase = createServerSupabaseClient()
+    const supabase = createServerSupabaseClient();
 
     const { data, error } = await supabase
-    .from("ads_library")
-    .select(`
+      .from('ads_library')
+      .select(
+        `
       id,
       created_at,
       ad_archive_id,
@@ -29,25 +30,26 @@ async function getFirstAd() {
       meta_ad_url,
       image_url,
       image_description
-    `)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .single()
+    `
+      )
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
 
     if (error || !data) {
-      console.error("Error fetching ad:", error)
-      return null
+      console.error('Error fetching ad:', error);
+      return null;
     }
 
-    return data
+    return data;
   } catch (err) {
-    console.warn("getFirstAd: supabase client unavailable or failed, falling back to null", err)
-    return null
+    console.warn('getFirstAd: supabase client unavailable or failed, falling back to null', err);
+    return null;
   }
 }
 
 export default async function TestCreativeDetailsPage() {
-  const ad = await getFirstAd()
+  const ad = await getFirstAd();
 
   if (!ad) {
     return (
@@ -57,7 +59,7 @@ export default async function TestCreativeDetailsPage() {
           <p className="text-slate-600">Please add some ads to your database first.</p>
         </div>
       </div>
-    )
+    );
   }
 
   return (
@@ -73,5 +75,5 @@ export default async function TestCreativeDetailsPage() {
     >
       <AdDetails ad={ad} />
     </Suspense>
-  )
+  );
 }

@@ -1,56 +1,58 @@
-"use client"
+'use client';
 
-import { Calendar, Video, Tag } from "lucide-react"
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { useRouter } from "next/navigation"
-import Image from "next/image"
-import { useState } from "react"
-import type { Ad } from "@/lib/types"
-import { formatDate, truncateText } from "@/lib/utils"
+import React, { useState, memo } from 'react';
+import { Calendar, Video, Tag } from 'lucide-react';
+import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { useRouter } from 'next/navigation';
+import Image from 'next/image';
+import type { Ad } from '@/lib/types';
+import { formatDate, truncateText } from '@/lib/utils';
 
 interface AdCardProps {
-  ad: Ad
-  relatedAds?: Ad[]
-  from?: string
+  ad: Ad;
+  relatedAds?: Ad[];
+  from?: string;
 }
 
-export function AdCard({ ad, relatedAds = [], from }: AdCardProps) {
-  const router = useRouter()
-  const [imageLoaded, setImageLoaded] = useState(false)
-  const title = ad.title || "Untitled Ad"
-  const isVideo = ad.display_format === "VIDEO"
+function AdCardComponent({ ad, relatedAds = [], from }: AdCardProps) {
+  const router = useRouter();
+  const [imageLoaded, setImageLoaded] = useState(false);
+  const title = ad.title || 'Untitled Ad';
+  const isVideo = ad.display_format === 'VIDEO';
 
   // Calculate active days (mock calculation for demo)
-  const createdDate = new Date(ad.created_at)
-  const today = new Date()
-  const activeDays = Math.floor((today.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24))
+  const createdDate = new Date(ad.created_at);
+  const today = new Date();
+  const activeDays = Math.floor((today.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24));
 
   const handleViewDetails = () => {
     // Переходимо на реальну сторінку деталей з ID креативу та передаємо relatedAds через URL
-    const relatedAdsIds = relatedAds.map(relatedAd => relatedAd.id).join(',')
-    let url = relatedAdsIds ? `/creative/${ad.id}?related=${relatedAdsIds}` : `/creative/${ad.id}`
+    const relatedAdsIds = relatedAds.map((relatedAd) => relatedAd.id).join(',');
+    let url = relatedAdsIds ? `/creative/${ad.id}?related=${relatedAdsIds}` : `/creative/${ad.id}`;
     if (from) {
-      url += url.includes('?') ? `&from=${encodeURIComponent(from)}` : `?from=${encodeURIComponent(from)}`
+      url += url.includes('?')
+        ? `&from=${encodeURIComponent(from)}`
+        : `?from=${encodeURIComponent(from)}`;
     }
-    router.push(url)
-  }
+    router.push(url);
+  };
 
   // Prefetch the details page on hover for faster navigation
   const handleMouseEnter = () => {
-    router.prefetch(`/creative/${ad.id}`)
-  }
+    router.prefetch(`/creative/${ad.id}`);
+  };
 
   // Логіка для preview картинки:
   // - Для відео: використовуємо video_preview_image_url або image_url як fallback
   // - Для статичних: використовуємо image_url (сам креатив)
   const previewImage = isVideo
-    ? ad.video_preview_image_url || ad.image_url || "/placeholder.svg"
-    : ad.image_url || "/placeholder.svg"
+    ? ad.video_preview_image_url || ad.image_url || '/placeholder.svg'
+    : ad.image_url || '/placeholder.svg';
 
   // Безпечна перевірка тегів
-  const tags = Array.isArray(ad.tags) ? ad.tags : []
+  const tags = Array.isArray(ad.tags) ? ad.tags : [];
 
   return (
     <Card
@@ -59,7 +61,9 @@ export function AdCard({ ad, relatedAds = [], from }: AdCardProps) {
     >
       <CardHeader className="p-6 pb-4 flex flex-row items-start justify-between">
         <div className="flex-1 min-w-0">
-          <h3 className="font-medium text-slate-900 truncate text-lg leading-tight mb-1">{truncateText(title, 35)}</h3>
+          <h3 className="font-medium text-slate-900 truncate text-lg leading-tight mb-1">
+            {truncateText(title, 35)}
+          </h3>
           <p className="text-sm text-slate-500 font-medium">{ad.page_name}</p>
         </div>
         {isVideo && (
@@ -71,10 +75,10 @@ export function AdCard({ ad, relatedAds = [], from }: AdCardProps) {
 
       <CardContent className="p-6 pt-0 flex-grow">
         <div className="relative aspect-video mb-3 bg-slate-100 rounded-xl overflow-hidden group-hover:shadow-md transition-shadow duration-300">
-          {previewImage && previewImage !== "/placeholder.svg" ? (
+          {previewImage && previewImage !== '/placeholder.svg' ? (
             <div className="relative w-full h-full">
               <Image
-                src={previewImage || "/placeholder.svg"}
+                src={previewImage || '/placeholder.svg'}
                 alt={title}
                 fill
                 className="object-cover transition-all duration-300 group-hover:scale-105"
@@ -100,7 +104,9 @@ export function AdCard({ ad, relatedAds = [], from }: AdCardProps) {
           <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
         </div>
 
-        <p className="text-sm text-slate-600 line-clamp-3 mb-3 leading-relaxed">{truncateText(ad.text || "", 120)}</p>
+        <p className="text-sm text-slate-600 line-clamp-3 mb-3 leading-relaxed">
+          {truncateText(ad.text || '', 120)}
+        </p>
 
         {/* Tags Display - безпечна перевірка */}
         {tags.length > 0 && (
@@ -143,5 +149,8 @@ export function AdCard({ ad, relatedAds = [], from }: AdCardProps) {
         </Button>
       </CardFooter>
     </Card>
-  )
+  );
 }
+
+export const AdCard = memo(AdCardComponent);
+AdCard.displayName = 'AdCard';

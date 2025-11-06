@@ -1,21 +1,17 @@
-"use client"
-
-import { useState, useCallback } from "react"
+'use client';
 
 export default function TestViewDetailsPage() {
-  const [isLiked, setIsLiked] = useState(false)
-  const [copiedField, setCopiedField] = useState<string | null>(null)
-  const [imageLoaded, setImageLoaded] = useState(false)
+  // local UI state removed (not used in this test page)
 
   // Фейкові дані про Lovescape
   const ad = {
     id: 1,
-    title: "Find Your Perfect Match with Lovescape AI",
-    page_name: "Lovescape - Dating App",
-    created_at: "2024-01-15T10:30:00Z",
-    display_format: "VIDEO",
-    publisher_platform: "Facebook",
-    ad_archive_id: "LSC789456123",
+    title: 'Find Your Perfect Match with Lovescape AI',
+    page_name: 'Lovescape - Dating App',
+    created_at: '2024-01-15T10:30:00Z',
+    display_format: 'VIDEO',
+    publisher_platform: 'Facebook',
+    ad_archive_id: 'LSC789456123',
     text: `Ready to find your perfect match? 💕
 
 Lovescape uses advanced AI to connect you with people who truly understand you. No more endless swiping - just meaningful connections.
@@ -28,11 +24,12 @@ Lovescape uses advanced AI to connect you with people who truly understand you. 
 Join 2M+ singles who found love on Lovescape!
 
 Download now and get 7 days premium FREE! 🎁`,
-    caption: "Your love story starts here. Join Lovescape today! 💕 #LovescapeApp #Dating #FindLove #TrueLove",
-    cta_text: "Download Free",
-    cta_type: "INSTALL_MOBILE_APP",
-    link_url: "https://lovescape.app/download",
-    meta_ad_url: "https://www.facebook.com/ads/library/?id=LSC789456123",
+    caption:
+      'Your love story starts here. Join Lovescape today! 💕 #LovescapeApp #Dating #FindLove #TrueLove',
+    cta_text: 'Download Free',
+    cta_type: 'INSTALL_MOBILE_APP',
+    link_url: 'https://lovescape.app/download',
+    meta_ad_url: 'https://www.facebook.com/ads/library/?id=LSC789456123',
     audio_script: `[Upbeat romantic music starts]
 
 Narrator (warm, friendly female voice): "Tired of meaningless swipes? Ready for something real?"
@@ -86,31 +83,9 @@ Narrator: "Lovescape. Where love finds you."
 The lighting is natural and golden, coming through large windows in the background. The café has a cozy, modern aesthetic with exposed brick walls and hanging plants. In the bottom right corner, there's a subtle Lovescape app logo overlay.
 
 The overall mood is authentic, romantic, and aspirational - showing the kind of meaningful connection that the app promises to deliver. The couple appears relaxed and genuinely happy, not posed or artificial.`,
-  }
+  };
 
-  const isVideo = ad.display_format === "VIDEO"
-  const createdDate = new Date(ad.created_at)
-  const today = new Date()
-  const activeDays = Math.floor((today.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24))
-
-  const handleCopyToClipboard = useCallback(async (text: string, fieldName: string) => {
-    try {
-      await navigator.clipboard.writeText(text)
-      setCopiedField(fieldName)
-      setTimeout(() => setCopiedField(null), 2000)
-    } catch (error) {
-      console.error("Failed to copy:", error)
-    }
-  }, [])
-
-  const formatDate = (dateString: string): string => {
-    const date = new Date(dateString)
-    return date.toLocaleDateString("uk-UA", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    })
-  }
+  // Removed unused test helpers and state for this demo page
 
   return (
     <div className="min-h-screen bg-slate-50 p-8">
@@ -123,31 +98,44 @@ The overall mood is authentic, romantic, and aspirational - showing the kind of 
           <div className="space-y-6">
             {/* Audio Script */}
             <div className="bg-purple-50 p-6 rounded-xl">
-              <h3 className="text-xl font-semibold text-purple-900 mb-4 flex items-center">🎤 Audio Script</h3>
-              <p className="text-purple-800 leading-relaxed whitespace-pre-wrap">{ad.audio_script}</p>
+              <h3 className="text-xl font-semibold text-purple-900 mb-4 flex items-center">
+                🎤 Audio Script
+              </h3>
+              <p className="text-purple-800 leading-relaxed whitespace-pre-wrap">
+                {ad.audio_script}
+              </p>
             </div>
 
             {/* Video Script */}
             <div className="bg-red-50 p-6 rounded-xl">
-              <h3 className="text-xl font-semibold text-red-900 mb-4 flex items-center">🎬 Video Script</h3>
+              <h3 className="text-xl font-semibold text-red-900 mb-4 flex items-center">
+                🎬 Video Script
+              </h3>
               <p className="text-red-800 leading-relaxed whitespace-pre-wrap">{ad.video_script}</p>
             </div>
 
             {/* Image Description */}
             <div className="bg-yellow-50 p-6 rounded-xl">
-              <h3 className="text-xl font-semibold text-yellow-900 mb-4 flex items-center">🖼️ Image Description</h3>
-              <p className="text-yellow-800 leading-relaxed whitespace-pre-wrap">{ad.image_description}</p>
+              <h3 className="text-xl font-semibold text-yellow-900 mb-4 flex items-center">
+                🖼️ Image Description
+              </h3>
+              <p className="text-yellow-800 leading-relaxed whitespace-pre-wrap">
+                {ad.image_description}
+              </p>
             </div>
           </div>
 
           <div className="mt-8 p-4 bg-green-100 rounded-xl">
-            <p className="text-green-800 font-semibold">✅ Якщо ви бачите цю сторінку, то View Details працює!</p>
+            <p className="text-green-800 font-semibold">
+              ✅ Якщо ви бачите цю сторінку, то View Details працює!
+            </p>
             <p className="text-green-700 mt-2">
-              Тепер ви можете натиснути "View Details" на будь-якій картці і потрапити сюди.
+              Тепер ви можете натиснути &quot;View Details&quot; на будь-якій картці і потрапити
+              сюди.
             </p>
           </div>
         </div>
       </div>
     </div>
-  )
+  );
 }

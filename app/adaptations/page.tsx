@@ -1,10 +1,10 @@
-"use client"
+'use client';
 
-import { Layers, Plus } from "lucide-react"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent } from "@/components/ui/card"
-import { ProfileDropdown } from "@/app/login-auth/components/profile-dropdown"
-import { PageNavigation } from "@/components/page-navigation"
+import { Layers, Plus } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { ProfileDropdown } from '@/app/login-auth/components/profile-dropdown';
+import { PageNavigation } from '@/components/page-navigation';
 
 export default function AdaptationsPage() {
   return (
@@ -13,8 +13,12 @@ export default function AdaptationsPage() {
         {/* Hero section */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12">
           <div>
-            <h1 className="text-5xl font-bold text-slate-900 mb-3 tracking-tight">My Adaptations</h1>
-            <p className="text-slate-600 font-medium text-lg">View and manage your creative adaptations</p>
+            <h1 className="text-5xl font-bold text-slate-900 mb-3 tracking-tight">
+              My Adaptations
+            </h1>
+            <p className="text-slate-600 font-medium text-lg">
+              View and manage your creative adaptations
+            </p>
           </div>
           <div className="flex items-center space-x-4 mt-4 md:mt-0">
             <PageNavigation currentPage="adaptations" />
@@ -33,7 +37,7 @@ export default function AdaptationsPage() {
               Create your first adaptation from the Creative Library to see it here.
             </p>
             <Button
-              onClick={() => (window.location.href = "/")}
+              onClick={() => (window.location.href = '/')}
               className="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl h-11 px-6"
             >
               <Plus className="h-4 w-4 mr-2" />
@@ -43,5 +47,5 @@ export default function AdaptationsPage() {
         </Card>
       </div>
     </div>
-  )
+  );
 }
