@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
+import StorageImage from '@/lib/StorageImage';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import placeholder from '../../../public/placeholder.svg';
@@ -22,24 +22,25 @@ type Props = {
 
 export default function FolderItemCard({ it, ad, onOpenNote, onRemove }: Props) {
   const id = it.creative_id;
-  const thumb = ad?.video_preview_image_url || ad?.image_url || null;
 
   return (
     <Card key={id} className="bg-white border border-slate-100 rounded-2xl overflow-hidden">
       <CardContent className="flex items-center gap-4 p-4 pt-6">
         <div className="w-28 h-20 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center">
-          {thumb ? (
+          {ad?.ad_archive_id ? (
             <div className="relative w-full h-full">
-              <Image
-                src={thumb}
+              <StorageImage
+                bucket={
+                  ad.display_format === 'VIDEO' ? 'test10public_preview' : 'test9bucket_photo'
+                }
+                path={`${ad.ad_archive_id}.jpeg`}
                 alt={ad?.title || 'preview'}
-                fill
+                fill={true}
                 className="object-cover"
-                sizes="96px"
               />
             </div>
           ) : (
-            <Image
+            <img
               src={placeholder.src || '/placeholder.svg'}
               alt="placeholder"
               width={48}

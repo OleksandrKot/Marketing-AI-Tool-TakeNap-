@@ -6,7 +6,7 @@ import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useRouter } from 'next/navigation';
-import Image from 'next/image';
+import StorageImage from '@/lib/StorageImage';
 import type { Ad } from '@/lib/types';
 import { formatDate, truncateText } from '@/lib/utils';
 
@@ -45,11 +45,13 @@ function AdCardComponent({ ad, relatedAds = [], from }: AdCardProps) {
   };
 
   // Логіка для preview картинки:
-  // - Для відео: використовуємо video_preview_image_url або image_url як fallback
-  // - Для статичних: використовуємо image_url (сам креатив)
-  const previewImage = isVideo
-    ? ad.video_preview_image_url || ad.image_url || '/placeholder.svg'
-    : ad.image_url || '/placeholder.svg';
+  // - Для відео: використовуємо video_preview_image_url или бакет preview test10public_preview
+  // - Для статичних: використовуємо image_url или бакет photo test9bucket_photo
+  // Always prefer bucket-stored previews when ad_archive_id is available
+  // If no ad_archive_id, fall back to ad-provided preview URLs
+  const previewFromStorage = !!ad.ad_archive_id;
+  const previewStorageBucket = isVideo ? 'test10public_preview' : 'test9bucket_photo';
+  const previewStorageFilename = `${ad.ad_archive_id}.jpeg`;
 
   // Безпечна перевірка тегів
   const tags = Array.isArray(ad.tags) ? ad.tags : [];
@@ -74,18 +76,22 @@ function AdCardComponent({ ad, relatedAds = [], from }: AdCardProps) {
       </CardHeader>
 
       <CardContent className="p-6 pt-0 flex-grow">
-        <div className="relative aspect-video mb-3 bg-slate-100 rounded-xl overflow-hidden group-hover:shadow-md transition-shadow duration-300">
-          {previewImage && previewImage !== '/placeholder.svg' ? (
-            <div className="relative w-full h-full">
-              <Image
-                src={previewImage || '/placeholder.svg'}
+        {/* Ensure aspect ratio even if Tailwind aspect-ratio plugin is not enabled */}
+        <div
+          className="relative mb-3 bg-slate-100 rounded-xl overflow-hidden group-hover:shadow-md transition-shadow duration-300"
+          style={{ paddingTop: '56.25%' }}
+        >
+          {previewFromStorage ? (
+            <div className="absolute inset-0">
+              {/* Load from Supabase storage buckets by ad_archive_id */}
+              {/* Use fill so next/image can size correctly for local paths and external signed URLs will still cover */}
+              <StorageImage
+                bucket={previewStorageBucket}
+                path={previewStorageFilename}
                 alt={title}
-                fill
-                className="object-cover transition-all duration-300 group-hover:scale-105"
-                style={{ opacity: imageLoaded ? 1 : 0 }}
+                fill={true}
+                className="w-full h-full object-cover transition-all duration-300 group-hover:scale-105"
                 onLoad={() => setImageLoaded(true)}
-                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                loading="lazy"
               />
               {!imageLoaded && <div className="absolute inset-0 bg-slate-200 animate-pulse" />}
             </div>

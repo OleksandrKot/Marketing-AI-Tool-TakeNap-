@@ -2,7 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
+import StorageImage from '@/lib/StorageImage';
 import { useFavorites } from '@/lib/hooks/useFavorites';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardFooter } from '@/components/ui/card';
@@ -300,7 +300,6 @@ export default function FavoritesPage() {
           >
             {filteredFavorites.map((f) => {
               const ad = adMap[f.creativeId];
-              const thumb = ad?.video_preview_image_url || ad?.image_url || null;
               const isVideo = ad?.display_format === 'VIDEO';
 
               return viewMode === 'grid' ? (
@@ -327,24 +326,28 @@ export default function FavoritesPage() {
                   </CardHeader>
                   <CardContent className="p-6 flex-grow space-y-4">
                     <div className="aspect-square rounded-2xl overflow-hidden bg-white relative">
-                      {thumb ? (
+                      {ad?.ad_archive_id ? (
                         <div className="relative w-full h-full">
-                          <Image
-                            src={thumb}
+                          {/* storage-backed preview */}
+                          <StorageImage
+                            bucket={
+                              ad.display_format === 'VIDEO'
+                                ? 'test10public_preview'
+                                : 'test9bucket_photo'
+                            }
+                            path={`${ad.ad_archive_id}.jpeg`}
                             alt={ad?.title || 'preview'}
-                            fill
+                            fill={true}
                             className="object-cover transition-all duration-300 group-hover:scale-105"
-                            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                           />
                         </div>
                       ) : (
                         <div className="w-full h-full flex items-center justify-center bg-slate-100">
-                          <Image
+                          <img
                             src={placeholder.src || '/placeholder.svg'}
                             alt="placeholder"
                             width={48}
                             height={48}
-                            className="opacity-40"
                           />
                         </div>
                       )}
@@ -389,23 +392,27 @@ export default function FavoritesPage() {
                   <CardContent className="flex items-center justify-between m-4">
                     <div className="flex items-center gap-4">
                       <div className="w-24 h-16 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center">
-                        {thumb ? (
+                        {ad?.ad_archive_id ? (
                           <div className="relative w-full h-full">
-                            <Image
-                              src={thumb}
+                            {/* storage-backed preview */}
+                            <StorageImage
+                              bucket={
+                                ad.display_format === 'VIDEO'
+                                  ? 'test10public_preview'
+                                  : 'test9bucket_photo'
+                              }
+                              path={`${ad.ad_archive_id}.jpeg`}
                               alt={ad?.title || 'preview'}
-                              fill
+                              fill={true}
                               className="object-cover"
-                              sizes="96px"
                             />
                           </div>
                         ) : (
-                          <Image
+                          <img
                             src={placeholder.src || '/placeholder.svg'}
                             alt="placeholder"
                             width={32}
                             height={32}
-                            className="opacity-40"
                           />
                         )}
                       </div>

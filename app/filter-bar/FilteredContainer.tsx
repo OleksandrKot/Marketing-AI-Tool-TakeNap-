@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { extractDataArray } from '@/lib/utils';
 import { AdCard } from '@/components/ad-card';
 import FilterPanel from '@/app/filter-bar/components/FilterPanel';
 import { getAds } from '@/app/actions';
@@ -44,7 +45,10 @@ export default function FilteredContainer({ initialPageName = '' }: FilteredCont
   useEffect(() => {
     const loadAds = async () => {
       try {
-        const allAds = await getAds();
+        const raw = await getAds();
+        // Use a small helper to safely extract an array from server responses
+        // which may either be the array itself or an object with a `data` array.
+        const allAds: Ad[] = extractDataArray<Ad>(raw);
         setAds(allAds);
 
         // Створюємо доступні опції для фільтрів

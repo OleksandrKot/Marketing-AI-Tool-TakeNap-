@@ -130,7 +130,6 @@ export async function getAds(
   }
 }
 
-// Оновити getFakeAds для підтримки фільтрації по тегах та платформам
 function getFakeAds(
   search?: string,
   tags?: string[] | null,
@@ -266,7 +265,6 @@ function getFakeAds(
 
   let filteredAds = allFakeAds;
 
-  // Client-side search filtering
   if (search?.trim()) {
     const searchTerms = search.toLowerCase().trim().split(/\s+/);
     filteredAds = filteredAds.filter((ad) => {
