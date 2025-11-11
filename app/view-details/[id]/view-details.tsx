@@ -5,7 +5,9 @@ import { useFavorites } from '@/lib/hooks/useFavorites';
 import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import ModalLoading from '@/components/ui/modal-loading';
-import Image from 'next/image';
+// StorageImage is no longer used here; StorageVideo handles preview rendering
+import StorageVideo from '@/lib/StorageVideo';
+import StorageImage from '@/lib/StorageImage';
 import {
   ArrowLeft,
   X,
@@ -63,8 +65,9 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
   // derive persistent liked state from store
   const isLiked = isFavorite(creativeId) || isLikedLocal;
   const [showShareModal, setShowShareModal] = useState(false);
-  const [imageLoaded, setImageLoaded] = useState(false);
+  // local loading state for media (StorageVideo will call onLoaded for video)
   const [videoLoaded, setVideoLoaded] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
   const isVideo = ad.display_format === 'VIDEO';
@@ -91,17 +94,76 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
   }, [router, searchParams]);
 
   const handleDownload = useCallback(async () => {
-    const urlToDownload = isVideo ? ad.video_hd_url : ad.image_url;
-    if (!urlToDownload) return;
-
     setIsLoading(true);
     try {
+      // prefer storage signed urls when we have an archive id
+      if (ad.ad_archive_id && isVideo) {
+        const res = await fetch('/api/storage/signed-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bucket: 'test8public',
+            path: `${ad.ad_archive_id}.mp4`,
+            expires: 60,
+          }),
+        });
+        const j = await res.json().catch(() => null);
+        if (!j || typeof j !== 'object') return;
+        const rec = j as Record<string, unknown>;
+        const u = rec.url;
+        if (typeof u === 'string') {
+          const response = await fetch(u);
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${ad.title || 'creative'}.mp4`;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+        }
+        return;
+      }
+
+      // photo flow: prefer storage signed url if available
+      if (ad.ad_archive_id && !isVideo) {
+        const res = await fetch('/api/storage/signed-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            bucket: 'test9bucket_photo',
+            path: `${ad.ad_archive_id}.jpeg`,
+            expires: 60,
+          }),
+        });
+        const j = await res.json().catch(() => null);
+        const rec = j as Record<string, unknown> | null;
+        const u = rec?.url;
+        if (typeof u === 'string') {
+          const response = await fetch(u);
+          const blob = await response.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `${ad.title || 'creative'}.jpeg`;
+          document.body.appendChild(a);
+          a.click();
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+        }
+        return;
+      }
+
+      // fallback to direct image url
+      const urlToDownload = ad.image_url;
+      if (!urlToDownload) return;
       const response = await fetch(urlToDownload);
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${ad.title || 'creative'}.${isVideo ? 'mp4' : 'jpg'}`;
+      a.download = `${ad.title || 'creative'}.jpg`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -111,7 +173,7 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
     } finally {
       setIsLoading(false);
     }
-  }, [ad.video_hd_url, ad.image_url, ad.title, isVideo]);
+  }, [ad, isVideo]);
 
   const handleLike = useCallback(() => {
     // toggle persistent favorite
@@ -146,7 +208,7 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
 
   // use shared ScriptRenderer component
 
-  const previewImage = ad.image_url || ad.video_preview_image_url || '/placeholder.svg';
+  // Do not use external ad.image_url/video_preview_image_url as per storage-first policy
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -240,43 +302,37 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
             <Card className="overflow-hidden border-slate-200 rounded-2xl">
               <CardContent className="p-0">
                 <div className="relative aspect-video bg-slate-100">
-                  {isVideo && ad.video_hd_url ? (
-                    <video
-                      src={ad.video_hd_url}
-                      poster={previewImage || undefined}
-                      controls
-                      preload="metadata"
-                      className="w-full h-full object-contain"
-                      onLoadedData={() => setVideoLoaded(true)}
-                      style={{ display: videoLoaded ? 'block' : 'none' }}
-                    >
-                      {/* include an empty captions track element to satisfy a11y checks; if you have a real VTT URL add it to ad.captions_vtt_url */}
-                      <track kind="captions" srcLang="en" src="" />
-                    </video>
-                  ) : previewImage ? (
+                  {isVideo ? (
                     <div className="relative w-full h-full">
-                      <Image
-                        src={previewImage || '/placeholder.svg'}
-                        alt={ad.title || 'Ad preview'}
-                        fill
-                        className="object-contain transition-opacity duration-300"
-                        style={{ opacity: imageLoaded ? 1 : 0 }}
-                        onLoad={() => setImageLoaded(true)}
-                        priority
-                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 66vw, 50vw"
+                      <StorageVideo
+                        ad={ad}
+                        className="w-full h-full"
+                        onLoaded={() => setVideoLoaded(true)}
                       />
-                      {!imageLoaded && (
-                        <div className="absolute inset-0 bg-slate-200 animate-pulse" />
-                      )}
                     </div>
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <div className="text-center">
-                        <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
-                          <Video className="h-8 w-8 text-slate-400" />
+                    <div className="w-full h-full relative">
+                      {ad.ad_archive_id ? (
+                        <div className="absolute inset-0 w-full h-full">
+                          <StorageImage
+                            bucket="test9bucket_photo"
+                            path={`${ad.ad_archive_id}.jpeg`}
+                            alt={ad.title || 'preview'}
+                            fill={true}
+                            className="w-full h-full object-cover"
+                            onLoad={() => setImageLoaded(true)}
+                          />
                         </div>
-                        <p className="text-slate-500">No preview available</p>
-                      </div>
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <div className="text-center">
+                            <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
+                              <Video className="h-8 w-8 text-slate-400" />
+                            </div>
+                            <p className="text-slate-500">No preview available</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -291,7 +347,7 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
 
             {/* Media Controls */}
             <div className="flex gap-4">
-              {isVideo && ad.video_hd_url && (
+              {isVideo && ad.ad_archive_id && (
                 <Button
                   onClick={handleRestartVideo}
                   className="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl h-11 transition-all duration-200"
@@ -300,7 +356,7 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                   Restart Video
                 </Button>
               )}
-              {(ad.video_hd_url || ad.image_url) && (
+              {(ad.ad_archive_id || ad.image_url) && (
                 <Button
                   variant="outline"
                   onClick={handleDownload}

@@ -6,7 +6,13 @@ import { AdArchiveBrowser } from './ad-archive-browser/ad-archive-browser';
 export const dynamic = 'force-dynamic';
 
 export default async function Home() {
-  const initialAds = await getAds();
+  const raw = await getAds();
+  // Safely extract the ads array whether the API returned an array directly
+  // or an object that contains { data: [...] }.
+  // We import the utility lazily to avoid server/client import ordering issues.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { extractDataArray } = require('@/lib/utils');
+  const initialAds = extractDataArray(raw);
   const uniquePages = await getUniquePages();
 
   return (

@@ -3,7 +3,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import Image from 'next/image';
+import StorageImage from '@/lib/StorageImage';
 import { useFolders } from '@/lib/hooks/useFolders';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
@@ -95,7 +95,6 @@ export default function FolderDetailsPage() {
             return items.map((it: FolderItem) => {
               const id = it.creative_id;
               const ad = adMap[id];
-              const thumb = ad?.video_preview_image_url || ad?.image_url || null;
               return (
                 <Card
                   key={id}
@@ -103,18 +102,23 @@ export default function FolderDetailsPage() {
                 >
                   <CardContent className="p-4">
                     <div className="w-full h-40 bg-slate-100 rounded-lg overflow-hidden mb-3">
-                      {thumb ? (
+                      {ad?.ad_archive_id ? (
                         <div className="relative w-full h-full">
-                          <Image
-                            src={thumb}
+                          <StorageImage
+                            bucket={
+                              ad.display_format === 'VIDEO'
+                                ? 'test10public_preview'
+                                : 'test9bucket_photo'
+                            }
+                            path={`${ad.ad_archive_id}.jpeg`}
                             alt={ad?.title || 'preview'}
-                            fill
+                            fill={true}
                             className="object-cover"
                           />
                         </div>
                       ) : (
                         <div className="flex items-center justify-center h-full">
-                          <Image
+                          <img
                             src={placeholder.src || '/placeholder.svg'}
                             alt="placeholder"
                             width={48}

@@ -56,6 +56,18 @@ export function useAdArchive(initialAds: Ad[]) {
     return map;
   }, [filteredAdsByType]);
 
+  // Helper to safely extract an array from API responses which may be either
+  // an array or an object containing a `data` array. Avoid using `any` — use
+  // unknown and type guards instead.
+  function extractDataArray(raw: unknown): Ad[] {
+    if (Array.isArray(raw)) return raw as Ad[];
+    if (raw && typeof raw === 'object' && raw !== null && 'data' in raw) {
+      const r = raw as Record<string, unknown>;
+      if (Array.isArray(r.data)) return r.data as Ad[];
+    }
+    return [];
+  }
+
   const adIdToGroupMap: Record<string, Ad[]> = useMemo(() => {
     const out: Record<string, Ad[]> = {};
     groupedAll.forEach((groupAds) => {
@@ -102,7 +114,7 @@ export function useAdArchive(initialAds: Ad[]) {
   const handleFilterChange = useCallback(async (filters: FilterOptions) => {
     setIsLoading(true);
     try {
-      const filtered = await getAds(
+      const raw = await getAds(
         filters.search,
         filters.page,
         filters.date,
@@ -110,11 +122,12 @@ export function useAdArchive(initialAds: Ad[]) {
         // publisherPlatform is optional on FilterOptions
         filters.publisherPlatform
       );
+      const fetched: Ad[] = extractDataArray(raw);
       // apply client-side creative type filter so UI respects selectedCreativeType
       const final =
         selectedCreativeType === 'all'
-          ? filtered
-          : filtered.filter((ad) =>
+          ? fetched
+          : fetched.filter((ad) =>
               selectedCreativeType === 'video'
                 ? ad.display_format === 'VIDEO'
                 : ad.display_format === 'IMAGE'
@@ -133,7 +146,8 @@ export function useAdArchive(initialAds: Ad[]) {
       setSelectedTags(tags);
       setIsLoading(true);
       try {
-        const filtered = await getAds(productFilter || '', null, null, tags);
+        const raw = await getAds(productFilter || '', null, null, tags);
+        const filtered: Ad[] = extractDataArray(raw);
         const final =
           selectedCreativeType === 'all'
             ? filtered
@@ -158,7 +172,8 @@ export function useAdArchive(initialAds: Ad[]) {
 
     if (!searchValue && selectedTags.length === 0) {
       try {
-        const allAds = await getAds(undefined, null, null, undefined);
+        const raw = await getAds(undefined, null, null, undefined);
+        const allAds: Ad[] = extractDataArray(raw);
         setAds(allAds);
         setCurrentPage(1);
       } catch (error) {
@@ -214,12 +229,13 @@ export function useAdArchive(initialAds: Ad[]) {
     } else {
       setIsLoading(true);
       try {
-        const filtered = await getAds(
+        const raw = await getAds(
           searchValue || undefined,
           null,
           null,
           selectedTags.length ? selectedTags : undefined
         );
+        const filtered: Ad[] = extractDataArray(raw);
         const final =
           selectedCreativeType === 'all'
             ? filtered
@@ -257,12 +273,13 @@ export function useAdArchive(initialAds: Ad[]) {
       const id = window.setTimeout(async () => {
         setIsLoading(true);
         try {
-          const filtered = await getAds(
+          const raw = await getAds(
             value || undefined,
             null,
             null,
             selectedTags.length > 0 ? selectedTags : undefined
           );
+          const filtered: Ad[] = extractDataArray(raw);
           const final =
             selectedCreativeType === 'all'
               ? filtered
@@ -296,7 +313,8 @@ export function useAdArchive(initialAds: Ad[]) {
     setProductFilter('');
     setIsLoading(true);
     try {
-      const allAds = await getAds('', null, null, selectedTags);
+      const raw = await getAds('', null, null, selectedTags);
+      const allAds: Ad[] = extractDataArray(raw);
       setAds(allAds);
       setCurrentPage(1);
     } catch (error) {

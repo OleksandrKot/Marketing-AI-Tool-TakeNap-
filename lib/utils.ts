@@ -24,6 +24,18 @@ export function truncateText(text: string, maxLength: number): string {
   return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
 }
 
+// Safely extract an array of items from an API response which may be either
+// an array or an object with a `data` array (common supabase-style response).
+// Returns an empty array for any other shape.
+export function extractDataArray<T = unknown>(raw: unknown): T[] {
+  if (Array.isArray(raw)) return raw as T[];
+  if (raw !== null && typeof raw === 'object' && 'data' in raw) {
+    const candidate = (raw as { data: unknown }).data;
+    if (Array.isArray(candidate)) return candidate as T[];
+  }
+  return [];
+}
+
 export const useScrollbarWidth = () => {
   const computed = React.useRef(false);
   const widthRef = React.useRef(0);
