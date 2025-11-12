@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
 import type { Ad, AdaptationScenario } from '@/lib/types';
+import { parseScenarios, sanitizeScenarios } from './utils/adData';
 
 // Динамічне завантаження модального вікна
 const CreateAdaptationModal = dynamic(() => import('./create-adaptation-modal'), {
@@ -31,22 +32,41 @@ interface AdaptationsTabProps {
 export function AdaptationsTab({ ad }: AdaptationsTabProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [adData, setAdData] = useState<Ad>(ad);
 
-  // Парсимо JSON з new_scenario
-  const parseScenarios = (): AdaptationScenario[] => {
-    if (!ad.new_scenario) return [];
+  useEffect(() => {
+    let mounted = true;
+    const fetchLatest = async () => {
+      try {
+        console.debug('[AdaptationsTab] fetching latest ad', ad.id);
+        const res = await fetch(`/api/ads/${encodeURIComponent(ad.id)}`);
+        if (!res.ok) {
+          console.debug('[AdaptationsTab] fetch failed', res.status);
+          return;
+        }
+        const j = await res.json().catch(() => null);
+        const fresh = j?.data || null;
+        if (mounted && fresh) {
+          console.debug('[AdaptationsTab] fetched latest ad', fresh);
+          setAdData(fresh as Ad);
+        }
+      } catch (e) {
+        console.debug('[AdaptationsTab] failed to fetch latest ad', e);
+      }
+    };
 
-    try {
-      // Видаляємо ```json та ``` якщо вони є
-      const cleanJson = ad.new_scenario.replace(/^```json\n?/, '').replace(/\n?```$/, '');
-      return JSON.parse(cleanJson);
-    } catch (error) {
-      console.error('Error parsing new_scenario JSON:', error);
-      return [];
-    }
-  };
+    if (ad?.id) fetchLatest();
+    return () => {
+      mounted = false;
+    };
+  }, [ad.id]);
 
-  const scenarios = parseScenarios();
+  const scenarios: AdaptationScenario[] = useMemo(() => {
+    const raw = parseScenarios(adData);
+    const sanitized = sanitizeScenarios(raw);
+    console.debug('[AdaptationsTab] scenarios', sanitized);
+    return sanitized;
+  }, [adData]);
 
   const handleCopyToClipboard = async (text: string, fieldName: string) => {
     try {
@@ -190,12 +210,14 @@ export function AdaptationsTab({ ad }: AdaptationsTabProps) {
                         </Button>
                       </div>
                       <ul className="space-y-2">
-                        {scenario.technical_task_json.visual_elements.map((element, elemIndex) => (
-                          <li key={elemIndex} className="text-sm text-slate-600 flex items-start">
-                            <Palette className="h-3 w-3 text-slate-400 mr-2 mt-0.5 flex-shrink-0" />
-                            {element}
-                          </li>
-                        ))}
+                        {scenario.technical_task_json.visual_elements.map(
+                          (element: string, elemIndex: number) => (
+                            <li key={elemIndex} className="text-sm text-slate-600 flex items-start">
+                              <Palette className="h-3 w-3 text-slate-400 mr-2 mt-0.5 flex-shrink-0" />
+                              {element}
+                            </li>
+                          )
+                        )}
                       </ul>
                     </div>
 
@@ -273,7 +295,7 @@ export function AdaptationsTab({ ad }: AdaptationsTabProps) {
 
       {/* Create Adaptation Modal */}
       {showCreateModal && (
-        <CreateAdaptationModal ad={ad} onClose={() => setShowCreateModal(false)} />
+        <CreateAdaptationModal ad={adData} onClose={() => setShowCreateModal(false)} />
       )}
     </div>
   );

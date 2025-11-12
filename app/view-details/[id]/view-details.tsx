@@ -22,15 +22,11 @@ import {
   Link,
   Play,
   ImageIcon,
-  Mic,
-  Film,
-  Eye,
   ExternalLink,
   Copy,
   Check,
   Layers,
 } from 'lucide-react';
-import ScriptRenderer from '@/components/script-renderer';
 const CollectionModal = dynamic(
   () => import('@/components/modals/collection-modal').then((m) => m.default),
   {
@@ -206,6 +202,8 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
     }
   }, []);
 
+  // (CollapsiblePanel and cleanAndSplit moved to content-tab/adData utilities.)
+
   // use shared ScriptRenderer component
 
   // Do not use external ad.image_url/video_preview_image_url as per storage-first policy
@@ -379,117 +377,11 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
               )}
             </div>
 
-            {/* Ad Text */}
-            {ad.text && (
-              <Card className="border-slate-200 rounded-2xl">
-                <CardContent className="p-0">
-                  <div className="bg-blue-50 p-6 border-b border-slate-200">
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-xl font-semibold text-slate-900">Ad Text</h2>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleCopyToClipboard(ad.text, 'text')}
-                        className="text-slate-500 hover:text-slate-700"
-                      >
-                        {copiedField === 'text' ? (
-                          <Check className="h-4 w-4" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="p-6">
-                    <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{ad.text}</p>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            {/* Visual Description moved to content tab (avoid duplicate header) */}
 
-            {/* Duplicate Ad Text */}
-            {ad.duplicates_ad_text && (
-              <Card className="border-slate-200 rounded-2xl">
-                <CardContent className="p-0">
-                  <div className="bg-blue-50 p-6 border-b border-slate-200">
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-xl font-semibold text-slate-900">Duplicate Ad Text</h2>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          handleCopyToClipboard(ad.duplicates_ad_text!, 'duplicates_ad_text')
-                        }
-                        className="text-slate-500 hover:text-slate-700"
-                      >
-                        {copiedField === 'duplicates_ad_text' ? (
-                          <Check className="h-4 w-4" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="p-6">
-                    <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
-                      {ad.duplicates_ad_text}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            {/* Formats & Creative Concepts moved to Content tab to avoid duplication */}
 
-            {/* Caption */}
-            {ad.caption && (
-              <Card className="border-slate-200 rounded-2xl">
-                <CardContent className="p-0">
-                  <div className="bg-emerald-50 p-6 border-b border-slate-200">
-                    <div className="flex items-center justify-between">
-                      <h2 className="text-xl font-semibold text-slate-900">Caption</h2>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleCopyToClipboard(ad.caption, 'caption')}
-                        className="text-slate-500 hover:text-slate-700"
-                      >
-                        {copiedField === 'caption' ? (
-                          <Check className="h-4 w-4" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="p-6">
-                    <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
-                      {ad.caption}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Call to Action */}
-            {ad.cta_text && (
-              <Card className="border-slate-200 rounded-2xl">
-                <CardContent className="p-0">
-                  <div className="bg-orange-50 p-6 border-b border-slate-200">
-                    <h2 className="text-xl font-semibold text-slate-900">Call to Action</h2>
-                  </div>
-                  <div className="p-6">
-                    <div className="flex items-center justify-between">
-                      <Button className="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl h-11 px-6 transition-all duration-200">
-                        {ad.cta_text}
-                      </Button>
-                      <div className="text-sm text-slate-500">
-                        Type:{' '}
-                        <span className="font-medium text-slate-700">{ad.cta_type || 'N/A'}</span>
-                      </div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+            {/* Additional content moved to Content tab to avoid duplication */}
           </div>
 
           {/* Right Column - Details & Scripts */}
@@ -640,105 +532,6 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                         </div>
                       </div>
                     )}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Audio Script - ТІЛЬКИ ТУТ! */}
-            {ad.audio_script && (
-              <Card className="border-slate-200 rounded-2xl">
-                <CardContent className="p-0">
-                  <div className="bg-purple-50 p-6 border-b border-slate-200">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <Mic className="h-5 w-5 text-purple-600 mr-2" />
-                        <h2 className="text-xl font-semibold text-slate-900">Audio Script</h2>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleCopyToClipboard(ad.audio_script!, 'audio_script')}
-                        className="text-slate-500 hover:text-slate-700"
-                      >
-                        {copiedField === 'audio_script' ? (
-                          <Check className="h-4 w-4" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="p-6">
-                    <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
-                      {ad.audio_script}
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Video Script - ТІЛЬКИ ТУТ! */}
-            {ad.video_script && (
-              <Card className="border-slate-200 rounded-2xl">
-                <CardContent className="p-0">
-                  <div className="bg-red-50 p-6 border-b border-slate-200">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <Film className="h-5 w-5 text-red-600 mr-2" />
-                        <h2 className="text-xl font-semibold text-slate-900">Video Script</h2>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleCopyToClipboard(ad.video_script!, 'video_script')}
-                        className="text-slate-500 hover:text-slate-700"
-                      >
-                        {copiedField === 'video_script' ? (
-                          <Check className="h-4 w-4" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="p-6">
-                    <ScriptRenderer script={ad.video_script} copyPrefix="video_script" />
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Image Description - ТІЛЬКИ ТУТ! */}
-            {ad.image_description && (
-              <Card className="border-slate-200 rounded-2xl">
-                <CardContent className="p-0">
-                  <div className="bg-yellow-50 p-6 border-b border-slate-200">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <Eye className="h-5 w-5 text-yellow-600 mr-2" />
-                        <h2 className="text-xl font-semibold text-slate-900">Image Description</h2>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() =>
-                          handleCopyToClipboard(ad.image_description!, 'image_description')
-                        }
-                        className="text-slate-500 hover:text-slate-700"
-                      >
-                        {copiedField === 'image_description' ? (
-                          <Check className="h-4 w-4" />
-                        ) : (
-                          <Copy className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="p-6">
-                    <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
-                      {ad.image_description}
-                    </p>
                   </div>
                 </CardContent>
               </Card>

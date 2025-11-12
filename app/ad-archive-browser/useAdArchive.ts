@@ -15,6 +15,7 @@ export function useAdArchive(initialAds: Ad[]) {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [showAINewsModal, setShowAINewsModal] = useState(false);
   const [processingMessage, setProcessingMessage] = useState('');
+  const [processingDone, setProcessingDone] = useState(false);
   const [selectedCreativeType, setSelectedCreativeType] = useState<'all' | 'video' | 'image'>(
     'all'
   );
@@ -209,12 +210,8 @@ export function useAdArchive(initialAds: Ad[]) {
             image: `Successfully processed link! New static ads will appear shortly.`,
           };
           setProcessingMessage(successMessages[selectedCreativeType]);
-          setTimeout(() => {
-            setShowAINewsModal(false);
-            try {
-              window.location.reload();
-            } catch (e) {}
-          }, 3000);
+          // Keep the modal open and instruct the user to refresh to see new ads
+          setProcessingDone(true);
         } else {
           setShowAINewsModal(false);
           alert(`Error processing link:\n\n${result.message || result.error}`);
@@ -359,6 +356,8 @@ export function useAdArchive(initialAds: Ad[]) {
     handleProductFilterChange,
     clearProductFilter,
     videoAds,
+    processingDone,
+    setProcessingDone,
   };
 }
 

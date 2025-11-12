@@ -10,6 +10,7 @@ interface AINewsModalProps {
   isOpen: boolean;
   onClose: () => void;
   processingMessage: string;
+  processingDone?: boolean;
 }
 
 const newsItems = [
@@ -70,13 +71,18 @@ const newsItems = [
   },
 ];
 
-function AINewsModalComponent({ isOpen, onClose, processingMessage }: AINewsModalProps) {
+function AINewsModalComponent({
+  isOpen,
+  onClose,
+  processingMessage,
+  processingDone = false,
+}: AINewsModalProps) {
   const [currentNewsIndex, setCurrentNewsIndex] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
 
   // Безпечна функція для зміни новин
   const changeNews = useCallback(() => {
-    if (!isOpen) return;
+    if (!isOpen || processingDone) return;
 
     setIsAnimating(true);
     setTimeout(() => {
@@ -96,6 +102,8 @@ function AINewsModalComponent({ isOpen, onClose, processingMessage }: AINewsModa
       setIsAnimating(false);
       return;
     }
+
+    if (processingDone) return;
 
     const interval = setInterval(changeNews, 4000);
 
@@ -244,13 +252,34 @@ function AINewsModalComponent({ isOpen, onClose, processingMessage }: AINewsModa
 
           {/* Footer */}
           <div className="px-6 py-4 bg-slate-50 border-t border-slate-200 rounded-b-lg">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-2 text-sm text-slate-500">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span>Stay updated with the latest AI trends</span>
+            {processingDone ? (
+              <div className="flex items-center justify-between">
+                <div className="text-sm text-slate-700">{processingMessage}</div>
+                <div className="flex items-center gap-4">
+                  <Button
+                    onClick={() => {
+                      try {
+                        window.location.reload();
+                      } catch (e) {}
+                    }}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl h-11 px-6"
+                  >
+                    Refresh the page now
+                  </Button>
+                  <Button variant="ghost" onClick={onClose} className="h-11 px-4">
+                    Close
+                  </Button>
+                </div>
               </div>
-              <div className="text-xs text-slate-400">News updates every 4 seconds</div>
-            </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2 text-sm text-slate-500">
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                  <span>Stay updated with the latest AI trends</span>
+                </div>
+                <div className="text-xs text-slate-400">News updates every 4 seconds</div>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
