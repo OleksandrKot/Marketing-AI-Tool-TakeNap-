@@ -21,6 +21,7 @@ type Props = {
   filteredAdsByType: Ad[];
   selectedCreativeType: 'all' | 'video' | 'image';
   onCloseModal?: () => void;
+  processingDone?: boolean;
 };
 
 function ResultsGrid({
@@ -33,6 +34,7 @@ function ResultsGrid({
   filteredAdsByType,
   selectedCreativeType,
   onCloseModal,
+  processingDone,
 }: Props) {
   return (
     <>
@@ -77,6 +79,7 @@ function ResultsGrid({
         isOpen={showAINewsModal}
         onClose={onCloseModal || (() => {})}
         processingMessage={processingMessage}
+        processingDone={processingDone}
       />
     </>
   );

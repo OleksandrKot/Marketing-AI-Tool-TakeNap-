@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Copy, Check, Mic, Film, Eye, ExternalLink } from 'lucide-react';
-import ScriptRenderer from '@/components/script-renderer';
+import { Copy, Check, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import type { Ad } from '@/lib/types';
@@ -12,6 +11,16 @@ import ContentMedia from '@/components/content/ContentMedia';
 import ContentControls from '@/components/content/ContentControls';
 import DuplicatesGallery from '@/components/content/DuplicatesGallery';
 import StorageImage from '@/lib/StorageImage';
+import cleanAndSplit from './utils/cleanAndSplit';
+import CollapsiblePanel from './components/CollapsiblePanel';
+import GroupedSections from './components/GroupedSections';
+import {
+  parseScenarios,
+  sanitizeScenarios,
+  getVisualParagraphs,
+  buildMetaAnalysis,
+  buildGroupedSections,
+} from './utils/adData';
 
 interface ContentTabProps {
   ad: Ad;
@@ -21,8 +30,9 @@ interface ContentTabProps {
 export function ContentTab({ ad, relatedAds }: ContentTabProps) {
   const router = useRouter();
   const leftColRef = useRef<HTMLDivElement | null>(null);
-  const [leftHeight, setLeftHeight] = useState<number | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [adData, setAdData] = useState<Ad>(ad);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   // Download/restart handled by ContentControls
 
   const handleCopyToClipboard = useCallback(async (text: string, fieldName: string) => {
@@ -35,30 +45,72 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
     }
   }, []);
 
-  // use shared ScriptRenderer component
+  // cleanAndSplit util moved to ./utils/cleanAndSplit
+
+  // Local collapsible panel used in this file
+  // CollapsiblePanel moved to ./components/CollapsiblePanel
 
   // Preview image placeholder (we prefer storage bucket by ad_archive_id)
 
   // duplicates_preview_image will be rendered by DuplicatesGallery when present
 
+  // measurement hook removed: leftHeight not used
+
+  // Use shared parsing/analysis utilities
+  // Fetch fresh ad data before parsing (in case original prop is stale). Log debug info.
   useEffect(() => {
-    const measure = () => {
-      const h = leftColRef.current?.offsetHeight ?? null;
-      setLeftHeight(h);
+    let mounted = true;
+    const fetchLatest = async () => {
+      try {
+        console.debug('[ContentTab] fetching latest ad', ad.id);
+        const res = await fetch(`/api/ads/${encodeURIComponent(ad.id)}`);
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          throw new Error(`Fetch failed: ${res.status} ${text}`);
+        }
+        const j = await res.json().catch(() => null);
+        const fresh = j?.data || null;
+        if (mounted && fresh) {
+          console.debug('[ContentTab] fetched latest ad', fresh);
+          setAdData(fresh as Ad);
+          setFetchError(null);
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.debug('[ContentTab] failed to fetch latest ad', msg);
+        setFetchError(msg);
+      }
     };
 
-    measure();
-    let t: number | null = null;
-    const onResize = () => {
-      if (t) window.clearTimeout(t);
-      t = window.setTimeout(measure, 120) as unknown as number;
-    };
-    window.addEventListener('resize', onResize);
+    // only attempt if we have an id
+    if (ad?.id) fetchLatest();
     return () => {
-      window.removeEventListener('resize', onResize);
-      if (t) window.clearTimeout(t);
+      mounted = false;
     };
-  }, []);
+  }, [ad.id]);
+
+  const { visualMainParagraphs, visualDerivedFromVideo } = useMemo(() => {
+    return getVisualParagraphs(adData);
+  }, [adData]);
+
+  const metaAnalysis = useMemo(
+    () => buildMetaAnalysis(adData, visualMainParagraphs),
+    [adData, visualMainParagraphs]
+  );
+
+  const rawScenarios = useMemo(() => parseScenarios(adData), [adData]);
+  const adaptationScenarios = useMemo(() => sanitizeScenarios(rawScenarios), [rawScenarios]);
+
+  const groupedSections = useMemo(
+    () => buildGroupedSections(adData, metaAnalysis, adaptationScenarios, visualDerivedFromVideo),
+    [adData, metaAnalysis, adaptationScenarios, visualDerivedFromVideo]
+  );
+
+  useEffect(() => {
+    console.debug('[ContentTab] metaAnalysis', metaAnalysis);
+    console.debug('[ContentTab] adaptationScenarios', adaptationScenarios);
+    console.debug('[ContentTab] groupedSections', groupedSections);
+  }, [metaAnalysis, adaptationScenarios, groupedSections]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -66,18 +118,18 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
         <Card className="overflow-hidden border-slate-200 rounded-2xl">
           <CardContent className="p-0">
             <div className="relative aspect-video bg-slate-100">
-              <ContentMedia ad={ad} />
+              <ContentMedia ad={adData} />
             </div>
           </CardContent>
         </Card>
 
         {/* Media Controls */}
         <div className="flex gap-4 items-center">
-          <ContentControls ad={ad} />
-          {ad.link_url && (
+          <ContentControls ad={adData} />
+          {adData.link_url && (
             <Button
               variant="outline"
-              onClick={() => window.open(ad.link_url, '_blank', 'noopener,noreferrer')}
+              onClick={() => window.open(adData.link_url, '_blank', 'noopener,noreferrer')}
               className="border-emerald-600 text-emerald-600 hover:bg-emerald-50 font-medium rounded-xl h-11 transition-all duration-200"
             >
               <ExternalLink className="h-4 w-4 mr-2" />
@@ -87,19 +139,19 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
         </div>
 
         {/* Other duplicates gallery */}
-        {ad.duplicates_preview_image && (
+        {adData.duplicates_preview_image && (
           <Card className="border-slate-200 rounded-2xl">
             <CardContent className="p-0">
               <div className="bg-blue-50 p-6 border-b border-slate-200">
                 <h2 className="text-xl font-semibold text-slate-900">Other Duplicates</h2>
               </div>
-              <DuplicatesGallery duplicates={ad.duplicates_preview_image} />
+              <DuplicatesGallery duplicates={adData.duplicates_preview_image} />
             </CardContent>
           </Card>
         )}
 
         {/* Ad Text */}
-        {ad.text && (
+        {adData.text && (
           <Card className="border-slate-200 rounded-2xl">
             <CardContent className="p-0">
               <div className="bg-blue-50 p-6 border-b border-slate-200">
@@ -108,7 +160,9 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleCopyToClipboard(ad.text, 'text')}
+                    onClick={() =>
+                      handleCopyToClipboard(cleanAndSplit(adData.text).join('\n\n'), 'text')
+                    }
                     className="text-slate-500 hover:text-slate-700"
                   >
                     {copiedField === 'text' ? (
@@ -120,14 +174,18 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
                 </div>
               </div>
               <div className="p-6">
-                <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{ad.text}</p>
+                {cleanAndSplit(adData.text).map((p, i) => (
+                  <p key={i} className="text-slate-700 leading-relaxed mb-3 whitespace-pre-line">
+                    {p}
+                  </p>
+                ))}
               </div>
             </CardContent>
           </Card>
         )}
 
         {/* Duplicate Ad Text */}
-        {ad.duplicates_ad_text && (
+        {adData.duplicates_ad_text && (
           <Card className="border-slate-200 rounded-2xl">
             <CardContent className="p-0">
               <div className="bg-blue-50 p-6 border-b border-slate-200">
@@ -137,7 +195,10 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
                     variant="ghost"
                     size="sm"
                     onClick={() =>
-                      handleCopyToClipboard(ad.duplicates_ad_text!, 'duplicates_ad_text')
+                      handleCopyToClipboard(
+                        cleanAndSplit(adData.duplicates_ad_text).join('\n\n'),
+                        'duplicates_ad_text'
+                      )
                     }
                     className="text-slate-500 hover:text-slate-700"
                   >
@@ -150,16 +211,18 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
                 </div>
               </div>
               <div className="p-6">
-                <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
-                  {ad.duplicates_ad_text}
-                </p>
+                {cleanAndSplit(adData.duplicates_ad_text).map((p, i) => (
+                  <p key={i} className="text-slate-700 leading-relaxed mb-3 whitespace-pre-line">
+                    {p}
+                  </p>
+                ))}
               </div>
             </CardContent>
           </Card>
         )}
 
         {/* Caption */}
-        {ad.caption && (
+        {adData.caption && (
           <Card className="border-slate-200 rounded-2xl">
             <CardContent className="p-0">
               <div className="bg-emerald-50 p-6 border-b border-slate-200">
@@ -168,7 +231,9 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => handleCopyToClipboard(ad.caption, 'caption')}
+                    onClick={() =>
+                      handleCopyToClipboard(cleanAndSplit(adData.caption).join('\n\n'), 'caption')
+                    }
                     className="text-slate-500 hover:text-slate-700"
                   >
                     {copiedField === 'caption' ? (
@@ -180,14 +245,18 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
                 </div>
               </div>
               <div className="p-6">
-                <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">{ad.caption}</p>
+                {cleanAndSplit(adData.caption).map((p, i) => (
+                  <p key={i} className="text-slate-700 leading-relaxed mb-3 whitespace-pre-line">
+                    {p}
+                  </p>
+                ))}
               </div>
             </CardContent>
           </Card>
         )}
 
         {/* Call to Action */}
-        {ad.cta_text && (
+        {adData.cta_text && (
           <Card className="border-slate-200 rounded-2xl">
             <CardContent className="p-0">
               <div className="bg-orange-50 p-6 border-b border-slate-200">
@@ -196,10 +265,11 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
               <div className="p-6">
                 <div className="flex items-center justify-between">
                   <Button className="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl h-11 px-6 transition-all duration-200">
-                    {ad.cta_text}
+                    {adData.cta_text}
                   </Button>
                   <div className="text-sm text-slate-500">
-                    Type: <span className="font-medium text-slate-700">{ad.cta_type || 'N/A'}</span>
+                    Type:{' '}
+                    <span className="font-medium text-slate-700">{adData.cta_type || 'N/A'}</span>
                   </div>
                 </div>
               </div>
@@ -226,7 +296,7 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
                       className="bg-white border border-slate-200 rounded-xl p-4 hover:border-blue-200 hover:shadow-lg transition-all duration-300 cursor-pointer"
                       onClick={() => {
                         // Передаємо всі related ads (включаючи поточний ad) на нову сторінку
-                        const allRelatedIds = [ad.id, ...relatedAds.map((ra) => ra.id)].filter(
+                        const allRelatedIds = [adData.id, ...relatedAds.map((ra) => ra.id)].filter(
                           (id) => id !== relatedAd.id
                         );
                         const relatedParam =
@@ -236,9 +306,10 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
                           e.preventDefault();
-                          const allRelatedIds = [ad.id, ...relatedAds.map((ra) => ra.id)].filter(
-                            (id) => id !== relatedAd.id
-                          );
+                          const allRelatedIds = [
+                            adData.id,
+                            ...relatedAds.map((ra) => ra.id),
+                          ].filter((id) => id !== relatedAd.id);
                           const relatedParam =
                             allRelatedIds.length > 0 ? `?related=${allRelatedIds.join(',')}` : '';
                           router.push(`/creative/${relatedAd.id}${relatedParam}`);
@@ -306,107 +377,74 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
 
       {/* Right Column - Links & Scripts */}
       <div className="space-y-6">
-        {/* Audio Script */}
-        {ad.audio_script && (
-          <Card className="border-slate-200 rounded-2xl">
-            <CardContent className="p-0">
-              <div className="bg-purple-50 p-6 border-b border-slate-200">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <Mic className="h-5 w-5 text-purple-600 mr-2" />
-                    <h2 className="text-xl font-semibold text-slate-900">Audio Script</h2>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleCopyToClipboard(ad.audio_script!, 'audio_script')}
-                    className="text-slate-500 hover:text-slate-700"
-                  >
-                    {copiedField === 'audio_script' ? (
-                      <Check className="h-4 w-4" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-              <div className="p-6">
-                <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
-                  {ad.audio_script}
-                </p>
+        {fetchError && (
+          <Card className="border-red-200 rounded-2xl">
+            <CardContent className="p-4">
+              <div className="flex items-start gap-3">
+                <div className="text-sm text-red-700 font-medium">Ошибка обновления данных:</div>
+                <div className="text-sm text-red-600 break-words">{fetchError}</div>
               </div>
             </CardContent>
           </Card>
         )}
-
-        {/* Video Script */}
-        {ad.video_script && (
-          <Card
-            className="border-slate-200 rounded-2xl"
-            style={leftHeight ? { height: `${leftHeight}px` } : undefined}
+        {/* Grouped content: Visual Description, Formats & Creative Concepts, Additional content */}
+        {/* Visual Description + Formats & Creative Concepts (combined panel) */}
+        <div className="mb-6">
+          <CollapsiblePanel
+            title="Visual Description"
+            defaultOpen={true}
+            actions={
+              <div className="flex items-center">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    handleCopyToClipboard(visualMainParagraphs.join('\n\n'), 'visual_description')
+                  }
+                  className="text-slate-500 hover:text-slate-700"
+                >
+                  {copiedField === 'visual_description' ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            }
           >
-            <CardContent className="p-0 flex flex-col h-full">
-              <div className="bg-red-50 p-6 border-b border-slate-200">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <Film className="h-5 w-5 text-red-600 mr-2" />
-                    <h2 className="text-xl font-semibold text-slate-900">Video Script</h2>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleCopyToClipboard(ad.video_script!, 'video_script')}
-                    className="text-slate-500 hover:text-slate-700"
-                  >
-                    {copiedField === 'video_script' ? (
-                      <Check className="h-4 w-4" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-              <div className="p-6 overflow-y-auto">
-                <ScriptRenderer script={ad.video_script} copyPrefix="video_script" />
-              </div>
-            </CardContent>
-          </Card>
-        )}
+            {/* Render grouped title/text sections */}
+            <div className="space-y-4 mb-4">
+              <GroupedSections
+                sections={groupedSections.filter(
+                  (s) =>
+                    s.title === 'Image / Visual Description' ||
+                    s.title === 'Formats & Creative Concepts'
+                )}
+                onCopy={handleCopyToClipboard}
+                copiedField={copiedField}
+              />
+            </div>
+          </CollapsiblePanel>
+        </div>
 
-        {/* Image Description */}
-        {ad.image_description && (
-          <Card className="border-slate-200 rounded-2xl">
-            <CardContent className="p-0">
-              <div className="bg-yellow-50 p-6 border-b border-slate-200">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <Eye className="h-5 w-5 text-yellow-600 mr-2" />
-                    <h2 className="text-xl font-semibold text-slate-900">Image Description</h2>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      handleCopyToClipboard(ad.image_description!, 'image_description')
-                    }
-                    className="text-slate-500 hover:text-slate-700"
-                  >
-                    {copiedField === 'image_description' ? (
-                      <Check className="h-4 w-4" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-              <div className="p-6">
-                <p className="text-slate-700 leading-relaxed whitespace-pre-wrap">
-                  {ad.image_description}
-                </p>
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        {/* (Formats & Creative Concepts moved inside Visual Description panel) */}
+
+        {/* Additional content */}
+        <div className="mb-6">
+          <CollapsiblePanel title="Additional content" defaultOpen={false}>
+            <div className="space-y-6">
+              <GroupedSections
+                sections={groupedSections.filter(
+                  (s) =>
+                    s.title !== 'Image / Visual Description' &&
+                    s.title !== 'Formats & Creative Concepts'
+                )}
+                onCopy={handleCopyToClipboard}
+                copiedField={copiedField}
+              />
+            </div>
+          </CollapsiblePanel>
+        </div>
       </div>
     </div>
   );

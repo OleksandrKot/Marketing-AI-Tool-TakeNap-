@@ -110,7 +110,11 @@ export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
         adIdToGroupMap={adIdToGroupMap}
         filteredAdsByType={filteredAdsByType}
         selectedCreativeType={selectedCreativeType}
-        onCloseModal={() => state.setShowAINewsModal(false)}
+        onCloseModal={() => {
+          state.setShowAINewsModal(false);
+          if (typeof state.setProcessingDone === 'function') state.setProcessingDone(false);
+        }}
+        processingDone={state.processingDone}
       />
     </div>
   );
