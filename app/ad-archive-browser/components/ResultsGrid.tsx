@@ -1,6 +1,4 @@
-'use client';
-
-import React, { memo } from 'react';
+import React from 'react';
 import dynamic from 'next/dynamic';
 import { AdCard } from '@/components/ad-card';
 import { Search } from 'lucide-react';
@@ -85,5 +83,5 @@ function ResultsGrid({
   );
 }
 
-export default memo(ResultsGrid);
+export default ResultsGrid;
 ResultsGrid.displayName = 'ResultsGrid';
