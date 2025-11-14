@@ -1,7 +1,5 @@
-'use client';
-
 import React, { memo } from 'react';
-import { Button } from '@/components/ui/button';
+import Link from 'next/link';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { ViewToggle } from '@/components/view-toggle';
 import type { ViewMode } from '@/lib/types';
@@ -12,12 +10,13 @@ type Props = {
   currentPageAdsCount: number;
   currentPage: number;
   totalPages: number;
-  onPageChange: (p: number) => void;
+  onPageChange?: (p: number) => void;
   viewMode: ViewMode;
   setViewMode: (v: ViewMode) => void;
   selectedCreativeType: string;
   productFilter: string;
   selectedTags: string[];
+  pageSize?: number;
 };
 
 function PaginationBar({
@@ -32,6 +31,7 @@ function PaginationBar({
   selectedCreativeType,
   productFilter,
   selectedTags,
+  pageSize = 12,
 }: Props) {
   return (
     <div className="flex items-center justify-between w-full gap-4 mb-8">
@@ -50,27 +50,84 @@ function PaginationBar({
 
       <div className="flex items-center gap-4">
         <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onPageChange(currentPage - 1)}
-            disabled={currentPage === 1}
-            className="h-8 w-8 p-0 rounded-md text-slate-600 hover:bg-slate-200/70 hover:text-slate-900 disabled:opacity-50 transition-colors"
+          {/* Prev link - preserves filters via query params */}
+          <Link
+            href={(() => {
+              const params = new URLSearchParams();
+              params.set('page', String(Math.max(1, currentPage - 1)));
+              params.set('pageSize', String(pageSize));
+              if (productFilter) params.set('search', productFilter);
+              if (selectedCreativeType && selectedCreativeType !== 'all')
+                params.set('display_format', selectedCreativeType.toUpperCase());
+              if (selectedTags && selectedTags.length > 0)
+                params.set('tags', selectedTags.join(','));
+              return `?${params.toString()}`;
+            })()}
+            scroll={false}
+            onClick={(e) => {
+              // Prevent default navigation — update client state and URL without scrolling
+              e.preventDefault();
+              const params = new URLSearchParams();
+              params.set('page', String(Math.max(1, currentPage - 1)));
+              params.set('pageSize', String(pageSize));
+              if (productFilter) params.set('search', productFilter);
+              if (selectedCreativeType && selectedCreativeType !== 'all')
+                params.set('display_format', selectedCreativeType.toUpperCase());
+              if (selectedTags && selectedTags.length > 0)
+                params.set('tags', selectedTags.join(','));
+              if (typeof window !== 'undefined') {
+                window.history.replaceState(null, '', `?${params.toString()}`);
+              }
+              onPageChange?.(Math.max(1, currentPage - 1));
+            }}
+            className={`h-8 w-8 p-0 rounded-md text-slate-600 flex items-center justify-center hover:bg-slate-200/70 hover:text-slate-900 transition-colors ${
+              currentPage === 1 ? 'opacity-50 pointer-events-none' : ''
+            }`}
+            aria-disabled={currentPage === 1}
           >
             <ChevronLeft className="h-4 w-4" />
-          </Button>
+          </Link>
+
           <span className="text-sm text-slate-600 font-medium px-2">
             Page {currentPage} of {totalPages}
           </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => onPageChange(currentPage + 1)}
-            disabled={currentPage === totalPages}
-            className="h-8 w-8 p-0 rounded-md text-slate-600 hover:bg-slate-200/70 hover:text-slate-900 disabled:opacity-50 transition-colors"
+
+          {/* Next link */}
+          <Link
+            href={(() => {
+              const params = new URLSearchParams();
+              params.set('page', String(Math.min(totalPages, currentPage + 1)));
+              params.set('pageSize', String(pageSize));
+              if (productFilter) params.set('search', productFilter);
+              if (selectedCreativeType && selectedCreativeType !== 'all')
+                params.set('display_format', selectedCreativeType.toUpperCase());
+              if (selectedTags && selectedTags.length > 0)
+                params.set('tags', selectedTags.join(','));
+              return `?${params.toString()}`;
+            })()}
+            scroll={false}
+            onClick={(e) => {
+              e.preventDefault();
+              const params = new URLSearchParams();
+              params.set('page', String(Math.min(totalPages, currentPage + 1)));
+              params.set('pageSize', String(pageSize));
+              if (productFilter) params.set('search', productFilter);
+              if (selectedCreativeType && selectedCreativeType !== 'all')
+                params.set('display_format', selectedCreativeType.toUpperCase());
+              if (selectedTags && selectedTags.length > 0)
+                params.set('tags', selectedTags.join(','));
+              if (typeof window !== 'undefined') {
+                window.history.replaceState(null, '', `?${params.toString()}`);
+              }
+              onPageChange?.(Math.min(totalPages, currentPage + 1));
+            }}
+            className={`h-8 w-8 p-0 rounded-md text-slate-600 flex items-center justify-center hover:bg-slate-200/70 hover:text-slate-900 transition-colors ${
+              currentPage === totalPages ? 'opacity-50 pointer-events-none' : ''
+            }`}
+            aria-disabled={currentPage === totalPages}
           >
             <ChevronRight className="h-4 w-4" />
-          </Button>
+          </Link>
         </div>
 
         <ViewToggle currentView={viewMode} onViewChange={setViewMode} />

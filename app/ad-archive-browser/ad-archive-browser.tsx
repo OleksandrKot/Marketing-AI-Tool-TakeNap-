@@ -4,17 +4,32 @@ import Header from './components/Header';
 import SearchControls from './components/SearchControls';
 import ResultsGrid from './components/ResultsGrid';
 import PaginationBar from './components/PaginationBar';
-import { useEffect } from 'react';
-import type { Ad, FilterOptions } from '@/lib/types';
-import { useAdArchive, type UseAdArchiveReturn } from './useAdArchive';
+import type { Ad } from '@/lib/types';
+import useAdArchive, { type UseAdArchiveReturn } from './useAdArchive';
 
 interface AdArchiveBrowserProps {
   initialAds: Ad[];
   pages: string[];
+  initialFilters?: import('@/lib/types').FilterOptions | null;
+  initialTotalAds?: number;
 }
 
-export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
-  const state = useAdArchive(initialAds) as UseAdArchiveReturn;
+export function AdArchiveBrowser({
+  initialAds,
+  pages,
+  initialFilters,
+  initialTotalAds,
+}: AdArchiveBrowserProps) {
+  // Pass explicit cleared filters to avoid relying on a client-side effect
+  // to reset filters after mount. This initializes hook state correctly
+  // so the component renders with cleared filters immediately.
+  const clearedFilters = { search: '', page: null, date: null, tags: null };
+  const state = useAdArchive(
+    initialAds,
+    initialFilters ?? clearedFilters,
+    initialTotalAds,
+    5 * 60 * 1000 // poll every 5 minutes by default
+  ) as UseAdArchiveReturn;
 
   const {
     filteredAdsByType,
@@ -43,26 +58,6 @@ export function AdArchiveBrowser({ initialAds, pages }: AdArchiveBrowserProps) {
     totalAds,
     currentPageAdsCount,
   } = state;
-
-  // Ensure filters are cleared on initial client mount. This forces a fresh fetch
-  // and prevents stale or pre-applied filters from hiding rows.
-  useEffect(() => {
-    try {
-      if (typeof state.handleFilterChange === 'function') {
-        state.handleFilterChange({
-          search: '',
-          page: null,
-          date: null,
-          tags: null,
-        } as FilterOptions);
-      }
-    } catch (e) {
-      // swallow errors here; diagnostics are printed by getAds
-      // eslint-disable-next-line no-console
-      console.debug('Failed to clear filters on mount:', e);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <div className="container mx-auto px-6 py-12 max-w-7xl">

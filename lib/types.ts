@@ -19,6 +19,7 @@ export interface Ad {
   meta_ad_url: string | null;
   image_url?: string | null;
   image_description?: string | null;
+  signed_image_url?: string | null;
   new_scenario?: string | null; // Додаємо нове поле для JSON сценаріїв
   tags?: string[] | null; // Додаємо поле для тегів
 
@@ -43,6 +44,7 @@ export interface FilterOptions {
   publisherPlatform?: string | null;
   date: string | null;
   tags: string[] | null; // Додаємо фільтр по тегам
+  pageSize?: number | null;
 }
 
 // Типи для парсингу new_scenario JSON

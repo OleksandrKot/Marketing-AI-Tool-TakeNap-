@@ -1,5 +1,3 @@
-'use client';
-
 import { PageNavigation } from '@/components/page-navigation';
 import { ProfileDropdown } from '@/app/login-auth/components/profile-dropdown';
 

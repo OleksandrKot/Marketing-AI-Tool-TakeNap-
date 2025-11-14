@@ -55,7 +55,8 @@ export async function getAds(
       character
     `
       )
-      .order('created_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false });
     // .limit(limit)
 
     if (search) {
@@ -113,7 +114,9 @@ export async function getAds(
     }
 
     console.log('🚀 Executing Supabase query...');
-    const { data, error } = await query;
+    const res = await query;
+    const data = res.data;
+    const error = res.error;
 
     if (error) {
       console.error('❌ Supabase error:', error);
@@ -121,8 +124,93 @@ export async function getAds(
       return getFakeAds(search, tags, publisherPlatform);
     }
 
-    console.log('✅ Successfully fetched', data?.length || 0, 'ads from Supabase');
-    return (data as Ad[]) || getFakeAds(search, tags, publisherPlatform);
+    console.log(
+      '✅ Successfully fetched',
+      Array.isArray(data) ? data.length : 0,
+      'ads from Supabase'
+    );
+    try {
+      const ads = Array.isArray(data) ? (data as Ad[]) : [];
+      const ids = ads.map((a) => a.id);
+      console.log('Fetched ad IDs from Supabase:', ids.join(', '));
+
+      // If no filters provided, also fetch the global count to compare
+      const hasFilters = !!(
+        search ||
+        page ||
+        date ||
+        (tags && tags.length > 0) ||
+        publisherPlatform
+      );
+      if (!hasFilters) {
+        try {
+          const { data: allRows, error: allError } = await supabase
+            .from('ads_library')
+            .select('id');
+          if (!allError && Array.isArray(allRows)) {
+            const allIds = allRows.map((r: unknown) => (r as { id: number }).id);
+            console.log('All ad IDs in DB:', allIds.join(', '));
+            // Compute missing ids (in DB but not in fetched page)
+            const missing = allIds.filter((id) => !ids.map(String).includes(String(id)));
+            if (missing.length > 0) {
+              console.log('Missing ad IDs (in DB but not returned):', missing.join(', '));
+              try {
+                const { data: missingRows, error: missingErr } = await supabase
+                  .from('ads_library')
+                  .select(
+                    'id, created_at, ad_archive_id, page_name, display_format, image_url, tags'
+                  )
+                  .in('id', missing as (string | number)[]);
+                if (missingErr) {
+                  console.debug('Error fetching missing rows details', missingErr);
+                } else {
+                  console.log('Details for missing rows:', JSON.stringify(missingRows, null, 2));
+                }
+              } catch (e) {
+                console.debug('Failed to fetch missing rows details', e);
+              }
+            } else {
+              console.log('No missing ad IDs detected between DB and fetched set.');
+            }
+          } else if (allError) {
+            console.debug('Error fetching all ad ids for comparison', allError);
+          }
+        } catch (e) {
+          console.debug('Failed to fetch global id list for ads_library', e);
+        }
+      }
+    } catch (e) {
+      console.debug('Failed to log fetched ad ids', e);
+    }
+
+    // If we have server credentials, generate proxy URLs for preview images
+    // stored in private buckets so server-rendered pages can include accessible
+    // image URLs without exposing the service role key.
+    try {
+      const ads = (data as Ad[]) || [];
+      const signedPromises = ads.map(async (ad) => {
+        try {
+          if (!ad || !ad.ad_archive_id) return ad;
+          const bucket =
+            ad.display_format === 'VIDEO' ? 'test10public_preview' : 'test9bucket_photo';
+          const path = `${ad.ad_archive_id}.jpeg`;
+          // Use server proxy route to serve images without expiring client links
+          const proxyUrl = `/api/storage/proxy?bucket=${encodeURIComponent(
+            bucket
+          )}&path=${encodeURIComponent(path)}`;
+          return { ...ad, signed_image_url: proxyUrl } as Ad & { signed_image_url?: string };
+        } catch (e) {
+          console.debug('Failed to set proxy image for ad', ad?.id, e);
+        }
+        return ad;
+      });
+
+      const withSigned = await Promise.all(signedPromises);
+      return withSigned as Ad[];
+    } catch (e) {
+      console.error('Error generating signed URLs:', e);
+      return (data as Ad[]) || getFakeAds(search, tags, publisherPlatform);
+    }
   } catch (error) {
     console.error('❌ Error in getAds:', error);
     console.log('🔄 Falling back to fake data...');

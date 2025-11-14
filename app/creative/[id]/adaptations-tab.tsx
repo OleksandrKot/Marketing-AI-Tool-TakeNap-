@@ -68,6 +68,10 @@ export function AdaptationsTab({ ad }: AdaptationsTabProps) {
     return sanitized;
   }, [adData]);
 
+  const isVideoAd = String(adData.display_format || '')
+    .toLowerCase()
+    .includes('video');
+
   const handleCopyToClipboard = async (text: string, fieldName: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -185,7 +189,11 @@ export function AdaptationsTab({ ad }: AdaptationsTabProps) {
                   </div>
 
                   {/* Technical Task Details */}
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div
+                    className={`grid grid-cols-1 ${
+                      isVideoAd ? 'lg:grid-cols-2' : 'lg:grid-cols-1'
+                    } gap-6`}
+                  >
                     {/* Visual Elements */}
                     <div className="bg-slate-50 rounded-xl p-4">
                       <div className="flex items-center mb-3">
@@ -196,7 +204,9 @@ export function AdaptationsTab({ ad }: AdaptationsTabProps) {
                           size="sm"
                           onClick={() =>
                             handleCopyToClipboard(
-                              scenario.technical_task_json.visual_elements.join('\n'),
+                              Array.isArray(scenario.technical_task_json?.visual_elements)
+                                ? scenario.technical_task_json.visual_elements.join('\n')
+                                : '',
                               `visual-${index}`
                             )
                           }
@@ -210,44 +220,46 @@ export function AdaptationsTab({ ad }: AdaptationsTabProps) {
                         </Button>
                       </div>
                       <ul className="space-y-2">
-                        {scenario.technical_task_json.visual_elements.map(
-                          (element: string, elemIndex: number) => (
-                            <li key={elemIndex} className="text-sm text-slate-600 flex items-start">
-                              <Palette className="h-3 w-3 text-slate-400 mr-2 mt-0.5 flex-shrink-0" />
-                              {element}
-                            </li>
-                          )
-                        )}
+                        {(Array.isArray(scenario.technical_task_json?.visual_elements)
+                          ? scenario.technical_task_json.visual_elements
+                          : []
+                        ).map((element: string, elemIndex: number) => (
+                          <li key={elemIndex} className="text-sm text-slate-600 flex items-start">
+                            <Palette className="h-3 w-3 text-slate-400 mr-2 mt-0.5 flex-shrink-0" />
+                            {String(element)}
+                          </li>
+                        ))}
                       </ul>
                     </div>
-
-                    {/* Audio Style */}
-                    <div className="bg-slate-50 rounded-xl p-4">
-                      <div className="flex items-center mb-3">
-                        <Mic className="h-4 w-4 text-slate-600 mr-2" />
-                        <h4 className="text-sm font-medium text-slate-700">Audio Style</h4>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            handleCopyToClipboard(
-                              scenario.technical_task_json.audio_style,
-                              `audio-${index}`
-                            )
-                          }
-                          className="text-slate-500 hover:text-slate-700 ml-auto"
-                        >
-                          {copiedField === `audio-${index}` ? (
-                            <Check className="h-3 w-3" />
-                          ) : (
-                            <Copy className="h-3 w-3" />
-                          )}
-                        </Button>
+                    {/* Audio Style (only for video ads and when present) */}
+                    {isVideoAd && scenario.technical_task_json?.audio_style ? (
+                      <div className="bg-slate-50 rounded-xl p-4">
+                        <div className="flex items-center mb-3">
+                          <Mic className="h-4 w-4 text-slate-600 mr-2" />
+                          <h4 className="text-sm font-medium text-slate-700">Audio Style</h4>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() =>
+                              handleCopyToClipboard(
+                                String(scenario.technical_task_json.audio_style || ''),
+                                `audio-${index}`
+                              )
+                            }
+                            className="text-slate-500 hover:text-slate-700 ml-auto"
+                          >
+                            {copiedField === `audio-${index}` ? (
+                              <Check className="h-3 w-3" />
+                            ) : (
+                              <Copy className="h-3 w-3" />
+                            )}
+                          </Button>
+                        </div>
+                        <p className="text-sm text-slate-600">
+                          {String(scenario.technical_task_json.audio_style || '')}
+                        </p>
                       </div>
-                      <p className="text-sm text-slate-600">
-                        {scenario.technical_task_json.audio_style}
-                      </p>
-                    </div>
+                    ) : null}
                   </div>
 
                   {/* Actions */}
