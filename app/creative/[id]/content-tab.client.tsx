@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Copy, Check, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -14,26 +14,24 @@ import StorageImage from '@/lib/StorageImage';
 import cleanAndSplit from './utils/cleanAndSplit';
 import CollapsiblePanel from './components/CollapsiblePanel';
 import GroupedSections from './components/GroupedSections';
-import {
-  parseScenarios,
-  sanitizeScenarios,
-  getVisualParagraphs,
-  buildMetaAnalysis,
-  buildGroupedSections,
-} from './utils/adData';
 
-interface ContentTabProps {
+interface ContentTabClientProps {
   ad: Ad;
   relatedAds?: Ad[] | null;
+  visualMainParagraphs: string[];
+  groupedSections: { title: string; text: string }[];
 }
 
-export function ContentTab({ ad, relatedAds }: ContentTabProps) {
+export default function ContentTabClient({
+  ad,
+  relatedAds,
+  visualMainParagraphs,
+  groupedSections,
+}: ContentTabClientProps) {
   const router = useRouter();
   const leftColRef = useRef<HTMLDivElement | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
-  const [adData, setAdData] = useState<Ad>(ad);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-  // Download/restart handled by ContentControls
+  const adData = ad; // server-prepared ad
 
   const handleCopyToClipboard = useCallback(async (text: string, fieldName: string) => {
     try {
@@ -44,73 +42,6 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
       console.error('Failed to copy:', error);
     }
   }, []);
-
-  // cleanAndSplit util moved to ./utils/cleanAndSplit
-
-  // Local collapsible panel used in this file
-  // CollapsiblePanel moved to ./components/CollapsiblePanel
-
-  // Preview image placeholder (we prefer storage bucket by ad_archive_id)
-
-  // duplicates_preview_image will be rendered by DuplicatesGallery when present
-
-  // measurement hook removed: leftHeight not used
-
-  // Use shared parsing/analysis utilities
-  // Fetch fresh ad data before parsing (in case original prop is stale). Log debug info.
-  useEffect(() => {
-    let mounted = true;
-    const fetchLatest = async () => {
-      try {
-        console.debug('[ContentTab] fetching latest ad', ad.id);
-        const res = await fetch(`/api/ads/${encodeURIComponent(ad.id)}`);
-        if (!res.ok) {
-          const text = await res.text().catch(() => '');
-          throw new Error(`Fetch failed: ${res.status} ${text}`);
-        }
-        const j = await res.json().catch(() => null);
-        const fresh = j?.data || null;
-        if (mounted && fresh) {
-          console.debug('[ContentTab] fetched latest ad', fresh);
-          setAdData(fresh as Ad);
-          setFetchError(null);
-        }
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        console.debug('[ContentTab] failed to fetch latest ad', msg);
-        setFetchError(msg);
-      }
-    };
-
-    // only attempt if we have an id
-    if (ad?.id) fetchLatest();
-    return () => {
-      mounted = false;
-    };
-  }, [ad.id]);
-
-  const { visualMainParagraphs, visualDerivedFromVideo } = useMemo(() => {
-    return getVisualParagraphs(adData);
-  }, [adData]);
-
-  const metaAnalysis = useMemo(
-    () => buildMetaAnalysis(adData, visualMainParagraphs),
-    [adData, visualMainParagraphs]
-  );
-
-  const rawScenarios = useMemo(() => parseScenarios(adData), [adData]);
-  const adaptationScenarios = useMemo(() => sanitizeScenarios(rawScenarios), [rawScenarios]);
-
-  const groupedSections = useMemo(
-    () => buildGroupedSections(adData, metaAnalysis, adaptationScenarios, visualDerivedFromVideo),
-    [adData, metaAnalysis, adaptationScenarios, visualDerivedFromVideo]
-  );
-
-  useEffect(() => {
-    console.debug('[ContentTab] metaAnalysis', metaAnalysis);
-    console.debug('[ContentTab] adaptationScenarios', adaptationScenarios);
-    console.debug('[ContentTab] groupedSections', groupedSections);
-  }, [metaAnalysis, adaptationScenarios, groupedSections]);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -123,7 +54,6 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
           </CardContent>
         </Card>
 
-        {/* Media Controls */}
         <div className="flex gap-4 items-center">
           <ContentControls ad={adData} />
           {adData.link_url && (
@@ -138,7 +68,6 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
           )}
         </div>
 
-        {/* Other duplicates gallery */}
         {adData.duplicates_preview_image && (
           <Card className="border-slate-200 rounded-2xl">
             <CardContent className="p-0">
@@ -150,7 +79,6 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
           </Card>
         )}
 
-        {/* Ad Text */}
         {adData.text && (
           <Card className="border-slate-200 rounded-2xl">
             <CardContent className="p-0">
@@ -184,7 +112,6 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
           </Card>
         )}
 
-        {/* Duplicate Ad Text */}
         {adData.duplicates_ad_text && (
           <Card className="border-slate-200 rounded-2xl">
             <CardContent className="p-0">
@@ -221,7 +148,6 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
           </Card>
         )}
 
-        {/* Caption */}
         {adData.caption && (
           <Card className="border-slate-200 rounded-2xl">
             <CardContent className="p-0">
@@ -255,7 +181,6 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
           </Card>
         )}
 
-        {/* Call to Action */}
         {adData.cta_text && (
           <Card className="border-slate-200 rounded-2xl">
             <CardContent className="p-0">
@@ -277,7 +202,6 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
           </Card>
         )}
 
-        {/* Related Ads Section */}
         {relatedAds && relatedAds.length > 0 && (
           <Card className="border-slate-200 rounded-2xl">
             <CardContent className="p-0">
@@ -295,7 +219,6 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
                       tabIndex={0}
                       className="bg-white border border-slate-200 rounded-xl p-4 hover:border-blue-200 hover:shadow-lg transition-all duration-300 cursor-pointer"
                       onClick={() => {
-                        // Передаємо всі related ads (включаючи поточний ad) на нову сторінку
                         const allRelatedIds = [adData.id, ...relatedAds.map((ra) => ra.id)].filter(
                           (id) => id !== relatedAd.id
                         );
@@ -333,8 +256,6 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
                             }}
                           />
                         ) : relatedAd.image_url ? (
-                          // We prefer storage images by ad_archive_id; if relatedAd has no ad_archive_id,
-                          // show a simple placeholder instead of loading an external URL.
                           <div className="w-full h-full flex items-center justify-center bg-slate-100">
                             <div className="text-center">
                               <div className="w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center mx-auto mb-2">
@@ -375,20 +296,7 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
         )}
       </div>
 
-      {/* Right Column - Links & Scripts */}
       <div className="space-y-6">
-        {fetchError && (
-          <Card className="border-red-200 rounded-2xl">
-            <CardContent className="p-4">
-              <div className="flex items-start gap-3">
-                <div className="text-sm text-red-700 font-medium">Ошибка обновления данных:</div>
-                <div className="text-sm text-red-600 break-words">{fetchError}</div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-        {/* Grouped content: Visual Description, Formats & Creative Concepts, Additional content */}
-        {/* Visual Description + Formats & Creative Concepts (combined panel) */}
         <div className="mb-6">
           <CollapsiblePanel
             title="Visual Description"
@@ -412,7 +320,6 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
               </div>
             }
           >
-            {/* Render grouped title/text sections */}
             <div className="space-y-4 mb-4">
               <GroupedSections
                 sections={groupedSections.filter(
@@ -427,9 +334,6 @@ export function ContentTab({ ad, relatedAds }: ContentTabProps) {
           </CollapsiblePanel>
         </div>
 
-        {/* (Formats & Creative Concepts moved inside Visual Description panel) */}
-
-        {/* Additional content */}
         <div className="mb-6">
           <CollapsiblePanel title="Additional content" defaultOpen={false}>
             <div className="space-y-6">

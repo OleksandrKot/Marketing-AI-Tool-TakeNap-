@@ -17,11 +17,11 @@ const CollectionModal = dynamic(
 import { HeartButton } from '@/app/favorites/components/HeartButton';
 import { Button } from '@/components/ui/button';
 import { CreativeTabs } from '@/components/creative-tabs';
-import { ContentTab } from './content-tab';
+import ContentTab from './content-tab.client';
 import { InfoTab } from './info-tab';
 import { AdaptationsTab } from './adaptations-tab';
 // tag manager removed from header for simplified detail view
-import type { Ad } from '@/lib/types';
+import type { Ad, AdaptationScenario } from '@/lib/types';
 
 // Динамічне завантаження компонентів, які не потрібні одразу
 const ShareModal = dynamic(() => import('./share-modal'), {
@@ -32,9 +32,20 @@ const ShareModal = dynamic(() => import('./share-modal'), {
 interface AdDetailsProps {
   ad: Ad;
   relatedAds?: Ad[] | null;
+  // precomputed server-side values
+  groupedSections?: { title: string; text: string }[];
+  visualMainParagraphs?: string[];
+  visualDerivedFromVideo?: boolean;
+  metaAnalysis?: Record<string, unknown>;
+  adaptationScenarios?: AdaptationScenario[];
 }
 
-const AdDetails = memo(function AdDetails({ ad, relatedAds }: AdDetailsProps) {
+const AdDetails = memo(function AdDetails({
+  ad,
+  relatedAds,
+  groupedSections = [],
+  visualMainParagraphs = [],
+}: AdDetailsProps) {
   const router = useRouter();
   // Normalize creative id to string to avoid mismatches (some ads have numeric ad_archive_id)
   const creativeId = String(ad.ad_archive_id ?? ad.id);
@@ -143,7 +154,14 @@ const AdDetails = memo(function AdDetails({ ad, relatedAds }: AdDetailsProps) {
         <CreativeTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
         {/* Tab Content */}
-        {activeTab === 'content' && <ContentTab ad={ad} relatedAds={relatedAds} />}
+        {activeTab === 'content' && (
+          <ContentTab
+            ad={ad}
+            relatedAds={relatedAds}
+            groupedSections={groupedSections}
+            visualMainParagraphs={visualMainParagraphs}
+          />
+        )}
         {activeTab === 'info' && <InfoTab ad={ad} />}
         {activeTab === 'adaptations' && <AdaptationsTab ad={ad} />}
 

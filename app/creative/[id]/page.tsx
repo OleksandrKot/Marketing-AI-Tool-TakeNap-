@@ -4,7 +4,14 @@ import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { AdDetailsSkeleton } from './ad-details-skeleton';
 import type { Metadata } from 'next';
-import type { Ad } from '@/lib/types';
+import type { Ad, AdaptationScenario } from '@/lib/types';
+import {
+  parseScenarios,
+  sanitizeScenarios,
+  getVisualParagraphs,
+  buildMetaAnalysis,
+  buildGroupedSections,
+} from './utils/adData';
 
 // Кешування даних креативу
 async function getAdById(id: string) {
@@ -35,6 +42,11 @@ async function getAdById(id: string) {
         meta_ad_url,
         image_url,
         image_description,
+        concept,
+        realisation,
+        topic,
+        hook,
+        character,
         new_scenario,
         duplicates_ad_text,
         duplicates_links,
@@ -86,6 +98,11 @@ async function getRelatedAdsByIds(ids: string[]): Promise<Ad[] | null> {
         meta_ad_url,
         image_url,
         image_description,
+        concept,
+        realisation,
+        topic,
+        hook,
+        character,
         new_scenario,
         duplicates_ad_text,
         duplicates_links,
@@ -308,9 +325,32 @@ export default async function CreativePage({ params, searchParams }: CreativePag
     relatedAds = await getRelatedAdsByIds(relatedIds);
   }
 
+  // Precompute parsing and grouped sections on the server to reduce client bundle work
+  const { visualMainParagraphs, visualDerivedFromVideo } = getVisualParagraphs(ad as Ad);
+
+  const rawScenarios = parseScenarios(ad as Ad);
+  const adaptationScenarios = sanitizeScenarios(rawScenarios);
+
+  const metaAnalysis = buildMetaAnalysis(ad as Ad, visualMainParagraphs);
+
+  const groupedSections = buildGroupedSections(
+    ad as Ad,
+    metaAnalysis,
+    adaptationScenarios,
+    visualDerivedFromVideo
+  );
+
   return (
     <Suspense fallback={<AdDetailsSkeleton />}>
-      <AdDetails ad={ad} relatedAds={relatedAds} />
+      <AdDetails
+        ad={ad}
+        relatedAds={relatedAds}
+        groupedSections={groupedSections}
+        visualMainParagraphs={visualMainParagraphs}
+        visualDerivedFromVideo={visualDerivedFromVideo}
+        metaAnalysis={metaAnalysis}
+        adaptationScenarios={adaptationScenarios as unknown as AdaptationScenario[]}
+      />
     </Suspense>
   );
 }
