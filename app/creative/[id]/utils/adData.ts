@@ -1,6 +1,7 @@
 import cleanAndSplit from './cleanAndSplit';
 import type { Ad, AdaptationScenario } from '@/lib/types';
 
+// Headings used to detect extra visual paragraphs
 const VISUAL_EXTRA_TITLES = [
   'colors and style',
   'visible emotions',
@@ -11,6 +12,10 @@ const VISUAL_EXTRA_TITLES = [
   'overall mood or feeling:',
 ];
 
+/**
+ * Remove any leading garbage before useful content,
+ * e.g. text before ```json or before first '{'.
+ */
 function stripLeading(text?: string) {
   if (!text) return '';
   const s = String(text);
@@ -28,9 +33,17 @@ function stripLeading(text?: string) {
   return s;
 }
 
+/**
+ * Try to parse JSON object from a mixed text string.
+ * Returns:
+ *  - parsed: JSON object if found, otherwise null
+ *  - cleaned: text with JSON and trailing key:value; removed
+ */
 function tryParseJsonFromText(text?: string) {
   if (!text) return { parsed: null as Record<string, unknown> | null, cleaned: '' };
   let t = String(text);
+
+  // Case 1: fenced ```json ... ``` block
   const fenced = t.match(/```(?:json\s*)?([\s\S]*?)```/i);
   if (fenced && fenced[1]) {
     const j = fenced[1].trim();
@@ -39,8 +52,12 @@ function tryParseJsonFromText(text?: string) {
       t = t.replace(fenced[0], '').trim();
       t = stripTrailingKVs(t);
       return { parsed: o, cleaned: t };
-    } catch {}
+    } catch {
+      // ignore and continue
+    }
   }
+
+  // Case 2: first JSON object in plain text
   const first = t.indexOf('{');
   if (first >= 0) {
     let depth = 0;
@@ -62,14 +79,21 @@ function tryParseJsonFromText(text?: string) {
         t = (t.slice(0, first) + t.slice(end + 1)).trim();
         t = stripTrailingKVs(t);
         return { parsed: o, cleaned: t };
-      } catch {}
+      } catch {
+        // ignore and continue
+      }
     }
   }
+
+  // Case 3: trailing "Key: Value;" pairs
   const kv = parseTrailingKVs(t);
   if (Object.keys(kv.obj).length) return { parsed: kv.obj, cleaned: kv.cleaned };
   return { parsed: null, cleaned: t };
 }
 
+/**
+ * Remove trailing "Key: Value;" blocks from text.
+ */
 function stripTrailingKVs(text: string) {
   if (!text) return '';
   const m = text.match(/(?:\s*\n)?([A-Za-z0-9\s&\-]+:\s*[^;]+;(\s*|$))+$/m);
@@ -77,12 +101,15 @@ function stripTrailingKVs(text: string) {
   return text;
 }
 
+/**
+ * Parse trailing "Key: Value;" pairs into an object.
+ */
 function parseTrailingKVs(text: string) {
   const obj: Record<string, unknown> = {};
   if (!text) return { obj, cleaned: text };
   const tail = text.slice(-800);
   const re = /([A-Za-z0-9\s&\-]+):\s*([^;]+);/g;
-  let match;
+  let match: RegExpExecArray | null;
   let any = false;
   while ((match = re.exec(tail))) {
     const k = match[1].trim();
@@ -98,6 +125,9 @@ function parseTrailingKVs(text: string) {
   return { obj, cleaned: text };
 }
 
+/**
+ * Parse adaptation_scenarios JSON stored as string in Ad.new_scenario.
+ */
 export const parseScenarios = (ad: Ad): AdaptationScenario[] => {
   if (!ad?.new_scenario) return [];
   try {
@@ -111,6 +141,10 @@ export const parseScenarios = (ad: Ad): AdaptationScenario[] => {
   }
 };
 
+/**
+ * Cleanup adaptation scenarios:
+ * - remove useless "visual elements" headings from lists.
+ */
 export const sanitizeScenarios = (scenarios: AdaptationScenario[]): AdaptationScenario[] => {
   return scenarios.map((s) => {
     try {
@@ -137,6 +171,9 @@ export const sanitizeScenarios = (scenarios: AdaptationScenario[]): AdaptationSc
   });
 };
 
+/**
+ * Build a short visual summary from structured headings or fallback text.
+ */
 function mkShort(found: Record<string, string>, fallback: string) {
   const f = (k: string) =>
     String(found[k] || '')
@@ -156,13 +193,24 @@ function mkShort(found: Record<string, string>, fallback: string) {
   return alt || '';
 }
 
+/**
+ * Remove extra markdown symbols like '*' and trim.
+ */
 export function cleanExtraSymbols(text: string) {
-  return text.replace(/\*/g, '').trim();
+  return String(text || '')
+    .replace(/\*/g, '')
+    .trim();
 }
 
+/**
+ * Split visual description into "main" and "extra" paragraphs.
+ * For images: separate by headings.
+ * For video: main is based on video_script.
+ */
 export const getVisualParagraphs = (ad: Ad) => {
   let visualMain: string[] = [];
   let visualExtra: string[] = [];
+
   if (ad.image_description) {
     const p = cleanAndSplit(ad.image_description).filter((x) => {
       const l = x.trim().toLowerCase();
@@ -172,6 +220,7 @@ export const getVisualParagraphs = (ad: Ad) => {
         l === 'visual description：'
       );
     });
+
     p.forEach((x) => {
       const first = (x.split(/\n+/)[0] || '').trim();
       const key = first.replace(/[:。\s]+$/, '').toLowerCase();
@@ -190,6 +239,7 @@ export const getVisualParagraphs = (ad: Ad) => {
     });
     visualExtra = [];
   }
+
   return {
     visualMainParagraphs: visualMain,
     visualExtraParagraphs: visualExtra,
@@ -197,6 +247,14 @@ export const getVisualParagraphs = (ad: Ad) => {
   };
 };
 
+/**
+ * Build a meta object with normalized text:
+ * - Hook, CTA
+ * - Social proof
+ * - Visual description
+ * - Target audience
+ * - Formats & Creative Concepts
+ */
 export const buildMetaAnalysis = (ad: Ad, visualMainParagraphs: string[]) => {
   const ex = ad as unknown as Record<string, unknown>;
   const fcc = {
@@ -227,41 +285,87 @@ export const buildMetaAnalysis = (ad: Ad, visualMainParagraphs: string[]) => {
   } as Record<string, unknown>;
 };
 
+/**
+ * Helper: build JSON payload for AI image/video prompt.
+ * Short, dense, no fluff, only essential fields.
+ */
+function buildVisualPromptJson(
+  found: Record<string, string>,
+  fallback: string,
+  ad: Ad,
+  meta: Record<string, unknown>
+) {
+  // Extracted fields or fallback values
+  const extractedSubject =
+    found['Main Objects and Characters'] ||
+    mkShort(found, fallback) ||
+    cleanExtraSymbols(fallback) ||
+    'Main character or object prominently displayed';
+
+  const extractedScene =
+    found['Setting and Background'] || 'Warm indoor environment with soft ambient lighting';
+
+  const extractedStyle =
+    found['Colors and Style'] ||
+    found['Overall Mood or Feeling'] ||
+    'Clean, modern, warm and inviting color palette';
+
+  const extractedEmotions =
+    found['Visible Emotions'] || 'Positive emotions such as warmth, happiness, comfort';
+
+  // Construct text from ad titles, hooks, CTA, fallback
+  const textParts: string[] = [];
+  if (ad.title) textParts.push(cleanExtraSymbols(ad.title));
+  if (ad.hook) textParts.push(cleanExtraSymbols(ad.hook));
+  if (ad.cta_text) textParts.push(cleanExtraSymbols(ad.cta_text));
+  if (!textParts.length && meta['Hook']) textParts.push(String(meta['Hook']));
+
+  const text_on_image = textParts.join(' | ') || 'Learn more';
+
+  return {
+    subject: extractedSubject,
+    scene: extractedScene,
+    style: extractedStyle,
+    emotions: extractedEmotions,
+    text_on_image,
+  };
+}
+
+/**
+ * Build grouped sections (title + text) for UI / prompt.
+ *
+ * IMPORTANT:
+ *   "Image / Visual Description" now ALWAYS contains JSON TEXT
+ *   (stringified object) with the core prompt data for AI.
+ */
 export const buildGroupedSections = (
   ad: Ad,
   meta: Record<string, unknown>,
-  adaptationScenarios: AdaptationScenario[],
-  visualDerivedFromVideo: boolean
+  adaptationScenarios: AdaptationScenario[]
 ) => {
   const out: { title: string; text: string }[] = [];
-  const ex = ad as unknown as Record<string, unknown>;
   const push = (t: string, v: unknown) => {
     const s = v === null || v === undefined ? '' : String(v);
-    if (s && s.trim() && !out.find((item) => item.title === t)) out.push({ title: t, text: s });
+    if (s && s.trim() && !out.find((item) => item.title === t)) {
+      out.push({ title: t, text: s.trim() });
+    }
   };
 
+  // 1. Basic ad meta
   push('Title', ad.title);
-  push('Duplicate Ad Text', cleanAndSplit(ad.duplicates_ad_text).join('\n\n'));
-  push('Caption', cleanAndSplit(ad.caption).join('\n\n'));
-  push('Call to Action', cleanExtraSymbols(ad.cta_text));
-  push('Link', ad.link_url);
-  push('Page / Publisher', ad.page_name);
-  push('Archive ID', ad.ad_archive_id);
-  push('Format', ad.display_format);
-  push('Concept', ad.concept);
-  push('Realisation', (ex.realisation as string) || '');
-  push('Topic', (ex.topic as string) || '');
+
+  // 2. Base ad text (fallback)
+  const baseAdText =
+    cleanAndSplit(ad.text).join('\n\n') ||
+    cleanAndSplit(ad.caption).join('\n\n') ||
+    cleanAndSplit(ad.duplicates_ad_text).join('\n\n');
+  push('Ad Text', cleanExtraSymbols(baseAdText));
+
+  // 3. Hook & CTA as separate core fields
   push('Hook', cleanExtraSymbols(String(ad.hook || meta['Hook'] || '')));
-  push('Character', (ex.character as string) || '');
-  push('Video Script', visualDerivedFromVideo ? '' : cleanAndSplit(ad.video_script).join('\n\n'));
-  push('Audio Script', cleanAndSplit((ex.audio_script as string) || '').join('\n\n'));
+  push('Call to Action', cleanExtraSymbols(ad.cta_text || String(meta['CTA'] || '')));
 
-  let fccInline: Record<string, unknown> | undefined = meta['Formats & Creative Concepts'] as
-    | Record<string, unknown>
-    | undefined;
-
-  const imageRawOrig = String(ad.image_description || meta['Visual Description'] || '').trim();
-  let imageRaw = imageRawOrig;
+  // 4. Visual description for image
   const imageHeadings = [
     'Main Objects and Characters',
     'Setting and Background',
@@ -270,6 +374,14 @@ export const buildGroupedSections = (
     'Overall Mood or Feeling',
   ];
 
+  const imageRawOrig = String(ad.image_description || meta['Visual Description'] || '').trim();
+  let imageRaw = imageRawOrig;
+
+  let fccInline: Record<string, unknown> | undefined = meta['Formats & Creative Concepts'] as
+    | Record<string, unknown>
+    | undefined;
+
+  // Try to extract JSON from image description (to enrich meta)
   const extractedImage = tryParseJsonFromText(imageRaw);
   if (extractedImage.parsed) {
     const p = extractedImage.parsed;
@@ -288,13 +400,14 @@ export const buildGroupedSections = (
       };
   }
 
-  if (!imageRaw) push('Image / Visual Description', meta['Visual Description']);
-  else {
+  // Build JSON prompt text for image visual
+  if (imageRaw) {
     let rem = imageRaw;
     const found: Record<string, string> = {};
     const headingsPattern = imageHeadings
       .map((h) => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
       .join('|');
+
     for (const heading of imageHeadings) {
       const re = new RegExp(
         `${heading}[:：]?\\s*([\\s\\S]*?)(?=(?:${headingsPattern})[:：]?\\s|$)`,
@@ -306,22 +419,32 @@ export const buildGroupedSections = (
         rem = rem.replace(m[0], '').trim();
       }
     }
-    const shortPrompt = mkShort(found, imageRaw);
-    const visualText = fccInline
-      ? `${shortPrompt}\n\n${Object.entries(fccInline)
-          .map(([k, v]) => `${k}: ${cleanExtraSymbols(String(v))}`)
-          .join('\n')}`
-      : shortPrompt;
-    const adTextReplacement = visualText || cleanAndSplit(ad.text).join('\n\n');
-    out.splice(1, 0, { title: 'Ad Text', text: adTextReplacement });
+
+    const promptJson = buildVisualPromptJson(found, imageRaw, ad, meta);
+    const visualText = JSON.stringify(promptJson, null, 2);
+
+    // If base ad text is very weak, we can reuse subject as summary
+    if ((!baseAdText || baseAdText.length < 10) && promptJson.subject) {
+      const adTextSection = out.find((s) => s.title === 'Ad Text');
+      if (adTextSection) adTextSection.text = promptJson.subject;
+    }
+
+    // MAIN: Image / Visual Description now holds JSON string
     push('Image / Visual Description', visualText);
-    for (const h of imageHeadings) if (found[h]) push(h, found[h]);
+  } else if (meta['Visual Description']) {
+    const fallback = String(meta['Visual Description'] || '');
+    const promptJson = buildVisualPromptJson({}, fallback, ad, meta);
+    const visualText = JSON.stringify(promptJson, null, 2);
+    push('Image / Visual Description', visualText);
   }
 
+  // 5. Video-based visual description (if any)
   let videoRaw = String(ad.video_script || '').trim();
   let audioStyle = '';
+
   if (videoRaw) videoRaw = stripLeading(videoRaw);
 
+  // If no direct video_script, try to get visual elements from adaptation scenarios
   if (!videoRaw) {
     let sc: AdaptationScenario[] = [];
     if (Array.isArray(adaptationScenarios) && adaptationScenarios.length)
@@ -330,7 +453,9 @@ export const buildGroupedSections = (
       try {
         const parsed = parseScenarios(ad);
         if (Array.isArray(parsed) && parsed.length) sc = sanitizeScenarios(parsed);
-      } catch {}
+      } catch {
+        // ignore
+      }
     }
     for (const s of sc) {
       const vis = s?.technical_task_json?.visual_elements;
@@ -345,6 +470,7 @@ export const buildGroupedSections = (
     }
   }
 
+  // Extract JSON from video-based description if present
   if (videoRaw) {
     const extracted = tryParseJsonFromText(videoRaw);
     if (extracted.parsed) {
@@ -364,6 +490,7 @@ export const buildGroupedSections = (
         };
     }
 
+    // Build compact JSON for video visual
     const foundVideo: Record<string, string> = {};
     const headingsPatternV = imageHeadings
       .map((h) => h.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
@@ -380,23 +507,27 @@ export const buildGroupedSections = (
         remV = remV.replace(m[0], '').trim();
       }
     }
-    const shortPromptV = mkShort(foundVideo, videoRaw);
-    const visualTextV = fccInline
-      ? `${shortPromptV}\n\n${Object.entries(fccInline)
-          .map(([k, v]) => `${k}: ${cleanExtraSymbols(String(v))}`)
-          .join('\n')}`
-      : shortPromptV;
 
-    push('Image / Visual Description', visualTextV || meta['Visual Description']);
-    for (const h of imageHeadings) if (foundVideo[h]) push(h, foundVideo[h]);
+    const promptJsonV = buildVisualPromptJson(foundVideo, videoRaw, ad, meta);
+    const visualTextV = JSON.stringify(promptJsonV, null, 2);
+
+    // If we don't have image description, use video visual JSON as main one
+    if (!out.find((s) => s.title === 'Image / Visual Description')) {
+      push('Image / Visual Description', visualTextV);
+    }
   }
+
   if (audioStyle) push('Audio Style', audioStyle);
 
+  // 6. Audio-related core info
   push('Sound Transcription', meta['Sound Transcription']);
   push('Audio Description', meta['Audio Description']);
+
+  // 7. Social proof & target audience
   push('Social Proof', meta['Social Proof']);
   push('Target Audience', meta['Target Audience']);
 
+  // 8. Formats & Creative Concepts – flatten into readable text
   const finalFcc =
     fccInline || (meta['Formats & Creative Concepts'] as Record<string, unknown> | undefined);
   if (finalFcc) {
@@ -409,10 +540,37 @@ export const buildGroupedSections = (
   return out;
 };
 
+/**
+ * Build a compact JSON object with ONLY core information.
+ * This is convenient to send as a prompt payload to an LLM.
+ */
+export const buildCorePromptJson = (
+  ad: Ad,
+  meta: Record<string, unknown>,
+  adaptationScenarios: AdaptationScenario[]
+) => {
+  const sections = buildGroupedSections(ad, meta, adaptationScenarios);
+  const get = (title: string) => sections.find((s) => s.title === title)?.text?.trim() || '';
+
+  return {
+    title: get('Title'),
+    adText: get('Ad Text'),
+    visualDescriptionJson: get('Image / Visual Description'), // JSON text
+    hook: get('Hook'),
+    cta: get('Call to Action'),
+    soundTranscription: get('Sound Transcription'),
+    audioDescription: get('Audio Description'),
+    socialProof: get('Social Proof'),
+    targetAudience: get('Target Audience'),
+    formatsAndCreativeConcepts: get('Formats & Creative Concepts'),
+  };
+};
+
 export default {
   parseScenarios,
   sanitizeScenarios,
   getVisualParagraphs,
   buildMetaAnalysis,
   buildGroupedSections,
+  buildCorePromptJson,
 };

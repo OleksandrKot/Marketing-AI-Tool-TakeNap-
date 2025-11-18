@@ -58,18 +58,12 @@ function AdCardComponent({ ad, relatedAds = [], from }: AdCardProps) {
       </CardHeader>
 
       <CardContent className="p-6 pt-0 flex-grow">
-        <div
-          className="relative mb-3 bg-slate-100 rounded-xl overflow-hidden group-hover:shadow-md transition-shadow duration-300"
-          style={{ paddingTop: '56.25%' }}
-        >
-          <div className="absolute inset-0">
-            <img
-              src={publicSrc}
-              alt={title}
-              className="w-full h-full object-cover transition-all duration-300 group-hover:scale-105"
-            />
-          </div>
-          <div className="absolute inset-0 bg-gradient-to-t from-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+        <div className="mb-3 bg-slate-100 rounded-xl overflow-hidden group-hover:shadow-md transition-shadow duration-300 flex items-center justify-center h-56 md:h-64">
+          <img
+            src={publicSrc}
+            alt={title}
+            className="max-h-full max-w-full object-contain transition-all duration-300 group-hover:scale-105"
+          />
         </div>
 
         <p className="text-sm text-slate-600 line-clamp-3 mb-3 leading-relaxed">

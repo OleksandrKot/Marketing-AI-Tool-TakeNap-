@@ -263,16 +263,26 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
 
   return {
     title: `${ad.title || 'Creative'} - ${ad.page_name} | TakeNap`,
-    description: ad.text ? ad.text.substring(0, 160) : `Creative from ${ad.page_name}`,
+    description: ad.text
+      ? ad.text.substring(0, 160)
+      : ad.title
+      ? ad.title.substring(0, 160)
+      : `Creative from ${ad.page_name}`,
     openGraph: {
       title: ad.title || 'Creative',
-      description: ad.text?.substring(0, 160),
+      description:
+        ad.text?.substring(0, 160) ||
+        ad.title?.substring(0, 160) ||
+        `Creative from ${ad.page_name}`,
       images: ad.video_preview_image_url ? [ad.video_preview_image_url] : [],
     },
     twitter: {
       card: 'summary_large_image',
       title: ad.title || 'Creative',
-      description: ad.text?.substring(0, 160),
+      description:
+        ad.text?.substring(0, 160) ||
+        ad.title?.substring(0, 160) ||
+        `Creative from ${ad.page_name}`,
       images: ad.video_preview_image_url ? [ad.video_preview_image_url] : [],
     },
   };
@@ -333,12 +343,7 @@ export default async function CreativePage({ params, searchParams }: CreativePag
 
   const metaAnalysis = buildMetaAnalysis(ad as Ad, visualMainParagraphs);
 
-  const groupedSections = buildGroupedSections(
-    ad as Ad,
-    metaAnalysis,
-    adaptationScenarios,
-    visualDerivedFromVideo
-  );
+  const groupedSections = buildGroupedSections(ad as Ad, metaAnalysis, adaptationScenarios);
 
   return (
     <Suspense fallback={<AdDetailsSkeleton />}>

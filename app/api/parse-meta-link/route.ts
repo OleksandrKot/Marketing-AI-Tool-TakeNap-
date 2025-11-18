@@ -15,7 +15,13 @@ function getErrorMessage(e: unknown): string {
 // API для парсингу Meta Ad Library посилань
 export async function POST(request: NextRequest) {
   try {
-    const { metaLink, creativeType = 'all' } = await request.json();
+    const {
+      metaLink,
+      creativeType = 'all',
+      limit = 10,
+      user_id = null,
+      job_id = null,
+    } = await request.json();
 
     if (!metaLink || !metaLink.includes('facebook.com/ads/library')) {
       return NextResponse.json({ error: 'Invalid Meta Ad Library link' }, { status: 400 });
@@ -66,6 +72,9 @@ export async function POST(request: NextRequest) {
         action: 'parse_meta_link',
         meta_link: metaLink,
         creative_type: creativeType,
+        limit: limit,
+        user_id: user_id,
+        job_id: job_id,
         product_key: productKey,
         product_name: productName,
         page_id: pageId,

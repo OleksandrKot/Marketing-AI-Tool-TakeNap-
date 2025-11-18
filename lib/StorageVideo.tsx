@@ -2,7 +2,6 @@
 
 import React, { useEffect, useState } from 'react';
 import type { Ad } from '@/lib/types';
-import StorageImage from '@/lib/StorageImage';
 
 interface Props {
   ad: Ad;
@@ -13,6 +12,7 @@ interface Props {
 export default function StorageVideo({ ad, className, onLoaded }: Props) {
   const isVideo = ad.display_format === 'VIDEO';
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
+  const [posterSrc, setPosterSrc] = useState<string | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -36,11 +36,19 @@ export default function StorageVideo({ ad, className, onLoaded }: Props) {
     async function load() {
       if (!ad.ad_archive_id || !isVideo) {
         setVideoSrc(null);
+        setPosterSrc(null);
         return;
       }
 
-      const v = await fetchSignedUrl('test8public', `${ad.ad_archive_id}.mp4`);
-      if (mounted) setVideoSrc(v);
+      const [v, p] = await Promise.all([
+        fetchSignedUrl('test8public', `${ad.ad_archive_id}.mp4`),
+        fetchSignedUrl('test10public_preview', `${ad.ad_archive_id}.jpeg`),
+      ]);
+
+      if (mounted) {
+        setVideoSrc(v);
+        setPosterSrc(p);
+      }
     }
 
     load();
@@ -51,32 +59,22 @@ export default function StorageVideo({ ad, className, onLoaded }: Props) {
 
   return (
     <div className={className ?? 'relative w-full h-full'}>
-      {ad.ad_archive_id ? (
-        <div className="absolute inset-0 w-full h-full">
-          <StorageImage
-            bucket={'test10public_preview'}
-            path={`${ad.ad_archive_id}.jpeg`}
-            alt={ad.title || 'preview'}
-            fill={true}
-            className="absolute inset-0 w-full h-full object-contain transition-opacity duration-300"
-          />
-        </div>
-      ) : null}
-
       {isVideo ? (
         videoSrc ? (
-          <video
-            src={videoSrc}
-            poster={undefined}
-            controls
-            preload="metadata"
-            className="w-full h-full object-contain relative z-10"
-            onLoadedData={() => {
-              onLoaded?.();
-            }}
-          >
-            <track kind="captions" srcLang="en" src="" />
-          </video>
+          <div className="flex items-center justify-center h-full">
+            <video
+              src={videoSrc}
+              poster={posterSrc ?? undefined}
+              controls
+              preload="metadata"
+              className="max-h-full max-w-full object-contain relative z-10"
+              onLoadedData={() => {
+                onLoaded?.();
+              }}
+            >
+              <track kind="captions" srcLang="en" src="" />
+            </video>
+          </div>
         ) : (
           <div className="relative w-full h-full flex items-center justify-center z-10">
             <p className="text-slate-500">Video not available</p>

@@ -39,6 +39,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { formatDate } from '@/lib/utils';
 import type { Ad } from '@/lib/types';
+import PromptEditor from './PromptEditor';
 
 // Динамічне завантаження компонентів
 const ShareModal = dynamic(() => import('../../creative/[id]/share-modal'), {
@@ -536,6 +537,11 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                 </CardContent>
               </Card>
             )}
+
+            {/* Prompt editor: editable JSON and final prompt */}
+            <div>
+              <PromptEditor ad={ad} />
+            </div>
           </div>
         </div>
 

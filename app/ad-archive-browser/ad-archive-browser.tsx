@@ -57,6 +57,14 @@ export function AdArchiveBrowser({
     visibleAdsCount,
     totalAds,
     currentPageAdsCount,
+    numberToScrape,
+    setNumberToScrape,
+    importJobId,
+    importStatus,
+    importSavedCreatives,
+    importTotalCreatives,
+    autoClearProcessing,
+    setAutoClearProcessing,
   } = state;
 
   return (
@@ -78,6 +86,19 @@ export function AdArchiveBrowser({
         filteredAdsCount={filteredAdsByType.length}
         videoAds={videoAds}
         clearProductFilter={clearProductFilter}
+        processingMessage={processingMessage}
+        processingDone={state.processingDone}
+        numberToScrape={numberToScrape}
+        setNumberToScrape={setNumberToScrape}
+        importJobId={importJobId}
+        importStatus={importStatus}
+        importSavedCreatives={importSavedCreatives}
+        importTotalCreatives={importTotalCreatives}
+        autoClearProcessing={autoClearProcessing}
+        setAutoClearProcessing={setAutoClearProcessing}
+        clearProcessingDisplay={state.clearProcessingDisplay}
+        requestLogs={state.requestLogs}
+        clearRequestLogs={state.clearRequestLogs}
       />
 
       <div className="flex items-center justify-between w-full gap-4 mb-8">

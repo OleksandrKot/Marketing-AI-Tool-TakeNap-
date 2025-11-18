@@ -13,7 +13,8 @@ export const getImageKey = (imageUrl: string): string => {
 
 export const getGroupingKey = (ad: Ad): string => {
   const imageKey = ad.image_url ? getImageKey(ad.image_url) : 'no-image';
-  const textKey = ad.text ? ad.text.substring(0, 100).replace(/\s+/g, ' ').trim() : 'no-text';
+  const rawText = ad.text || ad.title || '';
+  const textKey = rawText ? rawText.substring(0, 100).replace(/\s+/g, ' ').trim() : 'no-text';
   return `${imageKey}|${textKey}`;
 };
 
