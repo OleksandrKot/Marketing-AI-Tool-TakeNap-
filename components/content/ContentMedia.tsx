@@ -16,42 +16,25 @@ export default function ContentMedia({ ad }: Props) {
   const [imageLoaded, setImageLoaded] = useState(false);
 
   return (
-    <div className="relative w-full h-full">
-      {ad.ad_archive_id && (
-        <div className="absolute inset-0 z-0">
-          <StorageImage
-            bucket={isVideo ? 'test10public_preview' : 'test9bucket_photo'}
-            path={`${ad.ad_archive_id}.jpeg`}
-            alt={ad.title || 'preview'}
-            fill={true}
-            className="w-full h-full object-cover"
-            onLoad={() => setImageLoaded(true)}
-          />
-        </div>
-      )}
-      {/* eslint-disable jsx-a11y/media-has-caption */}
+    <div className="w-full flex items-center justify-center">
+      {/* For archived assets, show the preview/poster as the element's poster or image above the fold. */}
       {isVideo ? (
-        <StorageVideo
-          ad={ad}
-          className="w-full h-full object-fit relative z-10"
-          onLoaded={() => setVideoLoaded(true)}
-        />
+        <div className="flex items-center justify-center h-[360px] md:h-[480px]">
+          <StorageVideo ad={ad} className="h-full" onLoaded={() => setVideoLoaded(true)} />
+        </div>
       ) : (
-        <div className="relative w-full h-full">
-          {/* For non-video, show storage preview if available, otherwise placeholder will be rendered by StorageImage */}
+        <div className="flex items-center justify-center h-[360px] md:h-[480px]">
           {ad.ad_archive_id ? (
-            <div className="absolute inset-0">
-              <StorageImage
-                bucket={isVideo ? 'test10public_preview' : 'test9bucket_photo'}
-                path={`${ad.ad_archive_id}.jpeg`}
-                alt={ad.title || 'preview'}
-                fill={true}
-                className="w-full h-full object-fit"
-                onLoad={() => setImageLoaded(true)}
-              />
-            </div>
+            <StorageImage
+              bucket={isVideo ? 'test10public_preview' : 'test9bucket_photo'}
+              path={`${ad.ad_archive_id}.jpeg`}
+              alt={ad.title || 'preview'}
+              fill={false}
+              className="max-h-full max-w-full object-contain mx-auto"
+              onLoad={() => setImageLoaded(true)}
+            />
           ) : (
-            <div className="w-full h-full flex items-center justify-center">
+            <div className="h-full flex items-center justify-center">
               <div className="text-center">
                 <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3" />
                 <p className="text-slate-500">No preview available</p>

@@ -48,7 +48,7 @@ export default function ContentTabClient({
       <div ref={leftColRef} className="lg:col-span-2 space-y-6">
         <Card className="overflow-hidden border-slate-200 rounded-2xl">
           <CardContent className="p-0">
-            <div className="relative aspect-video bg-slate-100">
+            <div className="bg-slate-100 flex items-center justify-center h-[360px] md:h-[480px] overflow-hidden">
               <ContentMedia ad={adData} />
             </div>
           </CardContent>

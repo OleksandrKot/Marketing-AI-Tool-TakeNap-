@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import { supabase } from '@/lib/supabase';
 import type { Ad, FilterOptions, ViewMode } from '@/lib/types';
 import { getAds } from '../actions';
 import * as utils from './utils';
@@ -26,8 +27,233 @@ export function useAdArchive(
   const [selectedCreativeType, setSelectedCreativeType] = useState<'all' | 'video' | 'image'>(
     'all'
   );
+  const [numberToScrape, setNumberToScrape] = useState<number>(10);
+  const [importJobId, setImportJobId] = useState<string | null>(null);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
+  const [importSavedCreatives, setImportSavedCreatives] = useState<number | null>(null);
+  const [importTotalCreatives, setImportTotalCreatives] = useState<number | null>(null);
+  const [autoClearProcessing, setAutoClearProcessing] = useState<boolean>(true);
+  // lightweight request logs (shown in UI as stacked entries)
+  const [requestLogs, setRequestLogs] = useState<
+    Array<{
+      id: string;
+      time: string;
+      type?: string;
+      text?: string;
+      meta?: Record<string, unknown>;
+    }>
+  >([]);
 
-  // Compute availableTags from ads and memoize to avoid recomputation on unrelated state changes
+  const pushRequestLog = useCallback(
+    (entry: { type?: string; text?: string; meta?: Record<string, unknown> }) => {
+      try {
+        setRequestLogs((prev) => {
+          const next = [
+            ...prev,
+            {
+              id: `${Date.now()}_${Math.floor(Math.random() * 100000)}`,
+              time: new Date().toISOString(),
+              ...entry,
+            },
+          ];
+          return next.slice(-500);
+        });
+      } catch (e) {
+        console.debug('pushRequestLog error', e);
+      }
+    },
+    []
+  );
+  const clearRequestLogs = useCallback(() => {
+    try {
+      setRequestLogs([]);
+    } catch (e) {
+      console.debug('clearRequestLogs error', e);
+    }
+  }, []);
+  const jobChannelRef = useRef<ReturnType<(typeof supabase)['channel']> | null>(null);
+  const clearDisplayTimeoutRef = useRef<number | null>(null);
+
+  const scheduleClearDisplay = useCallback(
+    (delay = 6000) => {
+      if (!autoClearProcessing) return;
+      try {
+        if (clearDisplayTimeoutRef.current) {
+          window.clearTimeout(clearDisplayTimeoutRef.current);
+          clearDisplayTimeoutRef.current = null;
+        }
+        clearDisplayTimeoutRef.current = window.setTimeout(() => {
+          setProcessingMessage('');
+          setImportStatus(null);
+          setImportSavedCreatives(null);
+          setImportTotalCreatives(null);
+          setProcessingDone(false);
+          setImportJobId(null);
+          clearDisplayTimeoutRef.current = null;
+        }, delay) as unknown as number;
+      } catch (e) {
+        console.debug('scheduleClearDisplay error', e);
+      }
+    },
+    [autoClearProcessing]
+  );
+
+  const clearScheduledDisplay = useCallback(() => {
+    try {
+      if (clearDisplayTimeoutRef.current) {
+        window.clearTimeout(clearDisplayTimeoutRef.current);
+        clearDisplayTimeoutRef.current = null;
+      }
+    } catch (e) {
+      console.debug('clearScheduledDisplay error', e);
+    }
+  }, []);
+
+  const clearProcessingDisplay = useCallback(() => {
+    try {
+      // cancel any scheduled clear
+      if (clearDisplayTimeoutRef.current) {
+        window.clearTimeout(clearDisplayTimeoutRef.current);
+        clearDisplayTimeoutRef.current = null;
+      }
+      // reset processing-related state
+      setProcessingMessage('');
+      setImportStatus(null);
+      setImportSavedCreatives(null);
+      setImportTotalCreatives(null);
+      setProcessingDone(false);
+      setImportJobId(null);
+
+      // unsubscribe job-specific channel if present
+      try {
+        jobChannelRef.current?.unsubscribe();
+      } catch (e) {
+        console.debug('Error unsubscribing job channel during clear', e);
+      }
+    } catch (e) {
+      console.debug('clearProcessingDisplay error', e);
+    }
+  }, []);
+
+  // Persistent user-level realtime subscription. This listens for any import_status
+  // changes for the currently-authenticated user so the UI shows imports started
+  // by other tabs or earlier runs as well.
+  useEffect(() => {
+    let userChannel: ReturnType<(typeof supabase)['channel']> | null = null;
+    let mounted = true;
+
+    (async () => {
+      try {
+        const userRes = await supabase.auth.getUser();
+        const uid = userRes?.data?.user?.id ?? null;
+        if (!uid) return;
+
+        // Create user-level channel
+        try {
+          userChannel = supabase
+            .channel(`import-status-user-${uid}`)
+            .on(
+              'postgres_changes',
+              { event: '*', schema: 'public', table: 'import_status', filter: `user_id=eq.${uid}` },
+              (payload: unknown) => {
+                try {
+                  const row = getRowFromPayload(payload);
+                  if (!row) return;
+                  const message = row['message'];
+                  if (typeof message === 'string') {
+                    setProcessingMessage((prev) => prev || message);
+                    // new activity — cancel any scheduled clear
+                    clearScheduledDisplay();
+                    try {
+                      pushRequestLog({
+                        type: 'status',
+                        text: String(message),
+                        meta: { source: 'user_subscription' },
+                      });
+                    } catch (e) {
+                      /* noop */
+                    }
+                  }
+                  const status = row['status'];
+                  if (typeof status === 'string') setImportStatus(status);
+                  const saved = row['saved_creatives'];
+                  if (typeof saved === 'number') setImportSavedCreatives(saved);
+                  const total = row['total_creatives'];
+                  if (typeof total === 'number') setImportTotalCreatives(total);
+                  const jobId = row['job_id'];
+                  if (typeof jobId === 'string') setImportJobId(jobId);
+                } catch (e) {
+                  console.debug('Error handling user import_status payload', e);
+                }
+              }
+            )
+            .subscribe();
+        } catch (e) {
+          console.debug('Could not create user import_status subscription', e);
+          userChannel = null;
+        }
+
+        // Read the latest import_status row for this user so UI can show current state immediately
+        try {
+          const { data: latest, error: latestErr } = await supabase
+            .from('import_status')
+            .select('*')
+            .eq('user_id', uid)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (latestErr) {
+            console.debug('Error fetching latest import_status for user', latestErr);
+          } else if (latest && mounted) {
+            if (latest.message) {
+              setProcessingMessage((prev) => prev || latest.message);
+              clearScheduledDisplay();
+              try {
+                pushRequestLog({
+                  type: 'status',
+                  text: String(latest.message),
+                  meta: { source: 'user_initial_fetch' },
+                });
+              } catch (e) {
+                /* noop */
+              }
+            }
+            if (latest.status) setImportStatus(latest.status);
+            if (typeof latest.saved_creatives === 'number')
+              setImportSavedCreatives(latest.saved_creatives);
+            if (typeof latest.total_creatives === 'number')
+              setImportTotalCreatives(latest.total_creatives);
+            if (latest.job_id) setImportJobId(latest.job_id);
+            if (latest.status === 'done' || latest.status === 'error') {
+              setProcessingDone(true);
+              scheduleClearDisplay(6000);
+            }
+          }
+        } catch (e) {
+          console.debug('Exception reading latest import_status for user', e);
+        }
+      } catch (e) {
+        console.debug('Error initializing user import_status subscription', e);
+      }
+    })();
+
+    return () => {
+      mounted = false;
+      try {
+        userChannel?.unsubscribe();
+      } catch (e) {
+        console.debug('Error unsubscribing user import_status channel', e);
+      }
+      try {
+        // cleanup any job-specific channel
+        jobChannelRef.current?.unsubscribe();
+      } catch (e) {
+        console.debug('Error unsubscribing job channel on unmount', e);
+      }
+    };
+  }, []);
+
   const availableTags: string[] = useMemo(() => {
     try {
       if (typeof utils.uniqueTags === 'function') {
@@ -74,6 +300,17 @@ export function useAdArchive(
       if (Array.isArray(r.data)) return r.data as Ad[];
     }
     return [];
+  }
+
+  // Normalize a realtime payload to a plain record if possible.
+  function getRowFromPayload(p: unknown): Record<string, unknown> | null {
+    if (!p || typeof p !== 'object') return null;
+    const obj = p as Record<string, unknown>;
+    if ('record' in obj && obj.record && typeof obj.record === 'object')
+      return obj.record as Record<string, unknown>;
+    if ('new' in obj && obj.new && typeof obj.new === 'object')
+      return obj.new as Record<string, unknown>;
+    return obj;
   }
 
   const adIdToGroupMap: Record<string, Ad[]> = useMemo(() => {
@@ -208,25 +445,177 @@ export function useAdArchive(
       setIsLoading(true);
 
       try {
+        // try to obtain currently authenticated user id (if any) and include it
+        let userId: string | null = null;
+        try {
+          const userRes = await supabase.auth.getUser();
+          userId = userRes?.data?.user?.id ?? null;
+        } catch (e) {
+          console.debug('Could not get supabase user id for parse request', e);
+        }
+
+        // generate a job id so we can track import_status for this request
+        let jobId: string;
+        try {
+          const cryptoAny = globalThis.crypto as unknown as { randomUUID?: () => string };
+          if (cryptoAny && typeof cryptoAny.randomUUID === 'function') {
+            jobId = cryptoAny.randomUUID();
+          } else {
+            jobId = `job_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+          }
+        } catch (e) {
+          jobId = `job_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
+        }
+
+        // Prepare a realtime subscription to import_status for this job
+        let channel: ReturnType<(typeof supabase)['channel']> | null = null;
+        try {
+          channel = supabase
+            .channel(`import-status-${jobId}`)
+            .on(
+              'postgres_changes',
+              {
+                event: '*',
+                schema: 'public',
+                table: 'import_status',
+                filter: `job_id=eq.${jobId}`,
+              },
+              (payload: unknown) => {
+                try {
+                  const row = getRowFromPayload(payload);
+                  if (!row) return;
+                  // If a userId was provided, ensure the row belongs to that user
+                  const maybeUserId = row['user_id'];
+                  if (userId && maybeUserId && String(maybeUserId) !== String(userId)) return;
+                  // update processing message and mark done on status
+                  const message = row['message'];
+                  if (typeof message === 'string') {
+                    setProcessingMessage((prev) => prev || message);
+                    try {
+                      pushRequestLog({
+                        type: 'status',
+                        text: String(message),
+                        meta: { source: 'job_subscription' },
+                      });
+                    } catch (e) {
+                      /* noop */
+                    }
+                  }
+                  const status = row['status'];
+                  if (typeof status === 'string') setImportStatus(status);
+                  const saved = row['saved_creatives'];
+                  if (typeof saved === 'number') setImportSavedCreatives(saved);
+                  const total = row['total_creatives'];
+                  if (typeof total === 'number') setImportTotalCreatives(total);
+                  const jobIdFromRow = row['job_id'];
+                  if (typeof jobIdFromRow === 'string') setImportJobId(jobIdFromRow);
+
+                  if (status === 'done' || status === 'error') {
+                    setProcessingDone(true);
+                    // schedule clearing of the display after a short delay
+                    scheduleClearDisplay(6000);
+                    // unsubscribe when finished
+                    try {
+                      channel?.unsubscribe();
+                    } catch (e) {
+                      console.debug('Error unsubscribing import-status channel', e);
+                    }
+                  }
+                } catch (e) {
+                  console.debug('Error handling import_status payload', e);
+                }
+              }
+            )
+            .subscribe();
+        } catch (e) {
+          console.debug('Could not create import_status subscription', e);
+          channel = null;
+        }
+
+        // set initial processing states
+        console.debug('[AdArchive] starting parse, jobId=', jobId, 'userId=', userId);
+        setProcessingMessage('Креативи підвантажуються...');
+        // Do not open the modal automatically — show inline processing info instead.
+        setShowAINewsModal(false);
+        setProcessingDone(false);
+
         const response = await fetch('/api/parse-meta-link', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ metaLink: searchValue, creativeType: selectedCreativeType }),
+          body: JSON.stringify({
+            metaLink: searchValue,
+            creativeType: selectedCreativeType,
+            limit: numberToScrape,
+            user_id: userId,
+            job_id: jobId,
+          }),
         });
-        const result = await response.json();
+        let result: unknown = null;
+        try {
+          result = await response.json();
+        } catch (e) {
+          result = { success: response.ok, error: 'Invalid JSON response' } as Record<
+            string,
+            unknown
+          >;
+        }
 
-        if (result.success) {
-          const successMessages = {
-            all: `Successfully processed link! New ads (video & static) will appear shortly.`,
-            video: `Successfully processed link! New video ads will appear shortly.`,
-            image: `Successfully processed link! New static ads will appear shortly.`,
-          };
-          setProcessingMessage(successMessages[selectedCreativeType]);
-          // Keep the modal open and instruct the user to refresh to see new ads
-          setProcessingDone(true);
+        // request/response logging removed
+
+        // persist job id locally so UI can read it later if needed
+        // record parse start in logs
+        // parse_start logging removed
+        setImportJobId(jobId);
+
+        // store channel reference if job-specific subscription was created above
+        if (channel) jobChannelRef.current = channel;
+
+        // Try to read any existing import_status row for this job so we show DB message immediately.
+        try {
+          const { data: existing, error: existingErr } = await supabase
+            .from('import_status')
+            .select('*')
+            .eq('job_id', jobId)
+            .order('created_at', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          if (existingErr) {
+            console.debug('Error fetching initial import_status row', existingErr);
+          } else if (existing) {
+            if (existing.message) {
+              setProcessingMessage((prev) => prev || existing.message);
+              clearScheduledDisplay();
+            }
+            if (existing.status) setImportStatus(existing.status);
+            if (typeof existing.saved_creatives === 'number')
+              setImportSavedCreatives(existing.saved_creatives);
+            if (typeof existing.total_creatives === 'number')
+              setImportTotalCreatives(existing.total_creatives);
+            if (existing.status === 'done' || existing.status === 'error') {
+              setProcessingDone(true);
+              scheduleClearDisplay(6000);
+            }
+          }
+        } catch (e) {
+          console.debug('Exception reading initial import_status', e);
+        }
+
+        // safely inspect result object
+        const resultObj =
+          result && typeof result === 'object' ? (result as Record<string, unknown>) : null;
+        if (resultObj && resultObj['success'] === true) {
+          // Do not set a static success message here — rely on `import_status` DB updates
+          // The Make scenario should insert/update `import_status` rows; realtime
+          // subscription and initial DB read will surface messages and final status.
         } else {
-          setShowAINewsModal(false);
-          alert(`Error processing link:\n\n${result.message || result.error}`);
+          // If the webhook returned an error, surface it in the inline status
+          const errMsg = resultObj
+            ? String(resultObj['message'] ?? resultObj['error'] ?? 'Unknown error from webhook')
+            : 'Unknown error from webhook';
+          setProcessingMessage(`Error: ${errMsg}`);
+          setImportStatus('error');
+          setProcessingDone(true);
         }
       } catch (error: unknown) {
         setShowAINewsModal(false);
@@ -261,7 +650,7 @@ export function useAdArchive(
         setIsLoading(false);
       }
     }
-  }, [productFilter, selectedTags, selectedCreativeType]);
+  }, [productFilter, selectedTags, selectedCreativeType, numberToScrape]);
 
   const videoAds = useMemo(
     () => filteredAdsByType.filter((ad) => ad.display_format === 'VIDEO').length,
@@ -488,6 +877,84 @@ export function useAdArchive(
     // Intentionally include key deps so polling reacts to filter changes
   }, [pollIntervalMs, productFilter, selectedTags, selectedCreativeType]);
 
+  // Allow external callers to subscribe to a specific job id. This will attach a
+  // realtime listener for that job and fetch the latest DB row immediately.
+  const subscribeToJob = useCallback(async (jobId: string, userId?: string | null) => {
+    if (!jobId) return;
+
+    // cleanup previous job channel
+    try {
+      jobChannelRef.current?.unsubscribe();
+    } catch (e) {
+      console.debug('Error unsubscribing previous job channel', e);
+    }
+
+    // Read latest row for the job
+    try {
+      const { data: existing, error: existingErr } = await supabase
+        .from('import_status')
+        .select('*')
+        .eq('job_id', jobId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingErr) {
+        console.debug('Error fetching import_status row for subscribeToJob', existingErr);
+      } else if (existing) {
+        if (existing.message) {
+          setProcessingMessage((prev) => prev || existing.message);
+        }
+        if (existing.status) setImportStatus(existing.status);
+        if (typeof existing.saved_creatives === 'number')
+          setImportSavedCreatives(existing.saved_creatives);
+        if (typeof existing.total_creatives === 'number')
+          setImportTotalCreatives(existing.total_creatives);
+        if (existing.job_id) setImportJobId(existing.job_id);
+      }
+    } catch (e) {
+      console.debug('Exception reading import_status in subscribeToJob', e);
+    }
+
+    // create per-job realtime listener
+    try {
+      const channel = supabase
+        .channel(`import-status-sub-${jobId}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'import_status', filter: `job_id=eq.${jobId}` },
+          (payload: unknown) => {
+            try {
+              const row = getRowFromPayload(payload);
+              if (!row) return;
+              // If userId was provided, ensure row belongs to that user
+              const maybeUserId = row['user_id'];
+              if (userId && maybeUserId && String(maybeUserId) !== String(userId)) return;
+              const message = row['message'];
+              if (typeof message === 'string') {
+                setProcessingMessage((prev) => prev || message);
+              }
+              const status = row['status'];
+              if (typeof status === 'string') setImportStatus(status);
+              const saved = row['saved_creatives'];
+              if (typeof saved === 'number') setImportSavedCreatives(saved);
+              const total = row['total_creatives'];
+              if (typeof total === 'number') setImportTotalCreatives(total);
+              const jobIdFromRow = row['job_id'];
+              if (typeof jobIdFromRow === 'string') setImportJobId(jobIdFromRow);
+            } catch (e) {
+              console.debug('Error handling subscribeToJob payload', e);
+            }
+          }
+        )
+        .subscribe();
+
+      jobChannelRef.current = channel;
+    } catch (e) {
+      console.debug('Could not create job import_status subscription', e);
+    }
+  }, []);
+
   return {
     ads,
     setAds,
@@ -525,6 +992,18 @@ export function useAdArchive(
     videoAds,
     processingDone,
     setProcessingDone,
+    numberToScrape,
+    setNumberToScrape,
+    importJobId,
+    importStatus,
+    importSavedCreatives,
+    importTotalCreatives,
+    autoClearProcessing,
+    setAutoClearProcessing,
+    requestLogs,
+    clearRequestLogs,
+    clearProcessingDisplay,
+    subscribeToJob,
   };
 }
 

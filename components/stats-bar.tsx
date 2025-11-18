@@ -15,6 +15,8 @@ interface StatsBarProps {
   value?: string;
   onChange?: (value: string) => void;
   onEnterPress?: () => void;
+  numberToScrape?: number;
+  setNumberToScrape?: (n: number) => void;
 }
 
 function StatsBarComponent({
@@ -25,8 +27,12 @@ function StatsBarComponent({
   value,
   onChange,
   onEnterPress,
+  numberToScrape = 10,
+  setNumberToScrape = () => {},
 }: StatsBarProps) {
   const [competitorLink, setCompetitorLink] = useState('');
+  const [scrapeInput, setScrapeInput] = useState<string>(String(numberToScrape ?? 10));
+  const [scrapeError, setScrapeError] = useState<string | null>(null);
   const [selectedFormat, setSelectedFormat] = useState<string | null>(null);
   const [selectedDateRange, setSelectedDateRange] = useState<string | null>(null);
   const [isFormatDropdownOpen, setIsFormatDropdownOpen] = useState(false);
@@ -68,6 +74,76 @@ function StatsBarComponent({
                 }}
                 className="border-slate-200 rounded-lg h-9 text-sm text-slate-700 placeholder:text-slate-500 bg-slate-50 pl-10"
               />
+            </div>
+            <div className="mt-3">
+              <p className="text-xs text-slate-400 mb-1">Number of creatives to fetch</p>
+              <Input
+                type="number"
+                min={1}
+                max={1000}
+                value={scrapeInput}
+                aria-invalid={!!scrapeError}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  // allow empty while typing
+                  setScrapeInput(raw);
+                  // quick client-side check: only digits and optional spaces
+                  const asNum = parseInt(raw || '0', 10);
+                  if (raw.trim() === '') {
+                    setScrapeError('Enter a number');
+                    return;
+                  }
+                  if (Number.isNaN(asNum)) {
+                    setScrapeError('Invalid number');
+                    return;
+                  }
+                  if (asNum < 1) {
+                    setScrapeError('Must be at least 1');
+                    return;
+                  }
+                  if (asNum > 1000) {
+                    setScrapeError('Max is 1000');
+                    return;
+                  }
+                  setScrapeError(null);
+                }}
+                onBlur={() => {
+                  const asNum = parseInt(scrapeInput || '0', 10);
+                  if (!scrapeInput || scrapeInput.trim() === '') {
+                    // restore previous valid value
+                    setScrapeInput(String(numberToScrape ?? 10));
+                    setScrapeError(null);
+                    return;
+                  }
+                  if (Number.isNaN(asNum) || asNum < 1 || asNum > 1000) {
+                    setScrapeError('Enter a number between 1 and 1000');
+                    return;
+                  }
+                  // commit
+                  setNumberToScrape?.(asNum);
+                  setScrapeError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    const asNum = parseInt(scrapeInput || '0', 10);
+                    if (!scrapeInput || scrapeInput.trim() === '') {
+                      setScrapeInput(String(numberToScrape ?? 10));
+                      setScrapeError(null);
+                      return;
+                    }
+                    if (Number.isNaN(asNum) || asNum < 1 || asNum > 1000) {
+                      setScrapeError('Enter a number between 1 and 1000');
+                      return;
+                    }
+                    setNumberToScrape?.(asNum);
+                    setScrapeError(null);
+                  }
+                }}
+                className={`border-slate-200 rounded-lg h-9 text-sm text-slate-700 w-40 ${
+                  scrapeError ? 'border-red-500' : ''
+                }`}
+              />
+              {scrapeError && <div className="text-xs text-red-600 mt-1">{scrapeError}</div>}
             </div>
           </div>
         </CardContent>

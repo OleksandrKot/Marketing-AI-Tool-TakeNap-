@@ -1,12 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X, Zap, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import type { Ad } from '@/lib/types';
+import { supabase } from '@/lib/supabase';
 import ModalWrapper from '@/components/modals/ModalWrapper';
+
+interface PersonaOption {
+  id: string | number;
+  name?: string;
+  profile?: string;
+  needs?: string;
+}
 
 interface CreateAdaptationModalProps {
   ad: Ad;
@@ -16,6 +24,8 @@ interface CreateAdaptationModalProps {
 export default function CreateAdaptationModal({ ad, onClose }: CreateAdaptationModalProps) {
   const [prompt, setPrompt] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [personas, setPersonas] = useState<PersonaOption[]>([]);
+  const [selectedPersonaId, setSelectedPersonaId] = useState<string | null>(null);
 
   const handleCreateAdaptation = async () => {
     if (!prompt.trim()) return;
@@ -25,10 +35,24 @@ export default function CreateAdaptationModal({ ad, onClose }: CreateAdaptationM
     // Тут буде логіка відправки до Make.com коли буде готовий ланцюг
     try {
       // Симулюємо API запит
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+
+      // If user selected a persona, prepend persona description to prompt
+      let finalPrompt = prompt;
+      if (selectedPersonaId) {
+        const persona = personas.find(
+          (p) => p.id === selectedPersonaId || p.id === Number(selectedPersonaId)
+        );
+        if (persona) {
+          const personaPrefix = `Persona: ${persona.name}\nProfile: ${persona.profile}\nPrimary needs: ${persona.needs}\n`;
+          finalPrompt = personaPrefix + '\n' + prompt;
+        }
+      }
 
       // Показуємо успішне повідомлення
-      alert('Adaptation request sent! New scenarios will appear shortly.');
+      // For now we show the final prompt for user confirmation
+      console.debug('[CreateAdaptation] finalPrompt', finalPrompt);
+      alert('Adaptation request sent! Final prompt:\n\n' + finalPrompt.substring(0, 800));
       onClose();
     } catch (error) {
       alert('Error creating adaptation. Please try again.');
@@ -36,6 +60,32 @@ export default function CreateAdaptationModal({ ad, onClose }: CreateAdaptationM
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      try {
+        const { data: userRes } = await supabase.auth.getUser();
+        const user = userRes?.data?.user ?? null;
+        if (user) {
+          const { data, error } = await supabase
+            .from('user_personas')
+            .select('*')
+            .eq('user_id', user.id)
+            .order('created_at', { ascending: true });
+          if (!error && data && mounted) {
+            setPersonas(data as unknown as PersonaOption[]);
+            return;
+          }
+        }
+      } catch (e) {
+        console.debug('[CreateAdaptation] failed to load personas', e);
+      }
+    })();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   return (
     <ModalWrapper isOpen={true} onClose={onClose} panelClassName="p-4">
@@ -82,6 +132,36 @@ export default function CreateAdaptationModal({ ad, onClose }: CreateAdaptationM
                 <Sparkles className="h-4 w-4 text-orange-500 mr-2" />
                 <h4 className="text-sm font-medium text-slate-700">Adaptation Prompt</h4>
               </div>
+
+              {/* Persona selector */}
+              <div className="mb-3">
+                <label htmlFor="persona-select" className="block text-xs text-slate-500 mb-2">
+                  Use persona
+                </label>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={selectedPersonaId ?? ''}
+                    id="persona-select"
+                    onChange={(e) => setSelectedPersonaId(e.target.value || null)}
+                    className="rounded-lg border border-slate-200 p-2 bg-white"
+                  >
+                    <option value="">— None (custom prompt) —</option>
+                    {personas.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => window.open('/personas-settings', '_self')}
+                  >
+                    Manage Personas
+                  </Button>
+                </div>
+              </div>
+
               <Textarea
                 placeholder='Describe how you want to adapt this creative. For example: "Create versions for different age groups", "Adapt for fitness enthusiasts vs beginners", "Make versions for different emotional states"...'
                 value={prompt}

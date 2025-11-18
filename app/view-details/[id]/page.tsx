@@ -153,10 +153,17 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
 
   return {
     title: `${ad.title || 'Creative'} - ${ad.page_name} | TakeNap`,
-    description: ad.text ? ad.text.substring(0, 160) : `Creative from ${ad.page_name}`,
+    description: ad.text
+      ? ad.text.substring(0, 160)
+      : ad.title
+      ? ad.title.substring(0, 160)
+      : `Creative from ${ad.page_name}`,
     openGraph: {
       title: ad.title || 'Creative',
-      description: ad.text?.substring(0, 160),
+      description:
+        ad.text?.substring(0, 160) ||
+        ad.title?.substring(0, 160) ||
+        `Creative from ${ad.page_name}`,
       images: ad.video_preview_image_url ? [ad.video_preview_image_url] : [],
     },
   };

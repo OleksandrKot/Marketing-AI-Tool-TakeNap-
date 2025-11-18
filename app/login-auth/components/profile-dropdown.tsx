@@ -148,14 +148,11 @@ export function ProfileDropdown() {
                 </span>
               </DropdownMenuItem>
               <DropdownMenuItem
-                onClick={() => router.push('/wip/personas-settings')}
+                onClick={() => router.push('/personas-settings')}
                 title="Coming soon"
                 className="hover:bg-slate-100 cursor-pointer text-slate-700"
               >
-                Personas settings{' '}
-                <span className="ml-2 text-xs font-medium bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full">
-                  WIP
-                </span>
+                Personas settings
               </DropdownMenuItem>
             </>
           ) : (

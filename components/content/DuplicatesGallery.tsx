@@ -22,11 +22,34 @@ export default function DuplicatesGallery({ duplicates }: Props) {
         {imageArray.map((url, index) => {
           const cleanUrl = url;
 
-          // If it's an absolute URL, render directly
+          // helper to fetch signed url for storage objects
+          async function fetchSignedUrl(bucket: string, path: string) {
+            try {
+              const res = await fetch('/api/storage/signed-url', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ bucket, path, expires: 60 }),
+              });
+              const j = await res.json().catch(() => null);
+              if (!j || typeof j !== 'object') return null;
+              const rec = j as Record<string, unknown>;
+              const u = rec.url;
+              return typeof u === 'string' ? u : null;
+            } catch (_e) {
+              return null;
+            }
+          }
+
+          // If it's an absolute URL, render directly as a clickable link
           if (cleanUrl.startsWith('http')) {
             return (
               <div key={index} className="space-y-2">
-                <div className="relative aspect-video bg-slate-100 rounded-lg overflow-hidden">
+                <a
+                  href={cleanUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="relative aspect-video bg-slate-100 rounded-lg overflow-hidden block hover:opacity-90 transition-opacity"
+                >
                   <img
                     src={cleanUrl}
                     alt={`Duplicate ${index + 1}`}
@@ -34,20 +57,9 @@ export default function DuplicatesGallery({ duplicates }: Props) {
                     onError={(e) => {
                       const target = e.target as HTMLImageElement;
                       target.style.display = 'none';
-                      target.parentElement?.classList.add('flex', 'items-center', 'justify-center');
-                      target.parentElement!.innerHTML = `
-                        <div class="text-center">
-                          <div class="w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center mx-auto mb-2">
-                            <svg class="h-6 w-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                            </svg>
-                          </div>
-                          <p class="text-xs text-slate-400">No preview</p>
-                        </div>
-                      `;
                     }}
                   />
-                </div>
+                </a>
                 <p className="text-sm text-slate-700 line-clamp-2">Duplicate {index + 1}</p>
               </div>
             );
@@ -61,7 +73,19 @@ export default function DuplicatesGallery({ duplicates }: Props) {
             const path = parts.join('/');
             return (
               <div key={index} className="space-y-2">
-                <div className="relative aspect-video bg-slate-100 rounded-lg overflow-hidden">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const signed = await fetchSignedUrl(bucket, path);
+                    if (signed) {
+                      window.open(signed, '_blank', 'noopener');
+                    } else {
+                      // fallback: open storage preview route if available
+                      alert('Unable to open duplicate preview');
+                    }
+                  }}
+                  className="relative aspect-video bg-slate-100 rounded-lg overflow-hidden block hover:opacity-95 transition-opacity"
+                >
                   <StorageImage
                     bucket={bucket}
                     path={path}
@@ -69,7 +93,7 @@ export default function DuplicatesGallery({ duplicates }: Props) {
                     className="w-full h-full object-cover"
                     fill={false}
                   />
-                </div>
+                </button>
                 <p className="text-sm text-slate-700 line-clamp-2">Duplicate {index + 1}</p>
               </div>
             );
