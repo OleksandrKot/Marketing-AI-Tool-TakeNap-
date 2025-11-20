@@ -1,12 +1,23 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
+import ConfirmModal from '@/components/modals/confirm-modal';
 import { Button } from '@/components/ui/button';
 import { supabase } from '@/lib/supabase';
 import { log } from '@/lib/logger';
 
 export default function CopyToProfileButton({ token }: { token: string }) {
   const [loading, setLoading] = useState(false);
+  const [warnOpen, setWarnOpen] = useState(false);
+  const [warnMsg, setWarnMsg] = useState<string | undefined>(undefined);
+  const [warnTitle, setWarnTitle] = useState<string | undefined>(undefined);
+  const [showLogin, setShowLogin] = useState(false);
+
+  const LoginModal = dynamic(() => import('@/app/login-auth/LoginModal'), {
+    ssr: false,
+    loading: () => null,
+  });
 
   const handleCopy = async () => {
     try {
@@ -23,7 +34,8 @@ export default function CopyToProfileButton({ token }: { token: string }) {
         }
       }
       if (!accessToken) {
-        alert('Please sign in to copy this persona to your profile');
+        // open login modal so user can sign in
+        setShowLogin(true);
         setLoading(false);
         return;
       }
@@ -39,15 +51,23 @@ export default function CopyToProfileButton({ token }: { token: string }) {
 
       const j = await res.json();
       if (res.ok && j?.success) {
-        alert('Persona copied to your profile');
+        setWarnTitle('Success');
+        setWarnMsg('Persona copied to your profile');
+        setWarnOpen(true);
       } else if (j?.error) {
-        alert('Failed: ' + j.error);
+        setWarnTitle('Copy failed');
+        setWarnMsg('Failed: ' + j.error);
+        setWarnOpen(true);
       } else {
-        alert('Failed to copy persona');
+        setWarnTitle('Copy failed');
+        setWarnMsg('Failed to copy persona');
+        setWarnOpen(true);
       }
     } catch (e) {
       log.error('copy failed', e);
-      alert('Failed to copy persona');
+      setWarnTitle('Copy failed');
+      setWarnMsg('Failed to copy persona');
+      setWarnOpen(true);
     } finally {
       setLoading(false);
     }
@@ -58,6 +78,16 @@ export default function CopyToProfileButton({ token }: { token: string }) {
       <Button onClick={handleCopy} disabled={loading} className="bg-blue-600 text-white">
         {loading ? 'Copying...' : 'Copy to my profile'}
       </Button>
+      {showLogin ? <LoginModal onClose={() => setShowLogin(false)} /> : null}
+      <ConfirmModal
+        isOpen={warnOpen}
+        title={warnTitle}
+        message={warnMsg}
+        confirmLabel="OK"
+        cancelLabel=""
+        onConfirm={() => setWarnOpen(false)}
+        onCancel={() => setWarnOpen(false)}
+      />
     </div>
   );
 }

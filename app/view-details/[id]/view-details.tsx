@@ -37,9 +37,12 @@ const CollectionModal = dynamic(
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ProfileDropdown } from '@/app/login-auth/components/profile-dropdown';
 import { formatDate } from '@/lib/utils';
 import type { Ad } from '@/lib/types';
 import PromptEditor from './PromptEditor';
+import { supabase } from '@/lib/supabase';
+type SupabaseSessionLike = { session?: { user?: Record<string, unknown> } };
 
 // Динамічне завантаження компонентів
 const ShareModal = dynamic(() => import('../../creative/[id]/share-modal'), {
@@ -66,6 +69,11 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [showLogin, setShowLogin] = useState(false);
+  const LoginModal = dynamic(() => import('@/app/login-auth/LoginModal'), {
+    ssr: false,
+    loading: () => null,
+  });
 
   const isVideo = ad.display_format === 'VIDEO';
   const createdDate = new Date(ad.created_at);
@@ -195,6 +203,19 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
 
   const handleCopyToClipboard = useCallback(async (text: string, fieldName: string) => {
     try {
+      // Require authenticated session to copy
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const sessionUser = (sessionData as unknown as SupabaseSessionLike).session?.user;
+        if (!sessionUser) {
+          setShowLogin(true);
+          return;
+        }
+      } catch (e) {
+        setShowLogin(true);
+        return;
+      }
+
       await navigator.clipboard.writeText(text);
       setCopiedField(fieldName);
       setTimeout(() => setCopiedField(null), 2000);
@@ -290,6 +311,7 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
             >
               <Share2 className="h-5 w-5" />
             </Button>
+            <ProfileDropdown />
           </div>
         </div>
 
@@ -397,6 +419,46 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                   </div>
                 </div>
                 <div className="p-6 space-y-4">
+                  {/* Quick Meta Library actions */}
+                  {(ad.meta_ad_url || ad.ad_archive_id || ad.page_name) && (
+                    <div className="flex items-center gap-3 mb-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          const adUrl =
+                            ad.meta_ad_url ||
+                            (ad.ad_archive_id
+                              ? `https://www.facebook.com/ads/library/?id=${encodeURIComponent(
+                                  ad.ad_archive_id
+                                )}`
+                              : null);
+                          if (adUrl) window.open(adUrl, '_blank', 'noopener,noreferrer');
+                        }}
+                        className="text-slate-700"
+                        title="Open in Meta Ad Library"
+                      >
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        Open in Meta Ad Library
+                      </Button>
+
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (!ad.page_name) return;
+                          const q = encodeURIComponent(ad.page_name || '');
+                          const pageUrl = `https://www.facebook.com/ads/library/?q=${q}&active_status=all&ad_type=all&country=US`;
+                          window.open(pageUrl, '_blank', 'noopener,noreferrer');
+                        }}
+                        className="text-slate-700"
+                        title="Open Meta Library Page"
+                      >
+                        <Link className="h-4 w-4 mr-2" />
+                        Open Meta Library Page
+                      </Button>
+                    </div>
+                  )}
                   <div className="bg-slate-50 rounded-xl p-4">
                     <h3 className="text-sm font-medium text-slate-500 mb-2">Format</h3>
                     <Badge
@@ -478,6 +540,46 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                     </div>
                   </div>
                   <div className="p-6 space-y-4">
+                    {/* Meta Library quick actions for links card */}
+                    {(ad.meta_ad_url || ad.ad_archive_id || ad.page_name) && (
+                      <div className="flex items-center gap-3 mb-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            const adUrl =
+                              ad.meta_ad_url ||
+                              (ad.ad_archive_id
+                                ? `https://www.facebook.com/ads/library/?id=${encodeURIComponent(
+                                    ad.ad_archive_id
+                                  )}`
+                                : null);
+                            if (adUrl) window.open(adUrl, '_blank', 'noopener,noreferrer');
+                          }}
+                          className="text-slate-700"
+                          title="Open in Meta Ad Library"
+                        >
+                          <ExternalLink className="h-4 w-4 mr-2" />
+                          Open in Meta Ad Library
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            if (!ad.page_name) return;
+                            const q = encodeURIComponent(ad.page_name || '');
+                            const pageUrl = `https://www.facebook.com/ads/library/?q=${q}&active_status=all&ad_type=all&country=US`;
+                            window.open(pageUrl, '_blank', 'noopener,noreferrer');
+                          }}
+                          className="text-slate-700"
+                          title="Open Meta Library Page"
+                        >
+                          <Link className="h-4 w-4 mr-2" />
+                          Open Meta Library Page
+                        </Button>
+                      </div>
+                    )}
                     {ad.link_url && (
                       <div>
                         <h3 className="text-sm font-medium text-slate-500 mb-2">Landing Page</h3>
@@ -554,6 +656,7 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
             creativeId={creativeId}
           />
         )}
+        {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
       </div>
     </div>
   );

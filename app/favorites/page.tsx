@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
+import ConfirmModal from '@/components/modals/confirm-modal';
 import Link from 'next/link';
 import StorageImage from '@/lib/StorageImage';
 import { useFavorites } from '@/lib/hooks/useFavorites';
@@ -23,6 +24,7 @@ export default function FavoritesPage() {
   const [sortOrder, setSortOrder] = useState<SortOrder>('newest');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [isLoading, setIsLoading] = useState(false);
+  const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
 
   // Fetch ad metadata (image preview) for favorites
   useEffect(() => {
@@ -98,9 +100,8 @@ export default function FavoritesPage() {
   );
 
   const handleClearAll = useCallback(() => {
-    if (window.confirm('Are you sure you want to clear all favorites? This cannot be undone.')) {
-      for (const f of favorites) removeFavorite(f.creativeId);
-    }
+    // Open confirm modal instead of browser confirm
+    setClearConfirmOpen(true);
   }, [favorites, removeFavorite]);
 
   const filteredFavorites = favorites
@@ -457,6 +458,18 @@ export default function FavoritesPage() {
           </div>
         )}
       </div>
+      <ConfirmModal
+        isOpen={clearConfirmOpen}
+        title="Clear all favorites"
+        message={'Are you sure you want to clear all favorites? This cannot be undone.'}
+        confirmLabel="Clear"
+        cancelLabel="Cancel"
+        onConfirm={() => {
+          for (const f of favorites) removeFavorite(f.creativeId);
+          setClearConfirmOpen(false);
+        }}
+        onCancel={() => setClearConfirmOpen(false)}
+      />
     </div>
   );
 }

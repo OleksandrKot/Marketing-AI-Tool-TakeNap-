@@ -7,7 +7,9 @@ import { Button } from '@/components/ui/button';
 // logging UI removed
 import { FilterBar } from '@/components/filter-bar';
 import { Search } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
+import { supabase } from '@/lib/supabase';
 import * as RadixSwitch from '@radix-ui/react-switch';
 import type { FilterOptions } from '@/lib/types';
 
@@ -48,6 +50,8 @@ type Props = {
   clearRequestLogs?: () => void;
 };
 
+type SupabaseSessionLike = { session?: { user?: Record<string, unknown> } };
+
 export default function SearchControls({
   productFilter,
   onProductFilterChange,
@@ -64,6 +68,7 @@ export default function SearchControls({
   videoAds,
   numberToScrape = 10,
   setNumberToScrape = () => {},
+  clearProductFilter = () => {},
   clearProcessingDisplay = () => {},
   processingMessage,
   processingDone = false,
@@ -73,7 +78,16 @@ export default function SearchControls({
   requestLogs = [],
   clearRequestLogs = () => {},
 }: Props) {
+  // Some callers pass extra callbacks; avoid strict JSX prop mismatch by using a flexible prop type
+  const FilterBarAny = FilterBar as unknown as React.ComponentType<Record<string, unknown>>;
   const [showLogs, setShowLogs] = useState<boolean>(false);
+  const [showLogin, setShowLogin] = useState(false);
+  const [showSignInTip, setShowSignInTip] = useState(false);
+  const signInTipTimeoutRef = useRef<number | null>(null);
+  const LoginModal = dynamic(() => import('@/app/login-auth/LoginModal'), {
+    ssr: false,
+    loading: () => null,
+  });
   // persist user preference for logs visibility
   useEffect(() => {
     try {
@@ -112,6 +126,17 @@ export default function SearchControls({
       ? 'text-green-700'
       : 'text-blue-700';
 
+  // Clear any pending sign-in tip timeout on unmount
+  useEffect(() => {
+    return () => {
+      try {
+        if (signInTipTimeoutRef.current) window.clearTimeout(signInTipTimeoutRef.current);
+      } catch (e) {
+        /* ignore */
+      }
+    };
+  }, []);
+
   return (
     <>
       {productFilter && (
@@ -130,7 +155,40 @@ export default function SearchControls({
           columnIndex={0}
           value={productFilter}
           onChange={onProductFilterChange}
-          onEnterPress={onSearch}
+          onEnterPress={async () => {
+            try {
+              const { data: sessionData } = await supabase.auth.getSession();
+              const sessionUser = (sessionData as unknown as SupabaseSessionLike).session?.user;
+              if (!sessionUser) {
+                setShowLogin(true);
+                setShowSignInTip(true);
+                try {
+                  if (signInTipTimeoutRef.current) window.clearTimeout(signInTipTimeoutRef.current);
+                } catch (e) {}
+                signInTipTimeoutRef.current = window.setTimeout(
+                  () => setShowSignInTip(false),
+                  2500
+                ) as unknown as number;
+                return;
+              }
+            } catch (e) {
+              setShowLogin(true);
+              setShowSignInTip(true);
+              try {
+                if (signInTipTimeoutRef.current) window.clearTimeout(signInTipTimeoutRef.current);
+              } catch (err) {}
+              signInTipTimeoutRef.current = window.setTimeout(
+                () => setShowSignInTip(false),
+                2500
+              ) as unknown as number;
+              return;
+            }
+            try {
+              await onSearch?.();
+            } catch (e) {
+              console.debug('onSearch error', e);
+            }
+          }}
           numberToScrape={numberToScrape}
           setNumberToScrape={setNumberToScrape}
         />
@@ -182,7 +240,7 @@ export default function SearchControls({
       {/* Info / Processing box: shows 'How it works' by default, but when a job is active
           or a processing message exists, renders live status and progress. */}
       <div
-        className={`mb-6 border rounded-xl p-4 flex items-start justify-between space-x-3 ${
+        className={`mb-6 border rounded-xl p-4 flex flex-col md:flex-row md:items-start md:justify-between space-y-3 md:space-y-0 ${
           isActiveProcessing ? 'bg-blue-50 border-blue-200' : 'bg-blue-50 border-blue-200'
         }`}
       >
@@ -232,7 +290,7 @@ export default function SearchControls({
           )}
         </div>
 
-        <div className="flex items-center ml-4 space-x-3">
+        <div className="flex items-center md:ml-4 space-x-3 mt-2 md:mt-0">
           <div className="flex items-center gap-3">
             <RadixSwitch.Root
               className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
@@ -264,32 +322,79 @@ export default function SearchControls({
       {/* Request logs area (visible when toggle enabled) */}
       {/* request logs UI removed */}
 
-      <div className="mb-8 grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+      <div className="mb-8 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 items-center">
         <div className="flex justify-center">
-          <Button
-            onClick={onSearch}
-            className="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl transition-all duration-200 hover:shadow-md hover:shadow-blue-500/25 h-9 w-full flex items-center justify-center"
-          >
-            <Search className="h-4 w-4 mr-2" />
-            {selectedCreativeType === 'all'
-              ? 'Search All Types'
-              : selectedCreativeType === 'video'
-              ? 'Search Videos Only'
-              : 'Search Static Only'}
-          </Button>
+          <div className="relative w-full max-w-md">
+            {showSignInTip && (
+              <div className="absolute -top-9 right-0 bg-black text-white text-xs px-3 py-1 rounded shadow-md z-20">
+                Sign in to search
+              </div>
+            )}
+
+            <Button
+              onClick={async () => {
+                try {
+                  const { data: sessionData } = await supabase.auth.getSession();
+                  const sessionUser = (sessionData as unknown as SupabaseSessionLike).session?.user;
+                  if (!sessionUser) {
+                    setShowLogin(true);
+                    setShowSignInTip(true);
+                    try {
+                      if (signInTipTimeoutRef.current)
+                        window.clearTimeout(signInTipTimeoutRef.current);
+                    } catch (e) {}
+                    signInTipTimeoutRef.current = window.setTimeout(
+                      () => setShowSignInTip(false),
+                      2500
+                    ) as unknown as number;
+                    return;
+                  }
+                } catch (e) {
+                  setShowLogin(true);
+                  setShowSignInTip(true);
+                  try {
+                    if (signInTipTimeoutRef.current)
+                      window.clearTimeout(signInTipTimeoutRef.current);
+                  } catch (err) {}
+                  signInTipTimeoutRef.current = window.setTimeout(
+                    () => setShowSignInTip(false),
+                    2500
+                  ) as unknown as number;
+                  return;
+                }
+
+                try {
+                  await onSearch?.();
+                } catch (e) {
+                  console.debug('onSearch error', e);
+                }
+              }}
+              className="h-10 px-4 bg-slate-800 hover:bg-slate-900 text-white rounded w-full text-center"
+            >
+              <Search className="h-4 w-4 mr-2 inline" />
+              {selectedCreativeType === 'all'
+                ? 'Search All Types'
+                : selectedCreativeType === 'video'
+                ? 'Search Videos Only'
+                : 'Search Static Only'}
+            </Button>
+          </div>
         </div>
 
         <div className="md:col-span-2 flex justify-start w-full">
-          <FilterBar
+          <FilterBarAny
             onFilterChange={handleFilterChange}
             pages={pages}
             className="w-full"
             availableTags={availableTags}
             selectedTags={selectedTags}
             onTagsChange={handleTagsChange}
+            clearProductFilter={clearProductFilter}
           />
         </div>
+        {/* Last request log (helps correlate with import_status rows) */}
       </div>
+      {showLogin ? <LoginModal onClose={() => setShowLogin(false)} /> : null}
     </>
   );
 }

@@ -343,7 +343,12 @@ export default async function CreativePage({ params, searchParams }: CreativePag
 
   const metaAnalysis = buildMetaAnalysis(ad as Ad, visualMainParagraphs);
 
-  const groupedSections = buildGroupedSections(ad as Ad, metaAnalysis, adaptationScenarios);
+  const groupedSections = buildGroupedSections(
+    ad as Ad,
+    metaAnalysis,
+    adaptationScenarios,
+    visualDerivedFromVideo
+  );
 
   return (
     <Suspense fallback={<AdDetailsSkeleton />}>

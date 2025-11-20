@@ -1,13 +1,17 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import StorageImage from '@/lib/StorageImage';
+import ConfirmModal from '@/components/modals/confirm-modal';
 
 interface Props {
   duplicates?: string | null;
 }
 
 export default function DuplicatesGallery({ duplicates }: Props) {
+  const [warnOpen, setWarnOpen] = useState(false);
+  const [warnMsg, setWarnMsg] = useState<string | undefined>(undefined);
+
   const imageArray =
     duplicates
       ?.split(';')
@@ -80,8 +84,9 @@ export default function DuplicatesGallery({ duplicates }: Props) {
                     if (signed) {
                       window.open(signed, '_blank', 'noopener');
                     } else {
-                      // fallback: open storage preview route if available
-                      alert('Unable to open duplicate preview');
+                      // fallback: open storage preview route if available — show modal
+                      setWarnMsg('Unable to open duplicate preview');
+                      setWarnOpen(true);
                     }
                   }}
                   className="relative aspect-video bg-slate-100 rounded-lg overflow-hidden block hover:opacity-95 transition-opacity"
@@ -127,6 +132,15 @@ export default function DuplicatesGallery({ duplicates }: Props) {
           );
         })}
       </div>
+      <ConfirmModal
+        isOpen={warnOpen}
+        title="Unable to open preview"
+        message={warnMsg}
+        confirmLabel="OK"
+        cancelLabel=""
+        onConfirm={() => setWarnOpen(false)}
+        onCancel={() => setWarnOpen(false)}
+      />
     </div>
   );
 }
