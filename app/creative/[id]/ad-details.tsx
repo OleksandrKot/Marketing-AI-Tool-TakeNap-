@@ -16,6 +16,7 @@ const CollectionModal = dynamic(
 );
 import { HeartButton } from '@/app/favorites/components/HeartButton';
 import { Button } from '@/components/ui/button';
+import { ProfileDropdown } from '@/app/login-auth/components/profile-dropdown';
 import { CreativeTabs } from '@/components/creative-tabs';
 import ContentTab from './content-tab.client';
 import { InfoTab } from './info-tab';
@@ -146,6 +147,9 @@ const AdDetails = memo(function AdDetails({
               >
                 <Share2 className="h-5 w-5" />
               </Button>
+              <div className="hidden lg:block">
+                <ProfileDropdown />
+              </div>
             </div>
           </div>
         </div>

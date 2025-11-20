@@ -7,6 +7,9 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Copy } from 'lucide-react';
+import dynamic from 'next/dynamic';
+import { supabase } from '@/lib/supabase';
+type SupabaseSessionLike = { session?: { user?: Record<string, unknown> } };
 
 interface PromptShape {
   persona?: string;
@@ -48,6 +51,11 @@ export default function PromptEditor({ ad }: { ad: Ad }) {
 
   const [fields, setFields] = useState<PromptShape>(initial);
   const [customPrompt, setCustomPrompt] = useState<string>('');
+  const [showLogin, setShowLogin] = useState(false);
+  const LoginModal = dynamic(() => import('@/app/login-auth/LoginModal'), {
+    ssr: false,
+    loading: () => null,
+  });
 
   // keep customPrompt in sync with generated prompt unless user edits it
   const generatedPrompt = useMemo(() => {
@@ -77,6 +85,18 @@ export default function PromptEditor({ ad }: { ad: Ad }) {
 
   async function copyToClipboard(text: string) {
     try {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const sessionUser = (sessionData as unknown as SupabaseSessionLike).session?.user;
+        if (!sessionUser) {
+          setShowLogin(true);
+          return;
+        }
+      } catch (e) {
+        setShowLogin(true);
+        return;
+      }
+
       await navigator.clipboard.writeText(text);
     } catch (e) {
       console.error('Copy failed', e);
@@ -181,6 +201,7 @@ export default function PromptEditor({ ad }: { ad: Ad }) {
           </div>
         </div>
       </CardContent>
+      {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
     </Card>
   );
 }

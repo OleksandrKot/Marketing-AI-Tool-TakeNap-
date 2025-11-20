@@ -19,6 +19,8 @@ import {
 import dynamic from 'next/dynamic';
 import type { Ad, AdaptationScenario } from '@/lib/types';
 import { parseScenarios, sanitizeScenarios } from './utils/adData';
+import { supabase } from '@/lib/supabase';
+// removed unused dynamicLogin import
 
 // Динамічне завантаження модального вікна
 const CreateAdaptationModal = dynamic(() => import('./create-adaptation-modal'), {
@@ -33,6 +35,13 @@ export function AdaptationsTab({ ad }: AdaptationsTabProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [adData, setAdData] = useState<Ad>(ad);
+  const [showLogin, setShowLogin] = useState(false);
+  const LoginModal = dynamic(() => import('@/app/login-auth/LoginModal'), {
+    ssr: false,
+    loading: () => null,
+  });
+
+  type SupabaseSessionLike = { session?: { user?: Record<string, unknown> } };
 
   useEffect(() => {
     let mounted = true;
@@ -74,6 +83,18 @@ export function AdaptationsTab({ ad }: AdaptationsTabProps) {
 
   const handleCopyToClipboard = async (text: string, fieldName: string) => {
     try {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const sessionUser = (sessionData as unknown as SupabaseSessionLike).session?.user;
+        if (!sessionUser) {
+          setShowLogin(true);
+          return;
+        }
+      } catch (e) {
+        setShowLogin(true);
+        return;
+      }
+
       await navigator.clipboard.writeText(text);
       setCopiedField(fieldName);
       setTimeout(() => setCopiedField(null), 2000);
@@ -309,6 +330,7 @@ export function AdaptationsTab({ ad }: AdaptationsTabProps) {
       {showCreateModal && (
         <CreateAdaptationModal ad={adData} onClose={() => setShowCreateModal(false)} />
       )}
+      {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
     </div>
   );
 }

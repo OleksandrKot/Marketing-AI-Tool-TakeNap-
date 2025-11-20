@@ -11,6 +11,10 @@ const FavoritesModal = dynamic(() => import('./FavoritesModal').then((m) => m.de
   ssr: false,
   loading: () => <ModalLoading />,
 });
+const LoginModal = dynamic(() => import('@/app/login-auth/LoginModal'), {
+  ssr: false,
+  loading: () => null,
+});
 
 interface Props {
   creativeId: string;
@@ -20,6 +24,7 @@ export default function HeartButton({ creativeId }: Props) {
   const { isFavorite, toggleFavorite } = useFavorites();
   const [showModal, setShowModal] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
+  const [showLogin, setShowLogin] = useState(false);
 
   // More robust auth check: prefer session (getSession), fallback to getUser
   const checkAuth = useCallback(async () => {
@@ -92,8 +97,7 @@ export default function HeartButton({ creativeId }: Props) {
   const onClick = useCallback(async () => {
     const logged = isLoggedIn === null ? await checkAuth() : !!isLoggedIn;
     if (!logged) {
-      // still allow adding to local favorites for guests
-      toggleFavorite(creativeId);
+      setShowLogin(true);
       return;
     }
 
@@ -117,14 +121,7 @@ export default function HeartButton({ creativeId }: Props) {
         <Heart className={`h-5 w-5 ${isFavorite(creativeId) ? 'fill-current' : ''}`} />
       </Button>
 
-      {/* small inline debug badge showing auth state */}
-      <span
-        className={`ml-2 text-xs font-medium px-2 py-1 rounded-full ${
-          isLoggedIn ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-600'
-        }`}
-      >
-        {isLoggedIn === null ? 'Checking...' : isLoggedIn ? 'Logged in' : 'Guest'}
-      </span>
+      {/* auth badge removed — use global ProfileDropdown for profile controls */}
 
       {showModal && (
         <FavoritesModal
@@ -133,6 +130,7 @@ export default function HeartButton({ creativeId }: Props) {
           creativeId={creativeId}
         />
       )}
+      {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
     </>
   );
 }

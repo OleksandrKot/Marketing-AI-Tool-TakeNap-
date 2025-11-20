@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea';
 import type { Ad } from '@/lib/types';
 import { supabase } from '@/lib/supabase';
 import ModalWrapper from '@/components/modals/ModalWrapper';
+import ConfirmModal from '@/components/modals/confirm-modal';
 
 interface PersonaOption {
   id: string | number;
@@ -26,6 +27,9 @@ export default function CreateAdaptationModal({ ad, onClose }: CreateAdaptationM
   const [isLoading, setIsLoading] = useState(false);
   const [personas, setPersonas] = useState<PersonaOption[]>([]);
   const [selectedPersonaId, setSelectedPersonaId] = useState<string | null>(null);
+  const [warnOpen, setWarnOpen] = useState(false);
+  const [warnMsg, setWarnMsg] = useState<string | undefined>(undefined);
+  const [warnTitle, setWarnTitle] = useState<string | undefined>(undefined);
 
   const handleCreateAdaptation = async () => {
     if (!prompt.trim()) return;
@@ -52,10 +56,14 @@ export default function CreateAdaptationModal({ ad, onClose }: CreateAdaptationM
       // Показуємо успішне повідомлення
       // For now we show the final prompt for user confirmation
       console.debug('[CreateAdaptation] finalPrompt', finalPrompt);
-      alert('Adaptation request sent! Final prompt:\n\n' + finalPrompt.substring(0, 800));
+      setWarnTitle('Adaptation sent');
+      setWarnMsg('Adaptation request sent! Final prompt:\n\n' + finalPrompt.substring(0, 800));
+      setWarnOpen(true);
       onClose();
     } catch (error) {
-      alert('Error creating adaptation. Please try again.');
+      setWarnTitle('Adaptation failed');
+      setWarnMsg('Error creating adaptation. Please try again.');
+      setWarnOpen(true);
     } finally {
       setIsLoading(false);
     }
@@ -247,6 +255,15 @@ export default function CreateAdaptationModal({ ad, onClose }: CreateAdaptationM
           </Button>
         </div>
       </Card>
+      <ConfirmModal
+        isOpen={warnOpen}
+        title={warnTitle}
+        message={warnMsg}
+        confirmLabel="OK"
+        cancelLabel=""
+        onConfirm={() => setWarnOpen(false)}
+        onCancel={() => setWarnOpen(false)}
+      />
     </ModalWrapper>
   );
 }

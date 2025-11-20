@@ -1,6 +1,8 @@
 'use client';
 
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
+import { supabase } from '@/lib/supabase';
 import { Button } from '@/components/ui/button';
 import { Copy, Check } from 'lucide-react';
 
@@ -11,6 +13,11 @@ interface ScriptRendererProps {
 
 export default function ScriptRenderer({ script, copyPrefix = 'script' }: ScriptRendererProps) {
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [showLogin, setShowLogin] = useState(false);
+  const LoginModal = dynamic(() => import('@/app/login-auth/LoginModal'), {
+    ssr: false,
+    loading: () => null,
+  });
 
   if (!script) return null;
 
@@ -23,6 +30,28 @@ export default function ScriptRenderer({ script, copyPrefix = 'script' }: Script
 
   const handleCopy = async (text: string, id: string) => {
     try {
+      // require authentication before allowing clipboard copy
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        let accessToken: string | null = null;
+        const sd = sessionData as unknown;
+        if (sd && typeof sd === 'object') {
+          const sdObj = sd as Record<string, unknown>;
+          const sess = sdObj['session'];
+          if (sess && typeof sess === 'object') {
+            const at = (sess as Record<string, unknown>)['access_token'];
+            if (typeof at === 'string') accessToken = at;
+          }
+        }
+        if (!accessToken) {
+          setShowLogin(true);
+          return;
+        }
+      } catch (e) {
+        setShowLogin(true);
+        return;
+      }
+
       await navigator.clipboard.writeText(text);
       setCopiedField(id);
       setTimeout(() => setCopiedField(null), 2000);
@@ -168,6 +197,7 @@ export default function ScriptRenderer({ script, copyPrefix = 'script' }: Script
 
   return (
     <div>
+      {showLogin ? <LoginModal onClose={() => setShowLogin(false)} /> : null}
       {s.split(/\n/).map((line, idx) => (
         <p key={idx} className="text-slate-700 leading-relaxed mb-1 whitespace-pre-line">
           {line}

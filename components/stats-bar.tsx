@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, memo } from 'react';
+import React, { useState, memo, useEffect, useRef } from 'react';
 import { Eye, Calendar, ChevronDown, Video, X, Search } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -31,12 +31,39 @@ function StatsBarComponent({
   setNumberToScrape = () => {},
 }: StatsBarProps) {
   const [competitorLink, setCompetitorLink] = useState('');
+  const inputRef = useRef<HTMLInputElement | null>(null);
   const [scrapeInput, setScrapeInput] = useState<string>(String(numberToScrape ?? 10));
   const [scrapeError, setScrapeError] = useState<string | null>(null);
   const [selectedFormat, setSelectedFormat] = useState<string | null>(null);
   const [selectedDateRange, setSelectedDateRange] = useState<string | null>(null);
   const [isFormatDropdownOpen, setIsFormatDropdownOpen] = useState(false);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+
+  // Keep internal competitorLink in sync with controlled `value` prop
+  useEffect(() => {
+    try {
+      if (value !== undefined) setCompetitorLink(value);
+    } catch (e) {
+      /* ignore */
+    }
+  }, [value]);
+
+  // Focus and clear input when parent emits a clear event
+  useEffect(() => {
+    const handler = () => {
+      try {
+        setCompetitorLink('');
+        if (inputRef.current) {
+          inputRef.current.focus();
+          inputRef.current.select();
+        }
+      } catch (e) {
+        console.debug('productFilterCleared handler error', e);
+      }
+    };
+    window.addEventListener('productFilterCleared', handler as EventListener);
+    return () => window.removeEventListener('productFilterCleared', handler as EventListener);
+  }, []);
 
   const formatOptions = ['All Formats', 'Video', 'Image'];
 
@@ -58,6 +85,7 @@ function StatsBarComponent({
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
                 placeholder="Product name or Meta Ad Library link..."
+                ref={inputRef}
                 value={value !== undefined ? value : competitorLink}
                 onChange={(e) => {
                   const v = e.target.value;

@@ -58,6 +58,29 @@ export function useAdArchive(
           ];
           return next.slice(-500);
         });
+        // If this is a status-type log, reflect it in the import status UI as well
+        try {
+          if (entry?.type === 'status') {
+            if (typeof entry.text === 'string' && entry.text.trim() !== '') {
+              setProcessingMessage(String(entry.text));
+              // new activity — cancel any scheduled clear
+              clearScheduledDisplay();
+            }
+            const meta = entry.meta ?? {};
+            if (meta && typeof meta === 'object') {
+              const maybeStatus = (meta as Record<string, unknown>)['status'];
+              if (typeof maybeStatus === 'string') setImportStatus(maybeStatus);
+              const maybeJob = (meta as Record<string, unknown>)['job_id'];
+              if (typeof maybeJob === 'string') setImportJobId(maybeJob);
+              const maybeSaved = (meta as Record<string, unknown>)['saved_creatives'];
+              if (typeof maybeSaved === 'number') setImportSavedCreatives(maybeSaved);
+              const maybeTotal = (meta as Record<string, unknown>)['total_creatives'];
+              if (typeof maybeTotal === 'number') setImportTotalCreatives(maybeTotal);
+            }
+          }
+        } catch (e) {
+          console.debug('pushRequestLog: mirror to import status failed', e);
+        }
       } catch (e) {
         console.debug('pushRequestLog error', e);
       }
@@ -290,6 +313,17 @@ export function useAdArchive(
     return map;
   }, [filteredAdsByType]);
 
+  // Build a deduplicated list of ads for the main listing by taking the
+  // first representative from each grouping. This prevents duplicate
+  // creatives from showing multiple times on the main results grid.
+  const dedupedAds = useMemo(() => {
+    const out: Ad[] = [];
+    groupedAll.forEach((groupAds) => {
+      if (groupAds && groupAds.length) out.push(groupAds[0]);
+    });
+    return out;
+  }, [groupedAll]);
+
   // Helper to safely extract an array from API responses which may be either
   // an array or an object containing a `data` array. Avoid using `any` — use
   // unknown and type guards instead.
@@ -322,8 +356,8 @@ export function useAdArchive(
   }, [groupedAll]);
 
   const ungroupedPages = useMemo(
-    () => utils.chunk(filteredAdsByType, itemsPerPage),
-    [filteredAdsByType, itemsPerPage]
+    () => utils.chunk(dedupedAds, itemsPerPage),
+    [dedupedAds, itemsPerPage]
   );
 
   const totalPages = useMemo(() => {
@@ -350,7 +384,7 @@ export function useAdArchive(
     return ungroupedPages.slice(0, currentPage).reduce((sum, pg) => sum + pg.length, 0);
   }, [initialTotalAds, ungroupedPages, currentPage, itemsPerPage]);
 
-  const totalAds = typeof initialTotalAds === 'number' ? initialTotalAds : filteredAdsByType.length;
+  const totalAds = typeof initialTotalAds === 'number' ? initialTotalAds : dedupedAds.length;
 
   const handlePageChange = useCallback(
     (page: number) => {
@@ -618,9 +652,11 @@ export function useAdArchive(
           setProcessingDone(true);
         }
       } catch (error: unknown) {
-        setShowAINewsModal(false);
+        setShowAINewsModal(true);
         const message = error instanceof Error ? error.message : 'Unknown error';
-        alert('Error: ' + message);
+        setProcessingMessage('Error: ' + message);
+        setImportStatus('error');
+        setProcessingDone(true);
       } finally {
         setIsLoading(false);
       }
@@ -653,8 +689,8 @@ export function useAdArchive(
   }, [productFilter, selectedTags, selectedCreativeType, numberToScrape]);
 
   const videoAds = useMemo(
-    () => filteredAdsByType.filter((ad) => ad.display_format === 'VIDEO').length,
-    [filteredAdsByType]
+    () => dedupedAds.filter((ad) => ad.display_format === 'VIDEO').length,
+    [dedupedAds]
   );
 
   const searchTimeout = useRef<number | null>(null);
@@ -719,6 +755,10 @@ export function useAdArchive(
       console.error('Error loading ads:', error);
     } finally {
       setIsLoading(false);
+      try {
+        // notify any UI consumers to focus/clear input
+        window.dispatchEvent(new CustomEvent('productFilterCleared'));
+      } catch (e) {}
     }
   }, [selectedTags]);
 
