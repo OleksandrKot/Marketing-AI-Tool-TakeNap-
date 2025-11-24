@@ -1,10 +1,17 @@
-'use client';
-
+import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { Layers, Plus } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { ProfileDropdown } from '@/app/login-auth/components/profile-dropdown';
-import { PageNavigation } from '@/components/page-navigation';
+
+const PageNavigation = dynamic(
+  () => import('@/components/navigation/PageNavigation').then((m) => m.PageNavigation),
+  { ssr: false, loading: () => null }
+);
+
+const ProfileDropdown = dynamic(
+  () => import('@/app/login-auth/components/profile-dropdown').then((m) => m.ProfileDropdown),
+  { ssr: false, loading: () => null }
+);
 
 export default function AdaptationsPage() {
   return (
@@ -36,13 +43,13 @@ export default function AdaptationsPage() {
             <p className="text-slate-500 mb-6">
               Create your first adaptation from the Creative Library to see it here.
             </p>
-            <Button
-              onClick={() => (window.location.href = '/')}
-              className="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl h-11 px-6"
+            <Link
+              href="/"
+              className="inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl h-11 px-6 transition-colors"
             >
-              <Plus className="h-4 w-4 mr-2" />
+              <Plus className="h-4 w-4" />
               Go to Creative Library
-            </Button>
+            </Link>
           </CardContent>
         </Card>
       </div>

@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { createServerSupabaseClient } from '@/lib/core/supabase';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import type { Metadata } from 'next';
@@ -49,7 +49,7 @@ export default async function SharedPersonaPage({ params }: PageProps) {
   const personaGoals = Array.isArray(persona['goals']) ? (persona['goals'] as string[]) : [];
 
   const PageNavigation = dynamic(
-    () => import('@/components/page-navigation').then((m) => m.PageNavigation),
+    () => import('@/components/navigation/PageNavigation').then((m) => m.PageNavigation),
     {
       ssr: false,
     }

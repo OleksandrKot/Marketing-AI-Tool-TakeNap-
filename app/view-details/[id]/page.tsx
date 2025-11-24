@@ -1,6 +1,6 @@
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { createServerSupabaseClient } from '@/lib/core/supabase';
 import { ViewDetails } from './view-details';
-import type { Ad } from '@/lib/types';
+import type { Ad } from '@/lib/core/types';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { ViewDetailsSkeleton } from './view-details-skeleton';

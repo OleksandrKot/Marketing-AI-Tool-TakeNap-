@@ -4,10 +4,10 @@ import React, {
   useEffect,
   useState,
   useRef,
-  useCallback,
   useMemo,
   useImperativeHandle,
   forwardRef,
+  useCallback,
 } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -26,20 +26,74 @@ import {
   stringifyValue,
   tryParseJson,
   flattenJsonToProps,
-} from '@/lib/structuredAttrsUtils';
+} from '@/lib/creative/structured-attributes';
 
 type StructuredAttributesProps = {
+  // Sections coming from buildGroupedSections (Title, Ad Text, Image / Visual Description, etc.)
   groupedSections: { title: string; text: string }[];
+  // Optional callback that receives generated prompt JSON as string
   onGeneratedChange?: (val: string) => void;
+  // Raw ad data – used as an additional property source
   ad?: Record<string, unknown>;
 };
 
-type StructuredAttributesRef = { applyJson?: (obj: Record<string, unknown>) => void } | null;
+export type StructuredAttributesRef = {
+  // Allows parent component to apply external JSON into the blocks
+  applyJson?: (obj: Record<string, unknown>) => void;
+} | null;
+
+// Strict mapping for known prompt-related fields.
+// jsonKey – key we expect inside AiPrompt JSON (UA or EN)
+// label   – human-readable label (for UI)
+// outKey  – canonical key used in generated JSON
+const PROMPT_FIELDS: { jsonKey: string; label: string; outKey: string }[] = [
+  // Core prompt fields (visual prompt)
+  { jsonKey: 'subject', label: 'Subject', outKey: 'subject' },
+  { jsonKey: 'scene', label: 'Scene', outKey: 'scene' },
+  { jsonKey: 'style', label: 'Style', outKey: 'style' },
+  { jsonKey: 'emotions', label: 'Emotions', outKey: 'emotions' },
+  { jsonKey: 'text_on_image', label: 'Text on Image', outKey: 'text_on_image' },
+  { jsonKey: 'textOnImage', label: 'Text on Image', outKey: 'text_on_image' },
+
+  // Character (UA → unified EN-ish keys)
+  { jsonKey: 'гендер персонажу', label: 'Character Gender', outKey: 'characterGender' },
+  {
+    jsonKey: 'персонаж',
+    label: 'Character Type (realistic or fictional)',
+    outKey: 'characterType',
+  },
+  { jsonKey: 'тип фігури', label: 'Body Type', outKey: 'bodyType' },
+  { jsonKey: 'тип', label: 'Type', outKey: 'type' },
+  { jsonKey: 'особливості зовнішності', label: 'Appearance Details', outKey: 'appearanceDetails' },
+  { jsonKey: 'одяг', label: 'Clothing', outKey: 'clothing' },
+  { jsonKey: 'колір волосся', label: 'Hair Color', outKey: 'hairColor' },
+  { jsonKey: 'поза', label: 'Pose', outKey: 'pose' },
+  {
+    jsonKey: 'розташування персонажа у кадрі',
+    label: 'Character Position in Frame',
+    outKey: 'characterPositionInFrame',
+  },
+
+  // Background / palette (UA → unified EN-ish keys)
+  {
+    jsonKey: 'кольорова палітра візуалу',
+    label: 'Visual Color Palette',
+    outKey: 'visualColorPalette',
+  },
+  { jsonKey: 'локація', label: 'Location', outKey: 'location' },
+  { jsonKey: 'елементи заднього фону', label: 'Background Elements', outKey: 'backgroundElements' },
+  {
+    jsonKey: 'особливості елементів заднього фону',
+    label: 'Background Element Details',
+    outKey: 'backgroundElementDetails',
+  },
+];
 
 const StructuredAttributes = (
   { groupedSections, onGeneratedChange, ad }: StructuredAttributesProps,
   ref: React.Ref<StructuredAttributesRef>
 ) => {
+  // Fallback section titles used when JSON / strict fields are not available
   const initialKeys = [
     'Topic',
     'Character',
@@ -51,6 +105,9 @@ const StructuredAttributes = (
     'Emotional State',
   ];
 
+  /**
+   * Try to guess Topic from raw visual text.
+   */
   const extractTopicFromVisual = (text: string) => {
     try {
       const m = text.match(/topic\s*[:\-]\s*(.+)/i);
@@ -62,129 +119,73 @@ const StructuredAttributes = (
     }
   };
 
+  /**
+   * Build initial blocks from:
+   *  - Image / Visual Description JSON
+   *  - new_scenario / video_script
+   *  - grouped sections (Topic, Character, etc.)
+   */
   const mapFromSections = (): Block[] => {
     const out: Block[] = [];
 
-    // 1) Пытаемся достать structured JSON из "Image / Visual Description"
+    // 1) try to parse AiPrompt JSON from "Image / Visual Description" section
     const visual = groupedSections.find(
       (g) => g.title === 'Image / Visual Description' || g.title === 'Visual Description'
     );
 
+    let visualJson: Record<string, unknown> | null = null;
     if (visual && visual.text) {
       const parsed = tryParseJson(visual.text || '') as unknown;
       if (parsed && typeof parsed === 'object') {
-        const p = parsed as Record<string, unknown>;
-        // это, скорее всего, AiPromptJson
-        // берём оттуда несколько ключевых штук как стартовые блоки
-        try {
-          const topic =
-            (p['scene'] &&
-              typeof p['scene'] === 'object' &&
-              (p['scene'] as Record<string, unknown>)['subject']) ||
-            (p['text_elements'] &&
-              typeof p['text_elements'] === 'object' &&
-              (p['text_elements'] as Record<string, unknown>)['headline']) ||
-            (p['targeting'] &&
-              typeof p['targeting'] === 'object' &&
-              (p['targeting'] as Record<string, unknown>)['audience']) ||
-            '';
-          if (topic) {
-            out.push({
-              id: uid(),
-              label: 'Topic',
-              value: String(topic),
-              included: true,
-            });
-          }
-
-          const character =
-            (p['character'] &&
-              typeof p['character'] === 'object' &&
-              (p['character'] as Record<string, unknown>)['appearance']) ||
-            (p['character'] &&
-              typeof p['character'] === 'object' &&
-              (p['character'] as Record<string, unknown>)['role']) ||
-            (p['character'] &&
-              typeof p['character'] === 'object' &&
-              (p['character'] as Record<string, unknown>)['personality']) ||
-            '';
-          if (character) {
-            out.push({
-              id: uid(),
-              label: 'Character',
-              value: String(character),
-              included: true,
-            });
-          }
-
-          const tone =
-            (p['visual_style'] &&
-              typeof p['visual_style'] === 'object' &&
-              (p['visual_style'] as Record<string, unknown>)['mood']) ||
-            '';
-          if (tone) {
-            out.push({
-              id: uid(),
-              label: 'Tone',
-              value: String(tone),
-              included: true,
-            });
-          }
-
-          const colors =
-            (p['visual_style'] &&
-              typeof p['visual_style'] === 'object' &&
-              (p['visual_style'] as Record<string, unknown>)['colors']) ||
-            '';
-          if (colors) {
-            out.push({
-              id: uid(),
-              label: 'Color Palette',
-              value: String(colors),
-              included: true,
-            });
-          }
-
-          const cameraAngle =
-            (p['scene'] &&
-              typeof p['scene'] === 'object' &&
-              (p['scene'] as Record<string, unknown>)['camera_angle']) ||
-            '';
-          if (cameraAngle) {
-            out.push({
-              id: uid(),
-              label: 'Camera Angles',
-              value: String(cameraAngle),
-              included: true,
-            });
-          }
-
-          const emotion =
-            (p['visual_style'] &&
-              typeof p['visual_style'] === 'object' &&
-              (p['visual_style'] as Record<string, unknown>)['mood']) ||
-            (p['targeting'] &&
-              typeof p['targeting'] === 'object' &&
-              (p['targeting'] as Record<string, unknown>)['pain_points']) ||
-            (p['character'] &&
-              typeof p['character'] === 'object' &&
-              (p['character'] as Record<string, unknown>)['personality']) ||
-            '';
-          if (emotion) {
-            out.push({
-              id: uid(),
-              label: 'Emotional State',
-              value: String(emotion),
-              included: true,
-            });
-          }
-        } catch {
-          // если что-то пошло не так — просто игнорим, ниже всё равно будут fallback'и
-        }
+        visualJson = parsed as Record<string, unknown>;
       }
     }
 
-    // 2) new_scenario / newScenario — как отдельный редактируемый блок
+    /**
+     * Helper: take a value for a prompt field from:
+     *  - visualJson[jsonKey] if present
+     *  - fallback from ad (outKey or jsonKey)
+     * and append it as a Block.
+     */
+    const addPromptField = (cfg: { jsonKey: string; label: string; outKey: string }) => {
+      let raw: unknown;
+
+      // Prefer value from visual prompt JSON
+      if (visualJson && Object.prototype.hasOwnProperty.call(visualJson, cfg.jsonKey)) {
+        raw = visualJson[cfg.jsonKey];
+      }
+
+      // If not found, try to read from ad itself
+      if (raw === undefined && ad) {
+        const rad = ad as Record<string, unknown>;
+        if (Object.prototype.hasOwnProperty.call(rad, cfg.outKey)) {
+          raw = rad[cfg.outKey];
+        } else if (Object.prototype.hasOwnProperty.call(rad, cfg.jsonKey)) {
+          raw = rad[cfg.jsonKey];
+        }
+      }
+
+      if (raw === null || raw === undefined) return;
+      const val = String(raw).trim();
+      if (!val) return;
+
+      // Avoid duplicates (same label + same value)
+      if (out.some((b) => b.label === cfg.label && b.value === val)) return;
+
+      out.push({
+        id: uid(),
+        label: cfg.label,
+        value: val,
+        included: true,
+      });
+    };
+
+    // 2) strictly collect AiPrompt fields (UA/EN → canonical labels)
+    for (const cfg of PROMPT_FIELDS) {
+      addPromptField(cfg);
+    }
+
+    // 3) new_scenario → New Scenario
     try {
       const ns =
         ad &&
@@ -218,10 +219,10 @@ const StructuredAttributes = (
         }
       }
     } catch {
-      /* ignore */
+      // ignore
     }
 
-    // 3) video_script / videoScript — тоже блок
+    // 4) video_script → Video Script
     try {
       const vs =
         ad &&
@@ -246,10 +247,10 @@ const StructuredAttributes = (
         }
       }
     } catch {
-      /* ignore */
+      // ignore
     }
 
-    // 4) Fallback по заголовкам секций (старое поведение)
+    // 5) fallback: add grouped sections by title (Topic, Character, etc.)
     for (const key of initialKeys) {
       if (out.find((b) => b.label === key)) continue;
       const s = groupedSections.find((g) => g.title.toLowerCase().includes(key.toLowerCase()));
@@ -258,19 +259,27 @@ const StructuredAttributes = (
       }
     }
 
-    // 5) Если всё ещё нет Topic — достаём из текста визуалки
+    // 6) try to guess Topic from the visual description text, if not already set
     if (!out.find((b) => b.label === 'Topic') && visual && visual.text) {
-      out.push({
-        id: uid(),
-        label: 'Topic',
-        value: extractTopicFromVisual(visual.text || ''),
-        included: true,
-      });
+      const topicGuess = extractTopicFromVisual(visual.text || '');
+      if (topicGuess) {
+        out.push({
+          id: uid(),
+          label: 'Topic',
+          value: topicGuess,
+          included: true,
+        });
+      }
     }
 
     return out;
   };
 
+  /**
+   * Blocks state:
+   *  - loaded from localStorage if present (per pathname)
+   *  - otherwise built from sections / ad data
+   */
   const [blocks, setBlocks] = useState<Block[]>(() => {
     try {
       const key = `structuredAttrs:${
@@ -282,7 +291,7 @@ const StructuredAttributes = (
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch {
-      /* ignore */
+      // ignore
     }
     return mapFromSections();
   });
@@ -290,12 +299,7 @@ const StructuredAttributes = (
   const dragIndex = useRef<number | null>(null);
   const [format] = useState<'json' | 'llm'>('json');
 
-  /**
-   * Собираем все доступные свойства:
-   *  - плоские поля ad
-   *  - все вложенные JSON из строковых полей ad (videoScript/newScenario и т.д.)
-   *  - AiPromptJson из секции "Image / Visual Description"
-   */
+  // Set of normalized keys used in blocks, to avoid duplicate props
   const usedPropKeys = useMemo(() => {
     const s = new Set<string>();
     for (const b of blocks) {
@@ -305,12 +309,18 @@ const StructuredAttributes = (
     return s;
   }, [blocks]);
 
+  /**
+   * Build a pool of available properties:
+   *  - flat ad properties
+   *  - nested JSON properties inside ad (flattened)
+   *  - JSON from "Image / Visual Description" (flattened)
+   */
   const allProps = useMemo(() => {
     const result: PropItem[] = [];
     const seen = new Set<string>();
 
-    // 1) плоские поля ad
     if (ad) {
+      // 1) top-level ad fields
       Object.entries(ad)
         .filter(([, v]) => v !== null && v !== undefined && v !== '')
         .forEach(([k, v]) => {
@@ -323,14 +333,13 @@ const StructuredAttributes = (
           result.push({ key, label, value });
         });
 
-      // 2) вложенные JSON из строковых полей ad
+      // 2) nested JSON inside string fields
       const nested: PropItem[] = [];
       for (const [k, v] of Object.entries(ad)) {
         if (typeof v !== 'string') continue;
         const parsed = tryParseJson(v);
         if (!parsed) continue;
         const buf: { key: string; label: string; value: string }[] = [];
-        // prefix = k, чтобы получились ключи вроде "videoScript.Hook"
         flattenJsonToProps(buf, parsed, k);
         nested.push(...buf);
       }
@@ -344,7 +353,7 @@ const StructuredAttributes = (
       }
     }
 
-    // 3) AiPromptJson из секции "Image / Visual Description"
+    // 3) JSON from "Image / Visual Description" section
     const visual = groupedSections.find(
       (g) => g.title === 'Image / Visual Description' || g.title === 'Visual Description'
     );
@@ -352,7 +361,6 @@ const StructuredAttributes = (
       const parsed = tryParseJson(visual.text) as unknown;
       if (parsed && typeof parsed === 'object') {
         const flat: { key: string; label: string; value: string }[] = [];
-        // prefix = '' → ключи вида "scene.subject", "visual_style.mood"
         flattenJsonToProps(flat, parsed, '');
         for (const item of flat) {
           const val = item.value?.trim();
@@ -367,27 +375,31 @@ const StructuredAttributes = (
     return result;
   }, [ad, groupedSections, usedPropKeys]);
 
-  // autosave
+  /**
+   * Autosave blocks to localStorage (per pathname).
+   */
   useEffect(() => {
-    const key = `structuredAttrs:${
-      typeof window !== 'undefined' ? window.location.pathname : 'global'
-    }`;
+    if (typeof window === 'undefined') return;
+    const key = `structuredAttrs:${window.location.pathname || 'global'}`;
     const t = window.setTimeout(() => {
       try {
         window.localStorage.setItem(key, JSON.stringify(blocks));
       } catch {
-        /* ignore */
+        // ignore
       }
     }, 600);
     return () => window.clearTimeout(t);
   }, [blocks]);
 
+  /**
+   * When groupedSections change and there are no blocks yet,
+   * rebuild from sections.
+   */
   useEffect(() => {
     setBlocks((prev) => {
       if (prev && prev.length > 0) return prev;
       return mapFromSections();
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupedSections]);
 
   const removeBlock = (id: string) => {
@@ -402,11 +414,15 @@ const StructuredAttributes = (
     e.preventDefault();
   };
 
+  /**
+   * Drop handler:
+   *  - if data starts with "prop:", we insert a new Block with that property
+   *  - otherwise, we reorder existing blocks
+   */
   const onDrop = (e: React.DragEvent, i: number) => {
     e.preventDefault();
     const dt = e.dataTransfer.getData('text/plain') || '';
 
-    // drag из Available Properties: "prop:<key>"
     if (dt.startsWith('prop:')) {
       const key = dt.slice('prop:'.length);
       const prop = allProps.find((p) => p.key === key);
@@ -438,23 +454,40 @@ const StructuredAttributes = (
     dragIndex.current = null;
   };
 
+  /**
+   * Generate final prompt:
+   *  - format "json": returns JSON with canonical keys
+   *  - format "llm": returns plain text instruction
+   */
   const generatePrompt = useCallback((): string => {
     const included = blocks.filter((bl) => bl.included && bl.value && bl.value.trim());
+
     if (format === 'json') {
       const obj: Record<string, string> = {};
+
       for (const bl of included) {
-        const key = bl.label
-          .replace(/[^a-zA-Z0-9]+/g, ' ')
-          .trim()
-          .toLowerCase()
-          .split(' ')
-          .map((w, idx) => (idx === 0 ? w : w[0].toUpperCase() + w.slice(1)))
-          .join('');
+        // if label is known in PROMPT_FIELDS → use its outKey
+        const cfg = PROMPT_FIELDS.find((f) => f.label === bl.label);
+        let key: string;
+        if (cfg) {
+          key = cfg.outKey;
+        } else {
+          // fallback: camelCase from label
+          key = bl.label
+            .replace(/[^a-zA-Z0-9]+/g, ' ')
+            .trim()
+            .toLowerCase()
+            .split(' ')
+            .map((w, idx) => (idx === 0 ? w : w[0].toUpperCase() + w.slice(1)))
+            .join('');
+        }
         obj[key] = bl.value.trim();
       }
+
       return JSON.stringify(obj, null, 2);
     }
 
+    // LLM-style text prompt (not used by default in your flow, but kept for flexibility)
     const lines: string[] = [];
     lines.push('Generate a concise, ready-to-use creative prompt using the following attributes:');
     for (const bl of included) {
@@ -463,10 +496,19 @@ const StructuredAttributes = (
     return lines.join('\n');
   }, [blocks, format]);
 
+  /**
+   * Notify parent when generated JSON changes.
+   */
   useEffect(() => {
     if (onGeneratedChange) onGeneratedChange(generatePrompt());
   }, [blocks, format, generatePrompt, onGeneratedChange]);
 
+  /**
+   * allow parent component to "apply JSON into blocks":
+   *  - match by normalized label
+   *  - update existing blocks
+   *  - append unknown keys as new blocks
+   */
   useImperativeHandle(ref, () => ({
     applyJson: (obj: Record<string, unknown>) => {
       if (!obj || typeof obj !== 'object') return;
@@ -474,15 +516,17 @@ const StructuredAttributes = (
         const copy = [...prev];
         const usedKeys = new Set<string>();
 
+        // normalized key map for lookup
         const normObj: Record<string, string> = {};
         for (const k of Object.keys(obj)) {
-          const nk = k.replace(/[^a-zA-Z0-9]+/g, '').toLowerCase();
+          const nk = k.replace(/[^a-zA-Z0-9\u0400-\u04FF]+/g, '').toLowerCase();
           normObj[nk] = k;
         }
 
+        // update existing blocks where label matches
         for (let i = 0; i < copy.length; i++) {
           const blk = copy[i];
-          const blkKey = blk.label.replace(/[^a-zA-Z0-9]+/g, '').toLowerCase();
+          const blkKey = blk.label.replace(/[^a-zA-Z0-9\u0400-\u04FF]+/g, '').toLowerCase();
           const matchedObjKey = normObj[blkKey];
           if (matchedObjKey && Object.prototype.hasOwnProperty.call(obj, matchedObjKey)) {
             copy[i] = {
@@ -494,6 +538,7 @@ const StructuredAttributes = (
           }
         }
 
+        // append leftover keys as new blocks
         for (const k of Object.keys(obj)) {
           if (usedKeys.has(k)) continue;
           copy.push({
@@ -509,6 +554,7 @@ const StructuredAttributes = (
   }));
 
   const [generated, setGenerated] = useState<string | null>(null);
+
   const copyGenerated = async () => {
     if (!generated) return;
     await navigator.clipboard.writeText(generated);
@@ -517,6 +563,7 @@ const StructuredAttributes = (
   return (
     <Card className="border-slate-200 rounded-2xl">
       <CardContent className="p-0">
+        {/* Header */}
         <div className="bg-indigo-50 p-6 border-b border-slate-200">
           <div className="flex items-center justify-between">
             <h2 className="text-xl font-semibold text-slate-900">Structured Attributes</h2>
@@ -524,7 +571,9 @@ const StructuredAttributes = (
           </div>
         </div>
 
+        {/* Body */}
         <div className="p-4 space-y-3">
+          {/* Available properties (for drag & click) */}
           {allProps && allProps.length > 0 && (
             <div className="mb-2">
               <div className="text-sm font-medium mb-2">Available Properties</div>
@@ -564,6 +613,7 @@ const StructuredAttributes = (
             </div>
           )}
 
+          {/* Blocks list */}
           <div className="space-y-1">
             {blocks.map((b, i) => (
               <div
@@ -591,8 +641,16 @@ const StructuredAttributes = (
             ))}
           </div>
 
+          {/* Controls */}
           <div className="flex items-center gap-2">
-            <Button onClick={() => setGenerated(generatePrompt())}>Generate Prompt</Button>
+            <Button
+              onClick={() => {
+                const prompt = generatePrompt();
+                setGenerated(prompt);
+              }}
+            >
+              Generate Prompt
+            </Button>
             <Button
               variant="ghost"
               onClick={() => {
@@ -609,6 +667,7 @@ const StructuredAttributes = (
             )}
           </div>
 
+          {/* Generated JSON preview */}
           {generated && (
             <div>
               <h3 className="text-sm font-medium mb-2">Generated Prompt (JSON)</h3>

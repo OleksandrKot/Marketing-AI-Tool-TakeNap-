@@ -1,6 +1,6 @@
 'use client';
 
-import { useScrollbarWidth } from '@/lib/utils';
+import { useScrollbarWidth } from '@/lib/core/utils';
 import { useEffect } from 'react';
 
 type Props = {

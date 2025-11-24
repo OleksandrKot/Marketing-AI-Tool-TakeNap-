@@ -1,8 +1,8 @@
 import React, { memo } from 'react';
 import Link from 'next/link';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { ViewToggle } from '@/components/view-toggle';
-import type { ViewMode } from '@/lib/types';
+import { ViewToggle } from '@/components/filters/ViewToggle';
+import type { ViewMode } from '@/lib/core/types';
 
 type Props = {
   visibleAdsCount: number;

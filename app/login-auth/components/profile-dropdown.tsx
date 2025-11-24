@@ -16,7 +16,7 @@ const LoginModal = dynamic(() => import('@/app/login-auth/LoginModal'), {
   ssr: false,
   loading: () => null,
 });
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/core/supabase';
 
 export function ProfileDropdown() {
   const [user, setUser] = useState<{ email: string; nickname?: string } | null>(null);

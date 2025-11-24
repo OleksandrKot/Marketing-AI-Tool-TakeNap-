@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
-import { log } from '@/lib/logger';
+import { createServerSupabaseClient } from '@/lib/core/supabase';
+import { log } from '@/lib/core/logger';
 
 export async function GET(req: Request, { params }: { params: { token: string } }) {
   const token = params.token;

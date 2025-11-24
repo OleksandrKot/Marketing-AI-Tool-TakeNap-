@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
-import { detectProductFromUrl, getWebhookUrl } from '@/lib/product-webhooks';
+import { detectProductFromUrl, getWebhookUrl } from '@/lib/api/product-webhooks';
 
 function getErrorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -40,9 +40,9 @@ export async function POST(request: NextRequest) {
     const productWebhook = productKey ? getWebhookUrl(productKey, creativeType) : null;
     // Якщо немає env — підстрахуємось існуючим Replika webhook'ом
     const replikaFallbackMap: Record<string, string | undefined> = {
-      all: (await import('@/lib/product-webhooks')).PRODUCT_WEBHOOKS.replika?.webhooks.all,
-      video: (await import('@/lib/product-webhooks')).PRODUCT_WEBHOOKS.replika?.webhooks.video,
-      image: (await import('@/lib/product-webhooks')).PRODUCT_WEBHOOKS.replika?.webhooks.image,
+      all: (await import('@/lib/api/product-webhooks')).PRODUCT_WEBHOOKS.replika?.webhooks.all,
+      video: (await import('@/lib/api/product-webhooks')).PRODUCT_WEBHOOKS.replika?.webhooks.video,
+      image: (await import('@/lib/api/product-webhooks')).PRODUCT_WEBHOOKS.replika?.webhooks.image,
     };
     const webhookUrl = envDefault || productWebhook || replikaFallbackMap[creativeType];
 

@@ -11,7 +11,7 @@ export default async function Home() {
   // or an object that contains { data: [...] }.
   // We import the utility lazily to avoid server/client import ordering issues.
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const { extractDataArray } = require('@/lib/utils');
+  const { extractDataArray } = require('@/lib/core/utils');
   const initialAds = extractDataArray(raw);
   const uniquePages = await getUniquePages();
 

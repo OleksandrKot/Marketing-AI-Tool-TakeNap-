@@ -17,12 +17,12 @@ const CollectionModal = dynamic(
 import { HeartButton } from '@/app/favorites/components/HeartButton';
 import { Button } from '@/components/ui/button';
 import { ProfileDropdown } from '@/app/login-auth/components/profile-dropdown';
-import { CreativeTabs } from '@/components/creative-tabs';
+import { CreativeTabs } from '@/components/creative/tabs/CreativeTabs';
 import ContentTab from './content-tab.client';
 import { InfoTab } from './info-tab';
 import { AdaptationsTab } from './adaptations-tab';
 // tag manager removed from header for simplified detail view
-import type { Ad, AdaptationScenario } from '@/lib/types';
+import type { Ad, AdaptationScenario } from '@/lib/core/types';
 
 // Динамічне завантаження компонентів, які не потрібні одразу
 const ShareModal = dynamic(() => import('./share-modal'), {
@@ -156,6 +156,72 @@ const AdDetails = memo(function AdDetails({
 
         {/* Tab Navigation */}
         <CreativeTabs activeTab={activeTab} onTabChange={setActiveTab} />
+
+        {/* Adaptation actions (show when adaptations tab active) */}
+        {activeTab === 'adaptations' && (
+          <div className="my-6 flex justify-end">
+            <Button
+              onClick={() => {
+                try {
+                  // Build prefill and include Short Prompt (from groupedSections if present)
+                  const prefill: Record<string, unknown> = {
+                    imageVisualDescription: ad.image_description || ad.video_script || '',
+                    'гендер персонажу': '',
+                    персонаж: '',
+                    'тип фігури': '',
+                    тип: '',
+                    'особливості зовнішності': '',
+                    одяг: '',
+                    'колір волосся': '',
+                    поза: '',
+                    'розташування персонажа у кадрі': '',
+                    emotions: 'Positive emotions such as warmth, happiness, comfort',
+                    'кольорова палітра візуалу': '',
+                    локація: '',
+                    'елементи заднього фону': '',
+                    'особливості елементів заднього фону': '',
+                    scene: 'Warm indoor environment with soft ambient lighting',
+                    style: 'Clean, modern, warm and inviting color palette',
+                    adId: ad.id,
+                    adArchiveId: ad.ad_archive_id,
+                    title: ad.title,
+                    page_name: ad.page_name,
+                  };
+
+                  // Try to find Short Prompt JSON in the provided `groupedSections` prop
+                  const shortSection = Array.isArray(groupedSections)
+                    ? groupedSections.find(
+                        (g) =>
+                          g.title === 'Image / Visual Description' ||
+                          g.title === 'Visual Description'
+                      )
+                    : null;
+                  if (shortSection && shortSection.text) {
+                    try {
+                      const parsed = JSON.parse(shortSection.text);
+                      prefill.shortPromptJson = parsed;
+                      prefill.shortPromptText = JSON.stringify(parsed);
+                    } catch {
+                      prefill.shortPromptText = String(shortSection.text);
+                    }
+                  }
+                  const json = JSON.stringify(prefill);
+                  const encoded =
+                    typeof window !== 'undefined'
+                      ? window.btoa(unescape(encodeURIComponent(json)))
+                      : Buffer.from(json).toString('base64');
+                  const url = `/adaptations/create?data=${encodeURIComponent(encoded)}`;
+                  if (typeof window !== 'undefined') window.location.href = url;
+                } catch (e) {
+                  console.error('Failed to open create adaptation page', e);
+                }
+              }}
+              className="bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-xl h-11 px-6"
+            >
+              Create Adaptation
+            </Button>
+          </div>
+        )}
 
         {/* Tab Content */}
         {activeTab === 'content' && (

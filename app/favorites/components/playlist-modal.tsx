@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo, useState, useEffect } from 'react';
 import { X, Plus, Heart } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/core/supabase';
 import dynamic from 'next/dynamic';
 const LoginModal = dynamic(() => import('@/app/login-auth/LoginModal'), {
   ssr: false,

@@ -1,7 +1,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { createServerSupabaseClient } from '@/lib/core/supabase';
 
 type ListUsersResponse = {
   error?: { message?: string } | null;

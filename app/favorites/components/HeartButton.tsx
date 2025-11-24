@@ -6,7 +6,7 @@ import ModalLoading from '@/components/ui/modal-loading';
 import { Heart } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useFavorites } from '@/lib/hooks/useFavorites';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/core/supabase';
 const FavoritesModal = dynamic(() => import('./FavoritesModal').then((m) => m.default), {
   ssr: false,
   loading: () => <ModalLoading />,

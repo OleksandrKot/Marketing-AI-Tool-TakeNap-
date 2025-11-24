@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Copy, Check, RotateCw, Edit } from 'lucide-react';
 import { Textarea } from '@/components/ui/textarea';
-import ModalWrapper from '@/components/modals/modalwrapper';
+import ModalWrapper from '@/components/modals/ModalWrapper';
 
 type Section = { title: string; text: string };
 
@@ -77,7 +77,11 @@ const SectionItem = ({
     if (jsonError) return false;
     try {
       const res = onCopy(isEditable ? edited : text, title);
-      if (res && typeof (res as Promise<unknown>).then === 'function') {
+      if (
+        res !== undefined &&
+        res !== null &&
+        typeof (res as Promise<unknown>).then === 'function'
+      ) {
         // onCopy returned a promise — await it safely
         const awaited = await Promise.resolve(res as unknown);
         return awaited === undefined ? true : Boolean(awaited);
@@ -121,7 +125,7 @@ const SectionItem = ({
           )}
         </div>
 
-        <div className="text-slate-700 whitespace-pre-line leading-relaxed max-h-52 overflow-auto break-words">
+        <div className="text-slate-700 whitespace-pre-line leading-relaxed max-h-52 overflow-auto wrap-break-word">
           {text && text.length > 400 ? (
             <>
               <div className="text-sm text-slate-600 mb-2">{text.slice(0, 300)}...</div>

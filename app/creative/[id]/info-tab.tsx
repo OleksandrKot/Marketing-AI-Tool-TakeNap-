@@ -5,8 +5,8 @@ import { Calendar, Clock, Info, Play, ImageIcon, Copy, Check } from 'lucide-reac
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { formatDate } from '@/lib/utils';
-import type { Ad } from '@/lib/types';
+import { formatDate } from '@/lib/core/utils';
+import type { Ad } from '@/lib/core/types';
 
 interface InfoTabProps {
   ad: Ad;

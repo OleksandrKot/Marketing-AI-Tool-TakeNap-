@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { createServerSupabaseClient } from '@/lib/core/supabase';
 
 function getErrorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;

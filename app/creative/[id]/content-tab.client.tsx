@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/core/supabase';
 import { useRouter } from 'next/navigation';
 import { Copy, Check, ExternalLink, Link, MoreHorizontal } from 'lucide-react';
 import {
@@ -13,13 +13,17 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import type { Ad } from '@/lib/types';
+import type { Ad } from '@/lib/core/types';
 
-import ContentMedia from '@/components/content/ContentMedia';
-import ContentControls from '@/components/content/ContentControls';
-import StructuredAttributesModal from './components/StructuredAttributesModal';
+import ContentMedia from '@/components/creative/content/ContentMedia';
+import ContentControls from '@/components/creative/content/ContentControls';
+// Lazy-load the Attributes modal only when requested to avoid heavy initial bundle
+const DynamicStructuredAttributesModal = dynamic(
+  () => import('./components/StructuredAttributesModal'),
+  { ssr: false, loading: () => null }
+);
 type SupabaseSessionLike = { session?: { user?: Record<string, unknown> } };
-import StorageImage from '@/lib/StorageImage';
+import StorageImage from '@/lib/storage/StorageImage';
 import cleanAndSplit from './utils/cleanAndSplit';
 import CollapsiblePanel from './components/CollapsiblePanel';
 import GroupedSections from './components/GroupedSections';
@@ -45,6 +49,25 @@ export default function ContentTabClient({
     ssr: false,
     loading: () => null,
   });
+
+  // Loader component to avoid importing the heavy editor until user requests it
+  function LazyAttributesLoader({
+    groupedSections,
+    ad,
+  }: {
+    groupedSections: { title: string; text: string }[];
+    ad: Record<string, unknown>;
+  }) {
+    const [load, setLoad] = useState(false);
+    return load ? (
+      // dynamically imported component
+      <DynamicStructuredAttributesModal groupedSections={groupedSections} ad={ad} />
+    ) : (
+      <Button variant="outline" onClick={() => setLoad(true)} className="w-full">
+        Open Attributes Editor
+      </Button>
+    );
+  }
   const adData = ad; // server-prepared ad
 
   const handleCopyToClipboard = useCallback(
@@ -190,7 +213,7 @@ export default function ContentTabClient({
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {(() => {
                     // Build duplicate items from duplicates_preview_image (semicolon list)
-                    const dupItems: typeof relatedAds = [] as unknown as typeof relatedAds;
+                    const dupItems: Ad[] = [];
                     if (adData.duplicates_preview_image) {
                       const parts = adData.duplicates_preview_image
                         .split(';')
@@ -201,7 +224,7 @@ export default function ContentTabClient({
                         const isHttp = String(url).startsWith('http');
                         const cleaned = String(url).replace(/^\/+/, '');
                         const partsArr = cleaned.split('/').filter(Boolean);
-                        const fakeId = `dup-${adData.id}-${i}`;
+                        const fakeId = -(i + 1);
                         const fakeAd: Partial<Ad> = {
                           id: fakeId,
                           title: adData.title ? `${adData.title} (Duplicate)` : 'Duplicate',
@@ -507,9 +530,12 @@ export default function ContentTabClient({
       </div>
 
       <div className="space-y-6">
-        {/* Structured Attributes editor (modal) */}
+        {/* Structured Attributes editor (modal) - load on demand to speed up content page */}
         <div>
-          <StructuredAttributesModal groupedSections={groupedSections} ad={adData} />
+          <LazyAttributesLoader
+            groupedSections={groupedSections}
+            ad={adData as unknown as Record<string, unknown>}
+          />
         </div>
         <div className="mb-6">
           <CollapsiblePanel

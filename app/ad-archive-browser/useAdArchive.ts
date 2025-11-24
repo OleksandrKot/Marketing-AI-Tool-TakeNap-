@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
-import type { Ad, FilterOptions, ViewMode } from '@/lib/types';
+import { supabase } from '@/lib/core/supabase';
+import type { Ad, FilterOptions, ViewMode } from '@/lib/core/types';
 import { getAds } from '../actions';
 import * as utils from './utils';
 

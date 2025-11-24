@@ -17,9 +17,9 @@ import {
   Check,
 } from 'lucide-react';
 import dynamic from 'next/dynamic';
-import type { Ad, AdaptationScenario } from '@/lib/types';
+import type { Ad, AdaptationScenario } from '@/lib/core/types';
 import { parseScenarios, sanitizeScenarios } from './utils/adData';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/core/supabase';
 // removed unused dynamicLogin import
 
 // Динамічне завантаження модального вікна
@@ -74,7 +74,7 @@ export function AdaptationsTab({ ad }: AdaptationsTabProps) {
     const raw = parseScenarios(adData);
     const sanitized = sanitizeScenarios(raw);
     console.debug('[AdaptationsTab] scenarios', sanitized);
-    return sanitized;
+    return sanitized as AdaptationScenario[];
   }, [adData]);
 
   const isVideoAd = String(adData.display_format || '')
@@ -129,7 +129,7 @@ export function AdaptationsTab({ ad }: AdaptationsTabProps) {
             <Card key={index} className="border-slate-200 rounded-2xl">
               <CardContent className="p-0">
                 {/* Header */}
-                <div className="bg-gradient-to-r from-blue-50 to-purple-50 p-6 border-b border-slate-200">
+                <div className="bg-linear-to-r from-blue-50 to-purple-50 p-6 border-b border-slate-200">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center">
                       <User className="h-5 w-5 text-blue-600 mr-2" />
@@ -246,7 +246,7 @@ export function AdaptationsTab({ ad }: AdaptationsTabProps) {
                           : []
                         ).map((element: string, elemIndex: number) => (
                           <li key={elemIndex} className="text-sm text-slate-600 flex items-start">
-                            <Palette className="h-3 w-3 text-slate-400 mr-2 mt-0.5 flex-shrink-0" />
+                            <Palette className="h-3 w-3 text-slate-400 mr-2 mt-0.5 shrink-0" />
                             {String(element)}
                           </li>
                         ))}

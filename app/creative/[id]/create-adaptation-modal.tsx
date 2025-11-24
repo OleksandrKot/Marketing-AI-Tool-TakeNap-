@@ -5,8 +5,8 @@ import { X, Zap, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
-import type { Ad } from '@/lib/types';
-import { supabase } from '@/lib/supabase';
+import type { Ad } from '@/lib/core/types';
+import { supabase } from '@/lib/core/supabase';
 import ModalWrapper from '@/components/modals/ModalWrapper';
 import ConfirmModal from '@/components/modals/confirm-modal';
 
