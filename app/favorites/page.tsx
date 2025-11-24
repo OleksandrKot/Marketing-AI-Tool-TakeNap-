@@ -3,15 +3,15 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import ConfirmModal from '@/components/modals/confirm-modal';
 import Link from 'next/link';
-import StorageImage from '@/lib/StorageImage';
+import StorageImage from '@/lib/storage/StorageImage';
 import { useFavorites } from '@/lib/hooks/useFavorites';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardFooter } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Search, GridIcon, LayoutList, ArrowLeft, ArrowUpDown } from 'lucide-react';
-import type { Ad } from '@/lib/types';
+import type { Ad } from '@/lib/core/types';
 import placeholder from '../../public/placeholder.svg';
-import { truncateText } from '@/lib/utils';
+import { truncateText } from '@/lib/core/utils';
 
 type SortOrder = 'newest' | 'oldest' | 'alphabetical';
 type ViewMode = 'grid' | 'list';

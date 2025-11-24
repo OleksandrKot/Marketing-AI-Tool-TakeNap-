@@ -1,16 +1,16 @@
 'use client';
 
 import Header from './components/Header';
-import SearchControls from './components/SearchControls';
+import SearchControls from './components/search-controls';
 import ResultsGrid from './components/ResultsGrid';
 import PaginationBar from './components/PaginationBar';
-import type { Ad } from '@/lib/types';
+import type { Ad } from '@/lib/core/types';
 import useAdArchive, { type UseAdArchiveReturn } from './useAdArchive';
 
 interface AdArchiveBrowserProps {
   initialAds: Ad[];
   pages: string[];
-  initialFilters?: import('@/lib/types').FilterOptions | null;
+  initialFilters?: import('@/lib/core/types').FilterOptions | null;
   initialTotalAds?: number;
 }
 

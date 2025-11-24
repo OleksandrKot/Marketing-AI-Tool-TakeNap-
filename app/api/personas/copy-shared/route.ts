@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { createServerSupabaseClient } from '@/lib/core/supabase';
 import { randomUUID } from 'crypto';
-import { log } from '@/lib/logger';
+import { log } from '@/lib/core/logger';
 
 export async function POST(req: Request) {
   try {

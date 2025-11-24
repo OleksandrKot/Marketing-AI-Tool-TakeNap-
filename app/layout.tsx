@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import { Inter } from 'next/font/google';
 import './globals.css';
 import './modal.css';
-import { ThemeProvider } from '@/components/theme-provider';
+import { ThemeProvider } from '@/components/theme/ThemeProvider';
 import { ToastProvider } from '@/components/ui/toast';
 
 const inter = Inter({ subsets: ['latin', 'cyrillic'] });

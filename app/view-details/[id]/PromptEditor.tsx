@@ -1,14 +1,14 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import type { Ad } from '@/lib/types';
+import type { Ad } from '@/lib/core/types';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Copy } from 'lucide-react';
 import dynamic from 'next/dynamic';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/core/supabase';
 type SupabaseSessionLike = { session?: { user?: Record<string, unknown> } };
 
 interface PromptShape {

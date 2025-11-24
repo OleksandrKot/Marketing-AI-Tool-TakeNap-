@@ -3,13 +3,13 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import StorageImage from '@/lib/StorageImage';
+import StorageImage from '@/lib/storage/StorageImage';
 import { useFolders } from '@/lib/hooks/useFolders';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
-import { truncateText } from '@/lib/utils';
+import { truncateText } from '@/lib/core/utils';
 import placeholder from '../../../public/placeholder.svg';
-import type { Ad } from '@/lib/types';
+import type { Ad } from '@/lib/core/types';
 import type { Folder, FolderItem } from '@/lib/hooks/useFolders';
 
 export default function FolderDetailsPage() {

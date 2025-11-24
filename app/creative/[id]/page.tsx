@@ -1,10 +1,10 @@
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { createServerSupabaseClient } from '@/lib/core/supabase';
 import { AdDetails } from './ad-details';
 import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { AdDetailsSkeleton } from './ad-details-skeleton';
 import type { Metadata } from 'next';
-import type { Ad, AdaptationScenario } from '@/lib/types';
+import type { Ad, AdaptationScenario } from '@/lib/core/types';
 import {
   parseScenarios,
   sanitizeScenarios,
@@ -14,7 +14,7 @@ import {
 } from './utils/adData';
 
 // Кешування даних креативу
-async function getAdById(id: string) {
+async function getAdById(id: string): Promise<Ad | null> {
   try {
     const supabase = createServerSupabaseClient();
 
@@ -62,7 +62,7 @@ async function getAdById(id: string) {
       return getFakeAdById(id);
     }
 
-    return data;
+    return (data as unknown as Ad) || null;
   } catch (error) {
     console.error('Database connection error:', error);
     // Якщо проблема з підключенням, повертаємо фейкові дані
@@ -124,7 +124,7 @@ async function getRelatedAdsByIds(ids: string[]): Promise<Ad[] | null> {
 }
 
 // Фейкові дані для тестування, коли база даних недоступна
-function getFakeAdById(id: string) {
+function getFakeAdById(id: string): Ad | null {
   const fakeAds = {
     '1': {
       id: 1,
@@ -336,18 +336,17 @@ export default async function CreativePage({ params, searchParams }: CreativePag
   }
 
   // Precompute parsing and grouped sections on the server to reduce client bundle work
-  const { visualMainParagraphs, visualDerivedFromVideo } = getVisualParagraphs(ad as Ad);
+  const { visualMainParagraphs, visualDerivedFromVideo } = getVisualParagraphs(ad);
 
-  const rawScenarios = parseScenarios(ad as Ad);
+  const rawScenarios = parseScenarios(ad);
   const adaptationScenarios = sanitizeScenarios(rawScenarios);
 
-  const metaAnalysis = buildMetaAnalysis(ad as Ad, visualMainParagraphs);
+  const metaAnalysis = buildMetaAnalysis(ad, visualMainParagraphs);
 
   const groupedSections = buildGroupedSections(
-    ad as Ad,
+    ad,
     metaAnalysis,
-    adaptationScenarios,
-    visualDerivedFromVideo
+    adaptationScenarios as AdaptationScenario[]
   );
 
   return (

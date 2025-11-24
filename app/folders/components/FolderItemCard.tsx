@@ -1,12 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import StorageImage from '@/lib/StorageImage';
+import StorageImage from '@/lib/storage/StorageImage';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import placeholder from '../../../public/placeholder.svg';
-import { truncateText } from '@/lib/utils';
-import type { Ad } from '@/lib/types';
+import { truncateText } from '@/lib/core/utils';
+import type { Ad } from '@/lib/core/types';
 
 type FolderItem = {
   creative_id: string;

@@ -1,4 +1,4 @@
-import { PageNavigation } from '@/components/page-navigation';
+import { PageNavigation } from '@/components/navigation/PageNavigation';
 import { ProfileDropdown } from '@/app/login-auth/components/profile-dropdown';
 
 export function Header() {

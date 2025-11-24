@@ -3,7 +3,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 // This API route depends on request URL search params and runtime database access.
 // Mark as dynamic so Next won't attempt to render it statically during export.
 export const dynamic = 'force-dynamic';
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { createServerSupabaseClient } from '@/lib/core/supabase';
 
 // GET - отримати список креативів
 export async function GET(request: NextRequest) {

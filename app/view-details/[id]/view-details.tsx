@@ -6,8 +6,8 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import ModalLoading from '@/components/ui/modal-loading';
 // StorageImage is no longer used here; StorageVideo handles preview rendering
-import StorageVideo from '@/lib/StorageVideo';
-import StorageImage from '@/lib/StorageImage';
+import StorageVideo from '@/lib/storage/StorageVideo';
+import StorageImage from '@/lib/storage/StorageImage';
 import {
   ArrowLeft,
   X,
@@ -38,10 +38,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ProfileDropdown } from '@/app/login-auth/components/profile-dropdown';
-import { formatDate } from '@/lib/utils';
-import type { Ad } from '@/lib/types';
+import { formatDate } from '@/lib/core/utils';
+import type { Ad } from '@/lib/core/types';
 import PromptEditor from './PromptEditor';
-import { supabase } from '@/lib/supabase';
+import { supabase } from '@/lib/core/supabase';
 type SupabaseSessionLike = { session?: { user?: Record<string, unknown> } };
 
 // Динамічне завантаження компонентів

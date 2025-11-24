@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { extractDataArray } from '@/lib/utils';
-import { AdCard } from '@/components/ad-card';
+import { extractDataArray } from '@/lib/core/utils';
+import { AdCard } from '@/components/ads/AdCard';
 import FilterPanel from '@/app/filter-bar/components/FilterPanel';
 import { getAds } from '@/app/actions';
-import type { Ad } from '@/lib/types';
+import type { Ad } from '@/lib/core/types';
 
 interface FilterOptions {
   pageName: string;

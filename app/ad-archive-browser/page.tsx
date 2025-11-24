@@ -1,7 +1,7 @@
 import React from 'react';
 import AdArchiveBrowser from './ad-archive-browser';
-import { createServerSupabaseClient } from '@/lib/supabase';
-import type { Ad } from '@/lib/types';
+import { createServerSupabaseClient } from '@/lib/core/supabase';
+import type { Ad } from '@/lib/core/types';
 import { getUniquePages } from '@/app/actions';
 
 type SearchParams = Record<string, string | string[] | undefined>;

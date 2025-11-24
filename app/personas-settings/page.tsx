@@ -18,15 +18,15 @@ import {
   Home,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
-import log from '@/lib/logger';
+import { supabase } from '@/lib/core/supabase';
+import log from '@/lib/core/logger';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { ProfileDropdown } from '@/app/login-auth/components/profile-dropdown';
-import { PageNavigation } from '@/components/page-navigation';
+import { PageNavigation } from '@/components/navigation/PageNavigation';
 import ModalWrapper from '@/components/modals/ModalWrapper';
 import ConfirmModal from '@/components/modals/confirm-modal';
 

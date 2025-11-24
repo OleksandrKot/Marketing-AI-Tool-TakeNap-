@@ -1,8 +1,8 @@
 import React from 'react';
 import dynamic from 'next/dynamic';
-import { AdCard } from '@/components/ad-card';
+import { AdCard } from '@/components/ads/AdCard';
 import { Search } from 'lucide-react';
-import type { Ad, ViewMode } from '@/lib/types';
+import type { Ad, ViewMode } from '@/lib/core/types';
 
 const AINewsModal = dynamic(
   () => import('@/components/modals/ai-news-modal').then((mod) => mod.AINewsModal),

@@ -27,7 +27,7 @@ const ConfirmModal = dynamic(
 );
 import ModalWrapper from '@/components/modals/ModalWrapper';
 import FolderItemCard from './components/FolderItemCard';
-import type { Ad } from '@/lib/types';
+import type { Ad } from '@/lib/core/types';
 
 export default function FoldersPage() {
   // favorites not used in this view (was used previously for UI badges)

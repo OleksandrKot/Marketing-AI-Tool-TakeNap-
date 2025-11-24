@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef } from 'react';
-import ModalWrapper from '@/components/modals/modalwrapper';
+import ModalWrapper from '@/components/modals/ModalWrapper';
 import StructuredAttributes from './StructuredAttributes';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -12,7 +12,7 @@ export default function StructuredAttributesModal({
   ad,
 }: {
   groupedSections: { title: string; text: string }[];
-  ad?: Record<string, unknown>;
+  ad?: Record<string, unknown> | unknown;
 }) {
   const [open, setOpen] = useState(false);
   const [generated, setGenerated] = useState<string>('');

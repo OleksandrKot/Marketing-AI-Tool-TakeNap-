@@ -1,4 +1,4 @@
-import type { Ad } from '@/lib/types';
+import type { Ad } from '@/lib/core/types';
 
 export const getImageKey = (imageUrl: string): string => {
   try {

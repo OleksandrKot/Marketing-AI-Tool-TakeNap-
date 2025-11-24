@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabaseClient } from '@/lib/supabase';
-import { log } from '@/lib/logger';
+import { createServerSupabaseClient } from '@/lib/core/supabase';
+import { log } from '@/lib/core/logger';
 
 // POST /api/personas/share
 export async function POST(req: Request) {

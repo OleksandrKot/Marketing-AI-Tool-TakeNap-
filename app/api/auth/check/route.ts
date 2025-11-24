@@ -5,7 +5,7 @@ import { NextResponse } from 'next/server';
 // export. Next will treat it as a dynamic route and won't attempt to render
 // it statically.
 export const dynamic = 'force-dynamic';
-import { createServerSupabaseClient } from '@/lib/supabase';
+import { createServerSupabaseClient } from '@/lib/core/supabase';
 
 function getErrorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;

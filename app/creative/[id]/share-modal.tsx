@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { X, Copy, Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import type { Ad } from '@/lib/types';
+import type { Ad } from '@/lib/core/types';
 import ModalWrapper from '@/components/modals/ModalWrapper';
 
 interface ShareModalProps {

@@ -1,7 +1,7 @@
 'use server';
 
-import { createServerSupabaseClient } from '@/lib/supabase';
-import type { Ad } from '@/lib/types';
+import { createServerSupabaseClient } from '@/lib/core/supabase';
+import type { Ad } from '@/lib/core/types';
 
 export async function getAds(
   search?: string,

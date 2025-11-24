@@ -4,8 +4,8 @@ import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import ConfirmModal from '@/components/modals/confirm-modal';
 import { Button } from '@/components/ui/button';
-import { supabase } from '@/lib/supabase';
-import { log } from '@/lib/logger';
+import { supabase } from '@/lib/core/supabase';
+import { log } from '@/lib/core/logger';
 
 export default function CopyToProfileButton({ token }: { token: string }) {
   const [loading, setLoading] = useState(false);
