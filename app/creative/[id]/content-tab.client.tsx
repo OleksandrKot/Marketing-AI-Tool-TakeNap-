@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/core/supabase';
 import { useRouter } from 'next/navigation';
@@ -17,11 +17,6 @@ import type { Ad } from '@/lib/core/types';
 
 import ContentMedia from '@/components/creative/content/ContentMedia';
 import ContentControls from '@/components/creative/content/ContentControls';
-// Lazy-load the Attributes modal only when requested to avoid heavy initial bundle
-const DynamicStructuredAttributesModal = dynamic(
-  () => import('./components/StructuredAttributesModal'),
-  { ssr: false, loading: () => null }
-);
 type SupabaseSessionLike = { session?: { user?: Record<string, unknown> } };
 import StorageImage from '@/lib/storage/StorageImage';
 import cleanAndSplit from './utils/cleanAndSplit';
@@ -50,25 +45,38 @@ export default function ContentTabClient({
     loading: () => null,
   });
 
+  const DynamicStructuredAttributesModal = dynamic(
+    () => import('./components/StructuredAttributesModal').then((m) => m.default),
+    { ssr: false, loading: () => <div className="p-2">Loading editor...</div> }
+  );
+
   // Loader component to avoid importing the heavy editor until user requests it
-  function LazyAttributesLoader({
-    groupedSections,
-    ad,
-  }: {
-    groupedSections: { title: string; text: string }[];
-    ad: Record<string, unknown>;
-  }) {
-    const [load, setLoad] = useState(false);
-    return load ? (
-      // dynamically imported component
-      <DynamicStructuredAttributesModal groupedSections={groupedSections} ad={ad} />
-    ) : (
-      <Button variant="outline" onClick={() => setLoad(true)} className="w-full">
-        Open Attributes Editor
-      </Button>
-    );
-  }
+  // Note: the structured attributes modal is dynamically imported below
+  // via `DynamicStructuredAttributesModal` when needed.
   const adData = ad; // server-prepared ad
+  const [localGroupedSections, setLocalGroupedSections] = useState(groupedSections);
+
+  useEffect(() => {
+    setLocalGroupedSections(groupedSections);
+  }, [groupedSections]);
+
+  const applyAttributesToVisual = (obj: Record<string, unknown>) => {
+    try {
+      const json = JSON.stringify(obj, null, 2);
+      const idx = localGroupedSections.findIndex(
+        (g) => g.title === 'Image / Visual Description' || g.title === 'Visual Description'
+      );
+      let updated = [...localGroupedSections];
+      if (idx >= 0) {
+        updated[idx] = { ...updated[idx], text: json };
+      } else {
+        updated = [{ title: 'Image / Visual Description', text: json }, ...updated];
+      }
+      setLocalGroupedSections(updated);
+    } catch (e) {
+      // ignore
+    }
+  };
 
   const handleCopyToClipboard = useCallback(
     async (text: string, fieldName: string): Promise<boolean> => {
@@ -207,7 +215,7 @@ export default function ContentTabClient({
           <Card className="border-slate-200 rounded-2xl">
             <CardContent className="p-0">
               <div className="bg-blue-50 p-6 border-b border-slate-200">
-                <h2 className="text-xl font-semibold text-slate-900">Related Ads</h2>
+                <h2 className="text-xl font-semibold text-slate-900">Related Ads and Duplicates</h2>
               </div>
               <div className="p-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -434,109 +442,9 @@ export default function ContentTabClient({
             </CardContent>
           </Card>
         )}
-
-        {relatedAds && relatedAds.length > 0 && (
-          <Card className="border-slate-200 rounded-2xl">
-            <CardContent className="p-0">
-              <div className="bg-blue-50 p-6 border-b border-slate-200">
-                <h2 className="text-xl font-semibold text-slate-900">
-                  Related Ads ({relatedAds.length})
-                </h2>
-              </div>
-              <div className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {relatedAds.map((relatedAd) => (
-                    <div
-                      key={relatedAd.id}
-                      role="button"
-                      tabIndex={0}
-                      className="bg-white border border-slate-200 rounded-xl p-4 hover:border-blue-200 hover:shadow-lg transition-all duration-300 cursor-pointer"
-                      onClick={() => {
-                        const allRelatedIds = [adData.id, ...relatedAds.map((ra) => ra.id)].filter(
-                          (id) => id !== relatedAd.id
-                        );
-                        const relatedParam =
-                          allRelatedIds.length > 0 ? `?related=${allRelatedIds.join(',')}` : '';
-                        router.push(`/creative/${relatedAd.id}${relatedParam}`);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          const allRelatedIds = [
-                            adData.id,
-                            ...relatedAds.map((ra) => ra.id),
-                          ].filter((id) => id !== relatedAd.id);
-                          const relatedParam =
-                            allRelatedIds.length > 0 ? `?related=${allRelatedIds.join(',')}` : '';
-                          router.push(`/creative/${relatedAd.id}${relatedParam}`);
-                        }
-                      }}
-                    >
-                      <div className="aspect-video bg-slate-100 rounded-lg overflow-hidden mb-3">
-                        {relatedAd.ad_archive_id ? (
-                          <StorageImage
-                            bucket={
-                              relatedAd.display_format === 'VIDEO'
-                                ? 'test10public_preview'
-                                : 'test9bucket_photo'
-                            }
-                            path={`${relatedAd.ad_archive_id}.jpeg`}
-                            alt={relatedAd.title || 'Related ad'}
-                            fill={true}
-                            className="w-full h-full object-cover"
-                            onLoad={() => {
-                              /* no-op */
-                            }}
-                          />
-                        ) : relatedAd.image_url ? (
-                          <div className="w-full h-full flex items-center justify-center bg-slate-100">
-                            <div className="text-center">
-                              <div className="w-12 h-12 bg-slate-200 rounded-full flex items-center justify-center mx-auto mb-2">
-                                <svg
-                                  className="h-6 w-6 text-slate-400"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  viewBox="0 0 24 24"
-                                >
-                                  <path
-                                    strokeLinecap="round"
-                                    strokeLinejoin="round"
-                                    strokeWidth="2"
-                                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                                  ></path>
-                                </svg>
-                              </div>
-                              <p className="text-xs text-slate-400">No preview</p>
-                            </div>
-                          </div>
-                        ) : null}
-                      </div>
-                      <h3 className="font-medium text-slate-900 mb-1 line-clamp-2">
-                        {relatedAd.title || 'Untitled Ad'}
-                      </h3>
-                      <p className="text-sm text-slate-500 mb-2">{relatedAd.page_name}</p>
-                      {relatedAd.display_format === 'VIDEO' && (
-                        <span className="inline-block bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded-full">
-                          📹 Video
-                        </span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        )}
       </div>
 
       <div className="space-y-6">
-        {/* Structured Attributes editor (modal) - load on demand to speed up content page */}
-        <div>
-          <LazyAttributesLoader
-            groupedSections={groupedSections}
-            ad={adData as unknown as Record<string, unknown>}
-          />
-        </div>
         <div className="mb-6">
           <CollapsiblePanel
             title="Visual Description"
@@ -561,15 +469,23 @@ export default function ContentTabClient({
             }
           >
             <div className="space-y-4 mb-4">
-              <GroupedSections
-                sections={groupedSections.filter(
-                  (s) =>
-                    s.title === 'Image / Visual Description' ||
-                    s.title === 'Formats & Creative Concepts'
-                )}
-                onCopy={handleCopyToClipboard}
-                copiedField={copiedField}
-              />
+              <div className="space-y-3">
+                <div className="mb-2">
+                  <DynamicStructuredAttributesModal
+                    groupedSections={localGroupedSections}
+                    ad={adData}
+                    onApply={applyAttributesToVisual}
+                  />
+                </div>
+                <GroupedSections
+                  sections={localGroupedSections.filter(
+                    (s) =>
+                      s.title === 'Image / Visual Description' || s.title === 'Visual Description'
+                  )}
+                  onCopy={handleCopyToClipboard}
+                  copiedField={copiedField}
+                />
+              </div>
             </div>
           </CollapsiblePanel>
         </div>
@@ -579,7 +495,18 @@ export default function ContentTabClient({
             <div className="space-y-6">
               <GroupedSections
                 sections={groupedSections.filter((s) =>
-                  ['Title', 'Ad Text', 'text_on_image', 'Call to Action'].includes(String(s.title))
+                  [
+                    'Title',
+                    'Ad Text',
+                    'text_on_image',
+                    'Call to Action',
+                    'Video Description',
+                    'Audio Description',
+                    'Sound Transcription',
+                    'Audio Style',
+                    'Social Proof',
+                    'Target Audience',
+                  ].includes(String(s.title))
                 )}
                 onCopy={handleCopyToClipboard}
                 copiedField={copiedField}

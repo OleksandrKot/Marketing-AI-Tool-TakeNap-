@@ -1,7 +1,8 @@
 import { PageNavigation } from '@/components/navigation/PageNavigation';
 import { ProfileDropdown } from '@/app/login-auth/components/profile-dropdown';
+import type { ReactNode } from 'react';
 
-export function Header() {
+export function Header({ actions }: { actions?: ReactNode }) {
   return (
     <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12">
       <div>
@@ -12,6 +13,7 @@ export function Header() {
       </div>
       <div className="flex items-center space-x-4 mt-4 md:mt-0">
         <PageNavigation currentPage="library" />
+        {actions ? <div className="ml-2">{actions}</div> : null}
         <ProfileDropdown />
       </div>
     </div>

@@ -40,6 +40,16 @@ export const useScrollbarWidth = () => {
   const computed = React.useRef(false);
   const widthRef = React.useRef(0);
 
+  // If we're running on the server there is no `document`. Return a default
+  // width (0) and avoid accessing DOM APIs which causes SSR errors.
+  if (typeof document === 'undefined') {
+    if (!computed.current) {
+      computed.current = true;
+      widthRef.current = 0;
+    }
+    return widthRef.current;
+  }
+
   if (computed.current) return widthRef.current;
 
   const outer = document.createElement('div');

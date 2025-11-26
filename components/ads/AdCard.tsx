@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Calendar, Tag } from 'lucide-react';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -10,10 +10,12 @@ import { getPublicImageUrl } from '@/lib/storage/helpers';
 interface AdCardProps {
   ad: Ad;
   relatedAds?: Ad[];
+  relatedCount?: number;
   from?: string;
 }
 
-function AdCardComponent({ ad, relatedAds = [], from }: AdCardProps) {
+function AdCardComponent({ ad, relatedAds = [], relatedCount, from }: AdCardProps) {
+  const [expanded, setExpanded] = useState(false);
   const title = ad.title || 'Untitled Ad';
   const isVideo = ad.display_format === 'VIDEO';
 
@@ -99,6 +101,57 @@ function AdCardComponent({ ad, relatedAds = [], from }: AdCardProps) {
             <div className="w-2 h-2 bg-green-500 rounded-full ml-2" />
           </div>
         </div>
+
+        {relatedAds && relatedAds.length > 0 && (
+          <div className="mt-4">
+            {!expanded ? (
+              <button
+                type="button"
+                onClick={() => setExpanded(true)}
+                className="text-sm text-slate-600 hover:text-slate-800 font-medium"
+              >
+                Show {relatedCount ?? relatedAds.length} similar
+              </button>
+            ) : (
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm text-slate-600 font-medium">Similar creatives</span>
+                  <button
+                    type="button"
+                    onClick={() => setExpanded(false)}
+                    className="text-sm text-slate-500 hover:text-slate-700"
+                  >
+                    Hide
+                  </button>
+                </div>
+                <div className="grid grid-cols-4 gap-2">
+                  {relatedAds.slice(0, 8).map((r) => {
+                    const src = r.signed_image_url
+                      ? r.signed_image_url
+                      : r.ad_archive_id
+                      ? getPublicImageUrl(
+                          `${
+                            r.display_format === 'VIDEO'
+                              ? 'test10public_preview'
+                              : 'test9bucket_photo'
+                          }/${r.ad_archive_id}.jpeg`
+                        )
+                      : r.image_url || '/placeholder.svg';
+                    return (
+                      <Link key={r.id} href={`/creative/${r.id}`} className="block">
+                        <img
+                          src={src}
+                          alt={r.title || 'related'}
+                          className="w-full h-20 object-cover rounded-md border border-slate-100"
+                        />
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </CardContent>
 
       <CardFooter className="p-6 pt-0">

@@ -46,6 +46,29 @@ export default function AuthForm({ onAuth }: { onAuth?: (user: UserLike) => void
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) setError(error.message);
       else {
+        // After login, confirm that user email has been approved for access
+        try {
+          const check = await fetch(
+            `/api/access-requests/check?email=${encodeURIComponent(email)}`
+          );
+          const payload = await check.json();
+          if (!check.ok || !payload?.approved) {
+            // Not approved: inform user but DO NOT sign them out so the client session
+            // persists and the gate can show a clear "awaiting approval" state.
+            setError(
+              'Your access has not been approved yet. Please request access at /request-access.'
+            );
+            setSuccess('Signed in but awaiting approval.');
+            // call onAuth with the signed-in user so parent components know there's a session
+            const user = (data as unknown as Record<string, unknown>)['user'] as unknown;
+            onAuth?.({ ...(user as Record<string, unknown>), nickname: undefined } as UserLike);
+            setLoading(false);
+            return;
+          }
+        } catch (err) {
+          // ignore check errors and allow login to proceed
+        }
+
         setSuccess('Logged in!');
         // Fetch user profile (nickname)
         const user = (data as unknown as Record<string, unknown>)['user'] as unknown;
@@ -76,6 +99,22 @@ export default function AuthForm({ onAuth }: { onAuth?: (user: UserLike) => void
         if (profile?.nickname) localStorage.setItem('nickname', profile.nickname);
       }
     } else {
+      // Before registering, ensure email is allowed (admin approved a request)
+      try {
+        const check = await fetch(`/api/access-requests/check?email=${encodeURIComponent(email)}`);
+        const payload = await check.json();
+        if (!check.ok || !payload?.approved) {
+          setError('This email is not approved yet. Please request access first.');
+          setLoading(false);
+          return;
+        }
+      } catch (err) {
+        // If check fails, block registration by default to be safe
+        setError('Could not verify access approval. Please try again later.');
+        setLoading(false);
+        return;
+      }
+
       // Register user - include display_name in auth user metadata
       const { error } = await supabase.auth.signUp({ email, password });
       if (error) setError(error.message);

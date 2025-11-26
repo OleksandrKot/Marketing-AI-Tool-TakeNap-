@@ -1,20 +1,18 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import dynamic from 'next/dynamic';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
-import ConfirmModal from '@/components/modals/confirm-modal';
-// StructuredAttributes removed: all attribute work will be done via Short Prompt
 
-const PageNavigation = dynamic(
-  () => import('@/components/navigation/PageNavigation').then((m) => m.PageNavigation),
-  { ssr: false, loading: () => null }
-);
-const ProfileDropdown = dynamic(
-  () => import('@/app/login-auth/components/profile-dropdown').then((m) => m.ProfileDropdown),
-  { ssr: false, loading: () => null }
+import Header from '@/app/ad-archive-browser/components/Header';
+import { getPublicImageUrl, isStorageUrl } from '@/lib/storage/helpers';
+import { createClientSupabaseClient } from '@/lib/core/supabase';
+import { useToast } from '@/components/ui/toast';
+import dynamic from 'next/dynamic';
+const DynamicStructuredAttributesModal = dynamic(
+  () => import('@/app/creative/[id]/components/StructuredAttributesModal').then((m) => m.default),
+  { ssr: false, loading: () => <div className="p-4">Loading editor...</div> }
 );
 
 // NOTE: StructuredAttributes editor can be heavy and may import browser-only APIs.
@@ -36,11 +34,10 @@ function CreateAdaptationPageInner() {
   const router = useRouter();
   const dataParam = searchParams?.get('data') || '';
   const [prefill, setPrefill] = useState<Record<string, unknown>>({});
-  const [isOpenConfirm, setIsOpenConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   // generatedFromAttrs and structuredRef removed; Short Prompt is the single source
   const [autoFilled, setAutoFilled] = useState(false);
-  const [showAttrEditor, setShowAttrEditor] = useState(false);
+  const [showAttrEditor, setShowAttrEditor] = useState(true);
   // Short Prompt is the single source; parsed/applied on demand when user clicks Apply
 
   // decode prefill payload from query param `data`
@@ -311,12 +308,351 @@ function CreateAdaptationPageInner() {
     }
   };
 
+  const { showToast } = useToast();
+
   const handleSubmit = async () => {
     setIsSubmitting(true);
     try {
       console.debug('[CreateAdaptation] payload', prefill);
+
+      // Prepare short prompt object: prefer structured JSON, otherwise try to parse text,
+      // otherwise send text as { text: ... }
+      const shortPromptObj: Record<string, unknown> =
+        prefill.shortPromptJson && typeof prefill.shortPromptJson === 'object'
+          ? (prefill.shortPromptJson as Record<string, unknown>)
+          : prefill.shortPromptText && typeof prefill.shortPromptText === 'string'
+          ? (() => {
+              try {
+                return JSON.parse(prefill.shortPromptText as string) as Record<string, unknown>;
+              } catch {
+                return { text: String(prefill.shortPromptText) };
+              }
+            })()
+          : {};
+
+      // Determine a reference image URL.
+      // Priority:
+      // 1) explicit signed/full URL fields on the prefill
+      // 2) use `getPublicImageUrl` to build a storage URL from bucket + object key
+      // helper removed: we build/validate URLs using tryBuildFromField and isStorageUrl
+
+      const signed =
+        (prefill as Record<string, unknown>).signed_image_url ||
+        (prefill as Record<string, unknown>).signed_url ||
+        (prefill as Record<string, unknown>).signedUrl ||
+        (prefill as Record<string, unknown>).signed;
+
+      const imageUrlField =
+        (prefill as Record<string, unknown>).image_url ||
+        (prefill as Record<string, unknown>).imageUrl ||
+        (prefill as Record<string, unknown>).image;
+
+      const videoPreviewField =
+        (prefill as Record<string, unknown>).video_preview_image_url ||
+        (prefill as Record<string, unknown>).video_preview_image ||
+        (prefill as Record<string, unknown>).videoPreview;
+
+      let reference_image_url = '';
+
+      // If ad_archive_id (or camelCase `adArchiveId`) is present, prefer constructing a Supabase public URL from buckets
+      const formatRaw =
+        (prefill as Record<string, unknown>).display_format ||
+        (prefill as Record<string, unknown>).displayFormat ||
+        (prefill as Record<string, unknown>).format ||
+        '';
+      const formatStr = typeof formatRaw === 'string' ? formatRaw.toLowerCase() : '';
+      const isVideo = formatStr === 'video' || formatStr.includes('video');
+      const adArchiveIdRaw =
+        (prefill as Record<string, unknown>).ad_archive_id ??
+        (prefill as Record<string, unknown>).adArchiveId ??
+        (prefill as Record<string, unknown>).adArchiveID ??
+        (prefill as Record<string, unknown>).adId ??
+        (prefill as Record<string, unknown>).ad_id ??
+        null;
+
+      if (adArchiveIdRaw) {
+        const id = String(adArchiveIdRaw);
+        const bucket = isVideo
+          ? process.env.NEXT_PUBLIC_AD_BUCKET_VIDEO_PREVIEW ||
+            process.env.AD_BUCKET_VIDEO_PREVIEW ||
+            'test10public_preview'
+          : process.env.NEXT_PUBLIC_AD_BUCKET_PHOTO ||
+            process.env.AD_BUCKET_PHOTO ||
+            'test9bucket_photo';
+        reference_image_url = getPublicImageUrl(`${bucket}/${id}.jpeg`);
+      }
+
+      // We intentionally IGNORE external full URLs (Facebook CDN etc.).
+      // If ad_archive_id already provided above, we already used it. Otherwise, try to
+      // accept only Supabase storage URLs or build them from object keys.
+      if (!reference_image_url) {
+        const photoBucket =
+          process.env.NEXT_PUBLIC_AD_BUCKET_PHOTO ??
+          process.env.AD_BUCKET_PHOTO ??
+          'test9bucket_photo';
+        const videoBucket =
+          process.env.NEXT_PUBLIC_AD_BUCKET_VIDEO_PREVIEW ??
+          process.env.AD_BUCKET_VIDEO_PREVIEW ??
+          'test10public_preview';
+
+        const tryBuildFromField = (field: unknown, preferVideoBucket = false) => {
+          if (typeof field !== 'string' || !field.trim()) return '';
+          const s = String(field).trim();
+          const raw = s.replace(/^\/+/, '');
+
+          const supabaseBase =
+            process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
+
+          // If it's already a Supabase storage URL (public) or a Supabase-signed URL, accept it
+          try {
+            if (supabaseBase && s.startsWith(supabaseBase)) return s;
+          } catch (e) {}
+
+          // Also accept storage public path URLs that our `isStorageUrl` recognizes
+          if (isStorageUrl(s)) return s;
+
+          // If it's an external full URL (http...) from other domains, ignore it
+          if (/^https?:\/\//i.test(s)) return '';
+
+          // Otherwise treat as storage object key and build public URL
+          const bucket = preferVideoBucket ? videoBucket : photoBucket;
+          return getPublicImageUrl(raw.includes('/') ? raw : `${bucket}/${raw}`);
+        };
+
+        // prefer signed/object keys that are storage or keys
+        reference_image_url =
+          tryBuildFromField(signed, Boolean(isVideo)) ||
+          tryBuildFromField(videoPreviewField, true) ||
+          tryBuildFromField(imageUrlField, false) ||
+          '';
+
+        // as ultimate fallback, if ad_archive_id/adArchiveId exists use it (already handled above but keep safety)
+        if (!reference_image_url && adArchiveIdRaw) {
+          const id = String(adArchiveIdRaw);
+          const bucket = (prefill as Record<string, unknown>).display_format
+            ? String((prefill as Record<string, unknown>).display_format)
+                .toLowerCase()
+                .includes('video')
+              ? videoBucket
+              : photoBucket
+            : photoBucket;
+          reference_image_url = getPublicImageUrl(`${bucket}/${id}.jpeg`);
+        }
+      }
+
+      // Ensure Supabase public URLs that are inaccessible (private bucket) are
+      // exchanged for signed URLs via our server-side `/api/sign-image` route.
+      let final_reference_image_url = reference_image_url;
+      try {
+        const supabaseBase = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || '';
+        if (
+          final_reference_image_url &&
+          typeof final_reference_image_url === 'string' &&
+          supabaseBase &&
+          final_reference_image_url.startsWith(supabaseBase)
+        ) {
+          try {
+            const head = await fetch(final_reference_image_url, { method: 'HEAD' });
+            if (!head.ok) {
+              // parse bucket/path from URL, expecting /storage/v1/object/public/<bucket>/<path>
+              const marker = '/storage/v1/object/public/';
+              const idx = final_reference_image_url.indexOf(marker);
+              if (idx !== -1) {
+                const rest = final_reference_image_url.slice(idx + marker.length);
+                const [bucket, ...parts] = rest.split('/');
+                const path = parts.join('/');
+                if (bucket && path) {
+                  try {
+                    const resp = await fetch('/api/sign-image', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ bucket, path, expiresIn: 60 * 5 }),
+                    });
+                    if (resp.ok) {
+                      const json = await resp.json();
+                      if (json?.url) final_reference_image_url = json.url;
+                    }
+                  } catch (e) {
+                    // ignore signing failure, keep original URL
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            // network error on HEAD — ignore and continue
+          }
+        }
+      } catch (e) {
+        // swallow any issues here
+      }
+
+      // Try to attach current user id (if available) to the payload
+      let userId: string | null = null;
+      try {
+        try {
+          const client = createClientSupabaseClient();
+          try {
+            const resp = await client.auth.getUser();
+            userId = resp?.data?.user?.id ?? null;
+          } catch (e) {
+            // older supabase client versions may use auth.getUser or auth.user(); ignore failures
+            try {
+              // @ts-expect-error older client API may exist
+              const u = typeof client.auth.user === 'function' ? client.auth.user() : null;
+              userId = u?.id ?? null;
+            } catch {}
+          }
+        } catch (e) {
+          // can't create client or get user; ignore
+        }
+      } catch {}
+
+      // Extract specific fields requested for the webhook payload
+      const pickPrefillValue = (keys: string[]) => {
+        for (const k of keys) {
+          // direct prefill key
+          if ((prefill as Record<string, unknown>)[k])
+            return (prefill as Record<string, unknown>)[k];
+        }
+        // try in shortPromptObj with various casings
+        for (const k of keys) {
+          const lk = String(k).toLowerCase();
+          if (
+            shortPromptObj &&
+            typeof shortPromptObj === 'object' &&
+            lk in (shortPromptObj as Record<string, unknown>)
+          ) {
+            return (shortPromptObj as Record<string, unknown>)[lk];
+          }
+          // also try original case in shortPromptObj
+          if (
+            shortPromptObj &&
+            typeof shortPromptObj === 'object' &&
+            k in (shortPromptObj as Record<string, unknown>)
+          ) {
+            return (shortPromptObj as Record<string, unknown>)[k];
+          }
+        }
+        return null;
+      };
+
+      const conceptVal = pickPrefillValue(['Concept', 'concept', 'concepts']);
+      const formatVal = pickPrefillValue(['Format', 'format']);
+      const realisationVal = pickPrefillValue([
+        'Realisation',
+        'realisation',
+        'Realization',
+        'realization',
+      ]);
+      const hookkVal = pickPrefillValue(['Hookk', 'Hook', 'hook', 'hookk']);
+      const characterVal = pickPrefillValue(['Character', 'character', 'персонаж']);
+
+      const webhookBody = {
+        type: 'generate_visual_prompt',
+        payload: {
+          reference_image_url: final_reference_image_url,
+          user_prompt: shortPromptObj,
+          user_id: userId,
+          Concept: conceptVal ?? null,
+          Format: formatVal ?? null,
+          Realisation: realisationVal ?? null,
+          Hook: hookkVal ?? null,
+          Character: characterVal ?? null,
+          ad_archive_id: adArchiveIdRaw ?? null,
+        },
+      };
+
+      // Try to fetch the image and embed it as a data URL (base64) instead of sending a long external link.
+      // If fetching or conversion fails, we keep sending the URL.
+      try {
+        const ref = webhookBody.payload.reference_image_url;
+        if (typeof ref === 'string' && /^https?:\/\//i.test(ref)) {
+          try {
+            const r = await fetch(ref);
+            if (r.ok) {
+              const blob = await r.blob();
+              const dataUrl = await new Promise<string>((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onerror = (err) => reject(err);
+                reader.onloadend = () => resolve(String(reader.result));
+                reader.readAsDataURL(blob);
+              });
+              // Replace URL with embedded data URL
+              webhookBody.payload.reference_image_url = dataUrl;
+              console.debug('[CreateAdaptation] embedded image into payload (data URL)', {
+                length: dataUrl?.length ?? 0,
+                type: blob.type || null,
+              });
+            } else {
+              console.debug('[CreateAdaptation] image fetch failed, sending URL', {
+                status: r.status,
+              });
+            }
+          } catch (e) {
+            console.debug('[CreateAdaptation] failed to fetch/encode image; sending URL', e);
+          }
+        }
+      } catch (err) {
+        // swallow
+      }
+
+      // Debug logs for fields used to build reference_image_url (original and final)
+      try {
+        console.debug('[CreateAdaptation] debug', {
+          signed: signed ?? null,
+          imageUrlField: imageUrlField ?? null,
+          videoPreviewField: videoPreviewField ?? null,
+          ad_archive_id: adArchiveIdRaw ?? null,
+          original_reference_image_url: reference_image_url ?? null,
+          reference_image_url: final_reference_image_url ?? null,
+        });
+      } catch {}
+
+      // Notify user about the reference image being used
+      try {
+        showToast({
+          message: `Sending webhook with image: ${reference_image_url || 'none'}`,
+          ttl: 2500,
+        });
+      } catch (e) {
+        // fail silently if toast not available
+      }
+
+      try {
+        const resp = await fetch(
+          process.env.MAKE_GENERATE_URL ||
+            'https://hook.us2.make.com/uydqqpt8utq04dsii5t5wut50ileu199',
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(webhookBody),
+          }
+        );
+        if (!resp.ok) {
+          console.error('Webhook error status', resp.status);
+          try {
+            showToast({ message: `Webhook failed (${resp.status})`, type: 'error' });
+          } catch {}
+        } else {
+          try {
+            const json = await resp.json();
+            console.debug('Webhook response', json);
+          } catch {
+            // ignore non-JSON response bodies
+          }
+          try {
+            showToast({ message: 'Webhook sent successfully', type: 'success' });
+          } catch {}
+        }
+      } catch (err) {
+        console.error('Failed to call webhook', err);
+        try {
+          showToast({ message: 'Failed to send webhook', type: 'error' });
+        } catch {}
+      }
+
+      // keep small delay for UX parity
       await new Promise((r) => setTimeout(r, 800));
-      setIsOpenConfirm(true);
     } catch (e) {
       console.error(e);
     } finally {
@@ -327,9 +663,26 @@ function CreateAdaptationPageInner() {
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="border-b bg-white">
-        <div className="container mx-auto px-6 py-4 flex items-center justify-between max-w-7xl">
-          <PageNavigation currentPage="adaptations" />
-          <ProfileDropdown />
+        <div className="container mx-auto px-6 py-6 max-w-7xl">
+          <Header
+            actions={
+              <div className="flex items-center gap-3">
+                <Button
+                  variant="outline"
+                  onClick={() => router.back()}
+                  className="border-slate-300"
+                >
+                  Back
+                </Button>
+                <Button variant="ghost" onClick={() => router.push('/')}>
+                  Home
+                </Button>
+                <Button variant="outline" onClick={() => router.push('/adaptations')}>
+                  Adaptations
+                </Button>
+              </div>
+            }
+          />
         </div>
       </div>
 
@@ -341,17 +694,7 @@ function CreateAdaptationPageInner() {
               Prefilled from the creative you came from. Edit and submit.
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <Button variant="outline" onClick={() => router.back()} className="border-slate-300">
-              Back
-            </Button>
-            <Button variant="ghost" onClick={() => router.push('/')}>
-              Home
-            </Button>
-            <Button variant="outline" onClick={() => router.push('/adaptations')}>
-              Adaptations
-            </Button>
-          </div>
+          {/* Actions moved into site header to match global styling */}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -390,6 +733,11 @@ function CreateAdaptationPageInner() {
                 {[
                   ['гендер персонажу', 'Gender'],
                   ['персонаж', 'Character'],
+                  ['Concept', 'Concept'],
+                  ['Format', 'Format'],
+                  ['Realisation', 'Realisation'],
+                  ['Hookk', 'Hookk'],
+                  ['Character', 'Character (short)'],
                   ['тип фігури', 'Body type'],
                   ['тип', 'Format'],
                   ['особливості зовнішності', 'Appearance details'],
@@ -481,9 +829,16 @@ function CreateAdaptationPageInner() {
                     </Button>
                   </div>
                   {showAttrEditor ? (
-                    <div className="mt-4 rounded border border-dashed p-4 bg-slate-50 text-sm text-slate-600">
-                      The structured Attributes editor is disabled during prerender/build to avoid
-                      server-side errors. It will be available at runtime in the browser.
+                    <div className="mt-4">
+                      <DynamicStructuredAttributesModal
+                        groupedSections={
+                          ((prefill as Record<string, unknown>)?.groupedSections as unknown as {
+                            title: string;
+                            text: string;
+                          }[]) || []
+                        }
+                        ad={prefill}
+                      />
                     </div>
                   ) : null}
                 </CardContent>
@@ -492,19 +847,6 @@ function CreateAdaptationPageInner() {
           </aside>
         </div>
       </div>
-
-      <ConfirmModal
-        isOpen={isOpenConfirm}
-        title="Adaptation Created"
-        message={JSON.stringify(prefill, null, 2)}
-        confirmLabel="OK"
-        cancelLabel=""
-        onConfirm={() => {
-          setIsOpenConfirm(false);
-          router.push('/adaptations');
-        }}
-        onCancel={() => setIsOpenConfirm(false)}
-      />
     </div>
   );
 }

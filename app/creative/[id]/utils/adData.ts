@@ -538,6 +538,10 @@ export const buildGroupedSections = (
       visualPromptJson = visualPromptJson || promptJsonV;
       push('Image / Visual Description', JSON.stringify(promptJsonV, null, 2));
     }
+
+    // Also expose the raw video description separately so editors can show it
+    // under "Additional content" (makes it easy to view Video-specific text).
+    push('Video Description', videoRaw);
   }
 
   // Additional audio data

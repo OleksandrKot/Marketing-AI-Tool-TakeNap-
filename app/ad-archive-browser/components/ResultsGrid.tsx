@@ -16,6 +16,7 @@ type Props = {
   viewMode: ViewMode;
   currentPageAds: Ad[];
   adIdToGroupMap: Record<string, Ad[]>;
+  adIdToRelatedCount?: Record<string, number>;
   filteredAdsByType: Ad[];
   selectedCreativeType: 'all' | 'video' | 'image';
   onCloseModal?: () => void;
@@ -29,6 +30,7 @@ function ResultsGrid({
   viewMode,
   currentPageAds,
   adIdToGroupMap,
+  adIdToRelatedCount,
   filteredAdsByType,
   selectedCreativeType,
   onCloseModal,
@@ -49,10 +51,31 @@ function ResultsGrid({
             viewMode === 'grid' ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3' : 'grid-cols-1'
           }`}
         >
-          {currentPageAds.map((ad: Ad) => {
+          {currentPageAds.map((ad: Ad, idx: number) => {
             const fullGroup = adIdToGroupMap[ad.id] ?? [];
             const relatedAds = fullGroup.filter((a: Ad) => a.id !== ad.id);
-            return <AdCard key={ad.id} ad={ad} relatedAds={relatedAds} />;
+            const relatedCount = adIdToRelatedCount
+              ? adIdToRelatedCount[ad.id] ?? relatedAds.length
+              : relatedAds.length;
+            try {
+              // Log first few entries so developer can inspect mapping in browser console
+              if (typeof window !== 'undefined' && idx < 5) {
+                // eslint-disable-next-line no-console
+                console.debug(
+                  '[ResultsGrid] ad=',
+                  ad.id,
+                  'relatedCount=',
+                  relatedCount,
+                  'exactGroup=',
+                  fullGroup.length
+                );
+              }
+            } catch (e) {
+              /* noop */
+            }
+            return (
+              <AdCard key={ad.id} ad={ad} relatedAds={relatedAds} relatedCount={relatedCount} />
+            );
           })}
 
           {filteredAdsByType.length === 0 && (

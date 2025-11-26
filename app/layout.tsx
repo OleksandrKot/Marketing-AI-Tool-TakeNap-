@@ -5,6 +5,9 @@ import './globals.css';
 import './modal.css';
 import { ThemeProvider } from '@/components/theme/ThemeProvider';
 import { ToastProvider } from '@/components/ui/toast';
+import AdminButton from '@/components/admin/AdminButton';
+import AccessGate from '@/components/auth/AccessGate';
+import AuthContentGate from '@/components/auth/AuthContentGate';
 
 const inter = Inter({ subsets: ['latin', 'cyrillic'] });
 
@@ -24,7 +27,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           enableSystem={false}
           disableTransitionOnChange
         >
-          <ToastProvider>{children}</ToastProvider>
+          <ToastProvider>
+            <AccessGate />
+            {process.env.NEXT_PUBLIC_SHOW_ADMIN_BUTTON === 'true' ? <AdminButton /> : null}
+            <AuthContentGate>{children}</AuthContentGate>
+          </ToastProvider>
         </ThemeProvider>
       </body>
     </html>

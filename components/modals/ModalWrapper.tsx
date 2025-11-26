@@ -1,16 +1,23 @@
 'use client';
 
 import { useScrollbarWidth } from '@/lib/core/utils';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 
 type Props = {
   isOpen: boolean;
   onClose?: () => void;
   children: React.ReactNode;
   panelClassName?: string;
+  backdropClassName?: string;
 };
 
-export default function ModalWrapper({ isOpen, onClose, children, panelClassName }: Props) {
+export default function ModalWrapper({
+  isOpen,
+  onClose,
+  children,
+  panelClassName,
+  backdropClassName,
+}: Props) {
   const scrollbarWidth = useScrollbarWidth();
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -46,6 +53,14 @@ export default function ModalWrapper({ isOpen, onClose, children, panelClassName
     return () => document.removeEventListener('keydown', onKey);
   }, [isOpen, onClose]);
 
+  // Track whether the pointerdown originated on the backdrop so we only close
+  // when the interaction both started and ended on the backdrop.
+  const pointerDownOnBackdropRef = useRef<boolean>(false);
+
+  // If modal is not open, do not render anything. We still rely on the
+  // useEffect cleanup above to restore scroll state when isOpen flips false.
+  if (!isOpen) return null;
+
   return (
     <>
       {/* Backdrop uses click to close when clicking outside the panel. We handle Escape on document.
@@ -53,11 +68,24 @@ export default function ModalWrapper({ isOpen, onClose, children, panelClassName
           tabIndex/keyboard handlers to a non-interactive element. */}
       {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
       <div
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 !m-0 !mx-0"
+        className={
+          backdropClassName ??
+          'fixed inset-0 z-50 flex items-center justify-center bg-black/40 !m-0 !mx-0'
+        }
         role="dialog"
         aria-modal="true"
+        // Only close when the pointer-down started on the backdrop and the
+        // final click/up also happens on the backdrop. This avoids closing the
+        // modal when a user starts an interaction (e.g. drag/resize) inside
+        // the panel and releases the pointer outside the window.
+        onPointerDown={(e) => {
+          // store whether the pointerdown originated on the backdrop
+          (pointerDownOnBackdropRef.current as boolean) = e.target === e.currentTarget;
+        }}
         onClick={(e) => {
-          if (e.target === e.currentTarget) onClose?.();
+          if (e.target === e.currentTarget && pointerDownOnBackdropRef.current) onClose?.();
+          // reset flag after handling click
+          pointerDownOnBackdropRef.current = false;
         }}
       >
         {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions */}

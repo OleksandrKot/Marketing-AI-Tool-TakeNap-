@@ -14,19 +14,15 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
 import { Copy, Trash2, Move } from 'lucide-react';
 
-type Block = { id: string; label: string; value: string; included: boolean };
-type PropItem = { key: string; label: string; value: string };
-
-function uid() {
-  return Math.random().toString(36).slice(2, 9);
-}
-
 import {
   prettifyKey,
   stringifyValue,
   tryParseJson,
   flattenJsonToProps,
 } from '@/lib/creative/structured-attributes';
+
+type Block = { id: string; label: string; value: string; included: boolean };
+type PropItem = { key: string; label: string; value: string };
 
 type StructuredAttributesProps = {
   // Sections coming from buildGroupedSections (Title, Ad Text, Image / Visual Description, etc.)
@@ -42,10 +38,21 @@ export type StructuredAttributesRef = {
   applyJson?: (obj: Record<string, unknown>) => void;
 } | null;
 
+function uid() {
+  return Math.random().toString(36).slice(2, 9);
+}
+
+/**
+ * Normalize keys/labels to compare them safely (supports EN + UA characters).
+ */
+function normalizeKey(input: string | undefined | null): string {
+  if (!input) return '';
+  return String(input)
+    .toLowerCase()
+    .replace(/[^a-zA-Z0-9\u0400-\u04FF]+/g, '');
+}
+
 // Strict mapping for known prompt-related fields.
-// jsonKey – key we expect inside AiPrompt JSON (UA or EN)
-// label   – human-readable label (for UI)
-// outKey  – canonical key used in generated JSON
 const PROMPT_FIELDS: { jsonKey: string; label: string; outKey: string }[] = [
   // Core prompt fields (visual prompt)
   { jsonKey: 'subject', label: 'Subject', outKey: 'subject' },
@@ -56,54 +63,156 @@ const PROMPT_FIELDS: { jsonKey: string; label: string; outKey: string }[] = [
   { jsonKey: 'textOnImage', label: 'Text on Image', outKey: 'text_on_image' },
 
   // Character (UA → unified EN-ish keys)
-  { jsonKey: 'гендер персонажу', label: 'Character Gender', outKey: 'characterGender' },
+  { jsonKey: 'Character Gender', label: 'Character Gender', outKey: 'characterGender' },
   {
-    jsonKey: 'персонаж',
+    jsonKey: 'Character Type',
     label: 'Character Type (realistic or fictional)',
     outKey: 'characterType',
   },
-  { jsonKey: 'тип фігури', label: 'Body Type', outKey: 'bodyType' },
-  { jsonKey: 'тип', label: 'Type', outKey: 'type' },
-  { jsonKey: 'особливості зовнішності', label: 'Appearance Details', outKey: 'appearanceDetails' },
-  { jsonKey: 'одяг', label: 'Clothing', outKey: 'clothing' },
-  { jsonKey: 'колір волосся', label: 'Hair Color', outKey: 'hairColor' },
-  { jsonKey: 'поза', label: 'Pose', outKey: 'pose' },
+  { jsonKey: 'Body Type', label: 'Body Type', outKey: 'bodyType' },
+  { jsonKey: 'Type', label: 'Type', outKey: 'type' },
+  { jsonKey: 'Appearance Details', label: 'Appearance Details', outKey: 'appearanceDetails' },
+  { jsonKey: 'Clothing', label: 'Clothing', outKey: 'clothing' },
+  { jsonKey: 'Hair Color', label: 'Hair Color', outKey: 'hairColor' },
+  { jsonKey: 'Pose', label: 'Pose', outKey: 'pose' },
   {
-    jsonKey: 'розташування персонажа у кадрі',
+    jsonKey: 'Character Position in Frame',
     label: 'Character Position in Frame',
     outKey: 'characterPositionInFrame',
   },
 
   // Background / palette (UA → unified EN-ish keys)
   {
-    jsonKey: 'кольорова палітра візуалу',
+    jsonKey: 'Visual Color Palette',
     label: 'Visual Color Palette',
     outKey: 'visualColorPalette',
   },
-  { jsonKey: 'локація', label: 'Location', outKey: 'location' },
-  { jsonKey: 'елементи заднього фону', label: 'Background Elements', outKey: 'backgroundElements' },
+  { jsonKey: 'Location', label: 'Location', outKey: 'location' },
+  { jsonKey: 'Background Elements', label: 'Background Elements', outKey: 'backgroundElements' },
   {
-    jsonKey: 'особливості елементів заднього фону',
+    jsonKey: 'Background Element Details',
     label: 'Background Element Details',
     outKey: 'backgroundElementDetails',
   },
 ];
 
+// Fallback section titles used when JSON / strict fields are not available
+const INITIAL_KEYS = [
+  'Topic',
+  'Character',
+  'Tone',
+  'Scenario',
+  'Hooks',
+  'Camera Angles',
+  'Color Palette',
+  'Emotional State',
+];
+
+// Default blocks that must exist in the main list (UI + final prompt)
+const DEFAULT_FIELDS: { label: string; value: string }[] = [
+  { label: 'Character Gender', value: 'female/male' },
+  { label: 'Character', value: 'realistic / fictional' },
+  { label: 'Body Type', value: '' },
+  { label: 'Type', value: '' },
+  { label: 'Appearance Details', value: '' },
+  { label: 'Clothing', value: '' },
+  { label: 'Hair Color', value: '' },
+  { label: 'Pose', value: '' },
+  { label: 'Character Position in Frame', value: '' },
+  { label: 'Emotions', value: 'Positive emotions such as warmth, happiness, comfort' },
+  { label: 'Visual Color Palette', value: '' },
+  { label: 'Location', value: '' },
+  { label: 'Background Elements', value: '' },
+  { label: 'Background Element Details', value: '' },
+  { label: 'Scene', value: 'Warm indoor environment with soft ambient lighting' },
+  { label: 'Style', value: 'Clean, modern, warm and inviting color palette' },
+];
+
+// Default props for Available Properties (derived from DEFAULT_FIELDS → no duplication)
+const DEFAULT_PROP_ITEMS: PropItem[] = DEFAULT_FIELDS.map((f) => ({
+  key: normalizeKey(f.label) || f.label,
+  label: f.label,
+  value: f.value,
+}));
+
+// Short label overrides for clarity in the Available Properties pills
+const SHORT_LABELS: Record<string, string> = {
+  Id: 'Id',
+  'Created At': 'Created',
+  'Ad Archive Id': 'Archive Id',
+  'Page Name': 'Page',
+  Text: 'Text',
+  Caption: 'Caption',
+  'Cta Text': 'CTA',
+  'Cta Type': 'CTA Type',
+  'Display Format': 'Format',
+  'Link Url': 'Link',
+  Title: 'Title',
+  'Publisher Platform': 'Platform',
+  'Meta Ad Url': 'Meta URL',
+  'Image Url': 'Image',
+  'Image Description': 'Image Desc',
+  Concept: 'Concept',
+  Realisation: 'Realisation',
+  Topic: 'Topic',
+  Hook: 'Hook',
+  Character: 'Character',
+  'New Scenario': 'New Scenario',
+};
+
+const MAX_PILL_LABEL_LEN = 26;
+
+/**
+ * Convert raw label into a more human readable form:
+ *  - replace underscores / dots with spaces
+ *  - collapse multiple spaces
+ *  - Title Case each word (keep acronyms as-is)
+ */
+function humanizeLabel(label: string): string {
+  const cleaned = label
+    .replace(/[_\.]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return '';
+  const words = cleaned.split(' ');
+  return words
+    .map((w) => {
+      if (!w) return '';
+      // Keep pure acronyms like CTA / AI etc.
+      if (w.toUpperCase() === w) return w;
+      return w[0].toUpperCase() + w.slice(1).toLowerCase();
+    })
+    .join(' ');
+}
+
+/**
+ * Truncate label at word boundary where possible.
+ */
+function truncateLabel(label: string, max = MAX_PILL_LABEL_LEN): string {
+  if (label.length <= max) return label;
+  const cut = label.lastIndexOf(' ', max - 1);
+  const slicePoint = cut > 10 ? cut : max;
+  const sliced = label.slice(0, slicePoint);
+  return `${sliced.trim()}…`;
+}
+
+/**
+ * Final formatter for pill labels:
+ *  - apply SHORT_LABELS override if exists
+ *  - otherwise humanize and then truncate
+ */
+function formatPillLabel(label: string): string {
+  const override = SHORT_LABELS[label];
+  if (override) return override;
+  const human = humanizeLabel(label);
+  return truncateLabel(human || label);
+}
+
 const StructuredAttributes = (
   { groupedSections, onGeneratedChange, ad }: StructuredAttributesProps,
   ref: React.Ref<StructuredAttributesRef>
 ) => {
-  // Fallback section titles used when JSON / strict fields are not available
-  const initialKeys = [
-    'Topic',
-    'Character',
-    'Tone',
-    'Scenario',
-    'Hooks',
-    'Camera Angles',
-    'Color Palette',
-    'Emotional State',
-  ];
+  const format = 'json' as const;
 
   /**
    * Try to guess Topic from raw visual text.
@@ -124,6 +233,7 @@ const StructuredAttributes = (
    *  - Image / Visual Description JSON
    *  - new_scenario / video_script
    *  - grouped sections (Topic, Character, etc.)
+   *  - DEFAULT_FIELDS (ensures minimal prompt scaffold)
    */
   const mapFromSections = (): Block[] => {
     const out: Block[] = [];
@@ -185,7 +295,7 @@ const StructuredAttributes = (
       addPromptField(cfg);
     }
 
-    // 3) new_scenario → New Scenario
+    // 3) new_scenario → Scenario
     try {
       const ns =
         ad &&
@@ -197,14 +307,14 @@ const StructuredAttributes = (
           if (parsed) {
             out.push({
               id: uid(),
-              label: 'New Scenario',
+              label: 'Scenario',
               value: JSON.stringify(parsed, null, 2),
               included: true,
             });
           } else {
             out.push({
               id: uid(),
-              label: 'New Scenario',
+              label: 'Scenario',
               value: String(ns),
               included: true,
             });
@@ -212,7 +322,7 @@ const StructuredAttributes = (
         } else {
           out.push({
             id: uid(),
-            label: 'New Scenario',
+            label: 'Scenario',
             value: stringifyValue(ns),
             included: true,
           });
@@ -251,7 +361,7 @@ const StructuredAttributes = (
     }
 
     // 5) fallback: add grouped sections by title (Topic, Character, etc.)
-    for (const key of initialKeys) {
+    for (const key of INITIAL_KEYS) {
       if (out.find((b) => b.label === key)) continue;
       const s = groupedSections.find((g) => g.title.toLowerCase().includes(key.toLowerCase()));
       if (s && s.text && s.text.trim()) {
@@ -269,6 +379,14 @@ const StructuredAttributes = (
           value: topicGuess,
           included: true,
         });
+      }
+    }
+
+    // 7) ensure DEFAULT_FIELDS exist
+    for (const def of DEFAULT_FIELDS) {
+      const exists = out.some((b) => normalizeKey(b.label) === normalizeKey(def.label));
+      if (!exists) {
+        out.push({ id: uid(), label: def.label, value: def.value, included: true });
       }
     }
 
@@ -297,13 +415,12 @@ const StructuredAttributes = (
   });
 
   const dragIndex = useRef<number | null>(null);
-  const [format] = useState<'json' | 'llm'>('json');
 
-  // Set of normalized keys used in blocks, to avoid duplicate props
+  // Set of normalized labels used in blocks, to avoid duplicate properties
   const usedPropKeys = useMemo(() => {
     const s = new Set<string>();
     for (const b of blocks) {
-      const k = b.label.replace(/[^a-zA-Z0-9]+/g, '').toLowerCase();
+      const k = normalizeKey(b.label);
       if (k) s.add(k);
     }
     return s;
@@ -314,6 +431,7 @@ const StructuredAttributes = (
    *  - flat ad properties
    *  - nested JSON properties inside ad (flattened)
    *  - JSON from "Image / Visual Description" (flattened)
+   *  - DEFAULT_PROP_ITEMS (for prompt-friendly fields)
    */
   const allProps = useMemo(() => {
     const result: PropItem[] = [];
@@ -339,7 +457,7 @@ const StructuredAttributes = (
         if (typeof v !== 'string') continue;
         const parsed = tryParseJson(v);
         if (!parsed) continue;
-        const buf: { key: string; label: string; value: string }[] = [];
+        const buf: PropItem[] = [];
         flattenJsonToProps(buf, parsed, k);
         nested.push(...buf);
       }
@@ -360,7 +478,7 @@ const StructuredAttributes = (
     if (visual?.text) {
       const parsed = tryParseJson(visual.text) as unknown;
       if (parsed && typeof parsed === 'object') {
-        const flat: { key: string; label: string; value: string }[] = [];
+        const flat: PropItem[] = [];
         flattenJsonToProps(flat, parsed, '');
         for (const item of flat) {
           const val = item.value?.trim();
@@ -372,8 +490,15 @@ const StructuredAttributes = (
       }
     }
 
+    // 4) default prompt-related props
+    for (const def of DEFAULT_PROP_ITEMS) {
+      if (seen.has(def.key)) continue;
+      seen.add(def.key);
+      result.push(def);
+    }
+
     return result;
-  }, [ad, groupedSections, usedPropKeys]);
+  }, [ad, groupedSections]);
 
   /**
    * Autosave blocks to localStorage (per pathname).
@@ -457,7 +582,6 @@ const StructuredAttributes = (
   /**
    * Generate final prompt:
    *  - format "json": returns JSON with canonical keys
-   *  - format "llm": returns plain text instruction
    */
   const generatePrompt = useCallback((): string => {
     const included = blocks.filter((bl) => bl.included && bl.value && bl.value.trim());
@@ -487,13 +611,8 @@ const StructuredAttributes = (
       return JSON.stringify(obj, null, 2);
     }
 
-    // LLM-style text prompt (not used by default in your flow, but kept for flexibility)
-    const lines: string[] = [];
-    lines.push('Generate a concise, ready-to-use creative prompt using the following attributes:');
-    for (const bl of included) {
-      lines.push(`- ${bl.label}: ${bl.value.trim()}`);
-    }
-    return lines.join('\n');
+    // Currently not used; kept for possible future extension.
+    return '';
   }, [blocks, format]);
 
   /**
@@ -501,10 +620,10 @@ const StructuredAttributes = (
    */
   useEffect(() => {
     if (onGeneratedChange) onGeneratedChange(generatePrompt());
-  }, [blocks, format, generatePrompt, onGeneratedChange]);
+  }, [blocks, generatePrompt, onGeneratedChange]);
 
   /**
-   * allow parent component to "apply JSON into blocks":
+   * Allow parent component to "apply JSON into blocks":
    *  - match by normalized label
    *  - update existing blocks
    *  - append unknown keys as new blocks
@@ -519,14 +638,14 @@ const StructuredAttributes = (
         // normalized key map for lookup
         const normObj: Record<string, string> = {};
         for (const k of Object.keys(obj)) {
-          const nk = k.replace(/[^a-zA-Z0-9\u0400-\u04FF]+/g, '').toLowerCase();
+          const nk = normalizeKey(k);
           normObj[nk] = k;
         }
 
         // update existing blocks where label matches
         for (let i = 0; i < copy.length; i++) {
           const blk = copy[i];
-          const blkKey = blk.label.replace(/[^a-zA-Z0-9\u0400-\u04FF]+/g, '').toLowerCase();
+          const blkKey = normalizeKey(blk.label);
           const matchedObjKey = normObj[blkKey];
           if (matchedObjKey && Object.prototype.hasOwnProperty.call(obj, matchedObjKey)) {
             copy[i] = {
@@ -579,8 +698,9 @@ const StructuredAttributes = (
               <div className="text-sm font-medium mb-2">Available Properties</div>
               <div className="flex flex-wrap gap-2">
                 {allProps.map((p) => {
-                  const normalizedKey = p.key.replace(/[^a-zA-Z0-9]+/g, '').toLowerCase();
+                  const normalizedKey = normalizeKey(p.label);
                   const disabled = usedPropKeys.has(normalizedKey);
+                  const pillLabel = formatPillLabel(p.label);
 
                   return (
                     <button
@@ -597,7 +717,7 @@ const StructuredAttributes = (
                           { id: uid(), label: p.label, value: p.value, included: true },
                         ]);
                       }}
-                      className={`text-xs rounded-full px-3 py-1 ${
+                      className={`text-xs w-40 truncate text-wrap rounded-full px-6 py-1 text-left ${
                         disabled
                           ? 'bg-slate-50 text-slate-400 line-through'
                           : 'bg-slate-100 hover:bg-slate-200'
@@ -605,7 +725,7 @@ const StructuredAttributes = (
                       title={disabled ? `${p.label} (used)` : `Add ${p.label}`}
                       aria-disabled={disabled}
                     >
-                      {p.label}
+                      {pillLabel}
                     </button>
                   );
                 })}

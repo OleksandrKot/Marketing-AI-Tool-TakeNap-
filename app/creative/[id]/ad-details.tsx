@@ -166,6 +166,15 @@ const AdDetails = memo(function AdDetails({
                   // Build prefill and include Short Prompt (from groupedSections if present)
                   const prefill: Record<string, unknown> = {
                     imageVisualDescription: ad.image_description || ad.video_script || '',
+                    // include image fields so create page can build public reference_image_url
+                    image_url: ad.image_url || undefined,
+                    signed_image_url:
+                      (ad as Record<string, unknown>)['signed_image_url'] ||
+                      (ad as Record<string, unknown>)['signedUrl'] ||
+                      undefined,
+                    video_preview_image_url: ad.video_preview_image_url || undefined,
+                    // indicate whether creative is a video or photo
+                    display_format: ad.display_format || undefined,
                     'гендер персонажу': '',
                     персонаж: '',
                     'тип фігури': '',
@@ -184,6 +193,7 @@ const AdDetails = memo(function AdDetails({
                     style: 'Clean, modern, warm and inviting color palette',
                     adId: ad.id,
                     adArchiveId: ad.ad_archive_id,
+                    ad_archive_id: ad.ad_archive_id,
                     title: ad.title,
                     page_name: ad.page_name,
                   };
@@ -205,6 +215,7 @@ const AdDetails = memo(function AdDetails({
                       prefill.shortPromptText = String(shortSection.text);
                     }
                   }
+                  console.debug('[CreateAdaptation] prefill', prefill);
                   const json = JSON.stringify(prefill);
                   const encoded =
                     typeof window !== 'undefined'

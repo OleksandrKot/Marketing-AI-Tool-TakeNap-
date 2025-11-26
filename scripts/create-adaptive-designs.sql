@@ -5,24 +5,31 @@
 CREATE TABLE IF NOT EXISTS adaptive_designs (
   id BIGSERIAL PRIMARY KEY,
   created_at TIMESTAMPTZ DEFAULT NOW(),
+  --Refetence id
   user_id UUID NOT NULL,
-  based_on_ad_archive_id TEXT, -- reference to ads_library.ad_archive_id (optional)
+  ad_archive_id_reference TEXT,
+  
   title TEXT,
   text TEXT,
   caption TEXT,
-  cta_text TEXT,
-  cta_type TEXT,
-  display_format TEXT,
-  audio_script TEXT,
-  video_script TEXT,
+
+  -- Format and Creative Concept fields
+  concept TEXT,
+  format TEXT,
+  realisation TEXT,
+  topic TEXT,
+  hook TEXT,
+  character TEXT,
+
+  --Creative details
+  main_obj_and_char, TEXT,
+  background_description TEXT,
+  style_description TEXT,
+  emotions_description TEXT,
+  mood_description TEXT,
   image_description TEXT,
-  -- store optionally the generated asset meta (e.g., filename or storage key). Prefer storing actual file in storage and reference key here.
-  asset_file_name TEXT,
-  asset_storage_key TEXT,
-  payload JSONB,       -- shortPrompt / user-provided JSON used for generation
-  make_response JSONB, -- raw response from Make.com
-  is_active BOOLEAN DEFAULT TRUE
+  
 );
 
 CREATE INDEX IF NOT EXISTS idx_adaptive_designs_user ON adaptive_designs(user_id);
-CREATE INDEX IF NOT EXISTS idx_adaptive_designs_based_on_ad ON adaptive_designs(based_on_ad_archive_id);
+CREATE INDEX IF NOT EXISTS idx_adaptive_designs_based_on_ad ON adaptive_designs(ad_archive_id_reference);

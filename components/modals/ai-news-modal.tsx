@@ -259,12 +259,13 @@ function AINewsModalComponent({
                   <Button
                     onClick={() => {
                       try {
-                        window.location.reload();
+                        // Request a soft refresh handled by the app (no full page reload)
+                        window.dispatchEvent(new CustomEvent('app:refresh'));
                       } catch (e) {}
                     }}
                     className="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl h-11 px-6"
                   >
-                    Refresh the page now
+                    Refresh data
                   </Button>
                   <Button variant="ghost" onClick={onClose} className="h-11 px-4">
                     Close

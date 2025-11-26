@@ -6,11 +6,17 @@ import type { Ad, FilterOptions, ViewMode } from '@/lib/core/types';
 import { getAds } from '../actions';
 import * as utils from './utils';
 
+declare global {
+  interface Window {
+    __lastPhashCheck?: number;
+  }
+}
+
 export function useAdArchive(
   initialAds: Ad[],
   initialFilters?: FilterOptions,
   initialTotalAds?: number,
-  pollIntervalMs: number = 5 * 60 * 1000 // default to 5 minutes
+  pollIntervalMs: number = 60 * 1000
 ) {
   const [ads, setAds] = useState<Ad[]>(initialAds);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
@@ -33,7 +39,11 @@ export function useAdArchive(
   const [importSavedCreatives, setImportSavedCreatives] = useState<number | null>(null);
   const [importTotalCreatives, setImportTotalCreatives] = useState<number | null>(null);
   const [autoClearProcessing, setAutoClearProcessing] = useState<boolean>(true);
-  // lightweight request logs (shown in UI as stacked entries)
+  const jobChannelRef = useRef<ReturnType<(typeof supabase)['channel']> | null>(null);
+  const clearDisplayTimeoutRef = useRef<number | null>(null);
+  const searchTimeout = useRef<number | null>(null);
+  const isLoadingRef = useRef<boolean>(false);
+
   const [requestLogs, setRequestLogs] = useState<
     Array<{
       id: string;
@@ -44,49 +54,6 @@ export function useAdArchive(
     }>
   >([]);
 
-  const pushRequestLog = useCallback(
-    (entry: { type?: string; text?: string; meta?: Record<string, unknown> }) => {
-      try {
-        setRequestLogs((prev) => {
-          const next = [
-            ...prev,
-            {
-              id: `${Date.now()}_${Math.floor(Math.random() * 100000)}`,
-              time: new Date().toISOString(),
-              ...entry,
-            },
-          ];
-          return next.slice(-500);
-        });
-        // If this is a status-type log, reflect it in the import status UI as well
-        try {
-          if (entry?.type === 'status') {
-            if (typeof entry.text === 'string' && entry.text.trim() !== '') {
-              setProcessingMessage(String(entry.text));
-              // new activity — cancel any scheduled clear
-              clearScheduledDisplay();
-            }
-            const meta = entry.meta ?? {};
-            if (meta && typeof meta === 'object') {
-              const maybeStatus = (meta as Record<string, unknown>)['status'];
-              if (typeof maybeStatus === 'string') setImportStatus(maybeStatus);
-              const maybeJob = (meta as Record<string, unknown>)['job_id'];
-              if (typeof maybeJob === 'string') setImportJobId(maybeJob);
-              const maybeSaved = (meta as Record<string, unknown>)['saved_creatives'];
-              if (typeof maybeSaved === 'number') setImportSavedCreatives(maybeSaved);
-              const maybeTotal = (meta as Record<string, unknown>)['total_creatives'];
-              if (typeof maybeTotal === 'number') setImportTotalCreatives(maybeTotal);
-            }
-          }
-        } catch (e) {
-          console.debug('pushRequestLog: mirror to import status failed', e);
-        }
-      } catch (e) {
-        console.debug('pushRequestLog error', e);
-      }
-    },
-    []
-  );
   const clearRequestLogs = useCallback(() => {
     try {
       setRequestLogs([]);
@@ -94,8 +61,6 @@ export function useAdArchive(
       console.debug('clearRequestLogs error', e);
     }
   }, []);
-  const jobChannelRef = useRef<ReturnType<(typeof supabase)['channel']> | null>(null);
-  const clearDisplayTimeoutRef = useRef<number | null>(null);
 
   const scheduleClearDisplay = useCallback(
     (delay = 6000) => {
@@ -134,12 +99,10 @@ export function useAdArchive(
 
   const clearProcessingDisplay = useCallback(() => {
     try {
-      // cancel any scheduled clear
       if (clearDisplayTimeoutRef.current) {
         window.clearTimeout(clearDisplayTimeoutRef.current);
         clearDisplayTimeoutRef.current = null;
       }
-      // reset processing-related state
       setProcessingMessage('');
       setImportStatus(null);
       setImportSavedCreatives(null);
@@ -147,7 +110,6 @@ export function useAdArchive(
       setProcessingDone(false);
       setImportJobId(null);
 
-      // unsubscribe job-specific channel if present
       try {
         jobChannelRef.current?.unsubscribe();
       } catch (e) {
@@ -158,9 +120,53 @@ export function useAdArchive(
     }
   }, []);
 
-  // Persistent user-level realtime subscription. This listens for any import_status
-  // changes for the currently-authenticated user so the UI shows imports started
-  // by other tabs or earlier runs as well.
+  const pushRequestLog = useCallback(
+    (entry?: { type?: string; text?: string; meta?: Record<string, unknown> }) => {
+      try {
+        setRequestLogs((prev) => {
+          const next = [
+            ...prev,
+            {
+              id: `${Date.now()}_${Math.floor(Math.random() * 100000)}`,
+              time: new Date().toISOString(),
+              ...(entry ?? {}),
+            },
+          ];
+          return next.slice(-500);
+        });
+
+        try {
+          if (entry?.type === 'status') {
+            if (typeof entry.text === 'string' && entry.text.trim() !== '') {
+              setProcessingMessage(String(entry.text));
+              clearScheduledDisplay();
+            }
+            const meta = entry.meta ?? {};
+            if (meta && typeof meta === 'object') {
+              const maybeStatus = (meta as Record<string, unknown>)['status'];
+              if (typeof maybeStatus === 'string') setImportStatus(maybeStatus);
+              const maybeJob = (meta as Record<string, unknown>)['job_id'];
+              if (typeof maybeJob === 'string') setImportJobId(maybeJob);
+              const maybeSaved = (meta as Record<string, unknown>)['saved_creatives'];
+              if (typeof maybeSaved === 'number') setImportSavedCreatives(maybeSaved);
+              const maybeTotal = (meta as Record<string, unknown>)['total_creatives'];
+              if (typeof maybeTotal === 'number') setImportTotalCreatives(maybeTotal);
+            }
+          }
+        } catch (e) {
+          console.debug('pushRequestLog: mirror to import status failed', e);
+        }
+      } catch (e) {
+        console.debug('pushRequestLog error', e);
+      }
+    },
+    [clearScheduledDisplay]
+  );
+
+  useEffect(() => {
+    isLoadingRef.current = isLoading;
+  }, [isLoading]);
+
   useEffect(() => {
     let userChannel: ReturnType<(typeof supabase)['channel']> | null = null;
     let mounted = true;
@@ -171,7 +177,6 @@ export function useAdArchive(
         const uid = userRes?.data?.user?.id ?? null;
         if (!uid) return;
 
-        // Create user-level channel
         try {
           userChannel = supabase
             .channel(`import-status-user-${uid}`)
@@ -180,12 +185,11 @@ export function useAdArchive(
               { event: '*', schema: 'public', table: 'import_status', filter: `user_id=eq.${uid}` },
               (payload: unknown) => {
                 try {
-                  const row = getRowFromPayload(payload);
+                  const row = utils.getRowFromPayload(payload);
                   if (!row) return;
                   const message = row['message'];
                   if (typeof message === 'string') {
                     setProcessingMessage((prev) => prev || message);
-                    // new activity — cancel any scheduled clear
                     clearScheduledDisplay();
                     try {
                       pushRequestLog({
@@ -216,7 +220,6 @@ export function useAdArchive(
           userChannel = null;
         }
 
-        // Read the latest import_status row for this user so UI can show current state immediately
         try {
           const { data: latest, error: latestErr } = await supabase
             .from('import_status')
@@ -269,13 +272,12 @@ export function useAdArchive(
         console.debug('Error unsubscribing user import_status channel', e);
       }
       try {
-        // cleanup any job-specific channel
         jobChannelRef.current?.unsubscribe();
       } catch (e) {
         console.debug('Error unsubscribing job channel on unmount', e);
       }
     };
-  }, []);
+  }, [clearScheduledDisplay, pushRequestLog, scheduleClearDisplay]);
 
   const availableTags: string[] = useMemo(() => {
     try {
@@ -313,39 +315,85 @@ export function useAdArchive(
     return map;
   }, [filteredAdsByType]);
 
-  // Build a deduplicated list of ads for the main listing by taking the
-  // first representative from each grouping. This prevents duplicate
-  // creatives from showing multiple times on the main results grid.
+  const PHASH_GROUP_COLLAPSE_THRESHOLD = 2;
+  const PHASH_GROUP_MAX_COLLAPSE = 15;
+  // Hamming distance threshold for phash clustering. Lower = stricter (only
+  // very similar images cluster). Increase only if you want more merging.
+  // For 8x8 hashes max distance is 64; a value around 6-10 is typical.
+  const PHASH_HAMMING_THRESHOLD = 4;
+
   const dedupedAds = useMemo(() => {
-    const out: Ad[] = [];
-    groupedAll.forEach((groupAds) => {
-      if (groupAds && groupAds.length) out.push(groupAds[0]);
-    });
-    return out;
-  }, [groupedAll]);
+    if (!filteredAdsByType || filteredAdsByType.length === 0) return [] as Ad[];
 
-  // Helper to safely extract an array from API responses which may be either
-  // an array or an object containing a `data` array. Avoid using `any` — use
-  // unknown and type guards instead.
-  function extractDataArray(raw: unknown): Ad[] {
-    if (Array.isArray(raw)) return raw as Ad[];
-    if (raw && typeof raw === 'object' && raw !== null && 'data' in raw) {
-      const r = raw as Record<string, unknown>;
-      if (Array.isArray(r.data)) return r.data as Ad[];
+    const groupMap = new Map<string, Ad[]>();
+    for (const ad of filteredAdsByType) {
+      const key = utils.getGroupingKey(ad);
+      const arr = groupMap.get(key) ?? [];
+      arr.push(ad);
+      groupMap.set(key, arr);
     }
-    return [];
-  }
 
-  // Normalize a realtime payload to a plain record if possible.
-  function getRowFromPayload(p: unknown): Record<string, unknown> | null {
-    if (!p || typeof p !== 'object') return null;
-    const obj = p as Record<string, unknown>;
-    if ('record' in obj && obj.record && typeof obj.record === 'object')
-      return obj.record as Record<string, unknown>;
-    if ('new' in obj && obj.new && typeof obj.new === 'object')
-      return obj.new as Record<string, unknown>;
-    return obj;
-  }
+    const phashKeys = Array.from(groupMap.keys()).filter((k) => k.startsWith('phash:'));
+
+    try {
+      console.debug(
+        '[useAdArchive] PHASH_HAMMING_THRESHOLD=',
+        PHASH_HAMMING_THRESHOLD,
+        'PHASH_GROUP_COLLAPSE_THRESHOLD=',
+        PHASH_GROUP_COLLAPSE_THRESHOLD,
+        'phashKeysCount=',
+        phashKeys.length
+      );
+    } catch (e) {
+      /* noop */
+    }
+
+    const { phashClusters, keyToRep } = utils.buildPhashClustersFromKeys(
+      phashKeys,
+      groupMap,
+      PHASH_HAMMING_THRESHOLD
+    );
+
+    const seenGroup = new Set<string>();
+    const out: Ad[] = [];
+    for (const ad of filteredAdsByType) {
+      const key = utils.getGroupingKey(ad);
+      const mapped = keyToRep.get(key) ?? key;
+      if (seenGroup.has(mapped)) continue;
+      const group = groupMap.get(key) ?? [ad];
+
+      let effectiveSize = group.length;
+      if (mapped !== key) {
+        const keysInCluster = phashClusters.get(mapped) ?? [];
+        effectiveSize = keysInCluster.reduce((sum, kk) => sum + (groupMap.get(kk)?.length ?? 0), 0);
+      }
+
+      const isPhashBased = mapped.startsWith('phash:');
+      const shouldCollapse = isPhashBased
+        ? effectiveSize >= PHASH_GROUP_COLLAPSE_THRESHOLD &&
+          effectiveSize <= PHASH_GROUP_MAX_COLLAPSE
+        : group.length > 1;
+
+      if (shouldCollapse) {
+        const rep = group.slice().sort((a, b) => {
+          const da = new Date(a.created_at).getTime();
+          const db = new Date(b.created_at).getTime();
+          return db - da;
+        })[0];
+        if (rep) out.push(rep);
+      } else {
+        out.push(...group);
+      }
+      seenGroup.add(mapped);
+    }
+
+    return out;
+  }, [
+    filteredAdsByType,
+    PHASH_GROUP_COLLAPSE_THRESHOLD,
+    PHASH_GROUP_MAX_COLLAPSE,
+    PHASH_HAMMING_THRESHOLD,
+  ]);
 
   const adIdToGroupMap: Record<string, Ad[]> = useMemo(() => {
     const out: Record<string, Ad[]> = {};
@@ -354,6 +402,42 @@ export function useAdArchive(
     });
     return out;
   }, [groupedAll]);
+
+  const adIdToRelatedCount: Record<string, number> = useMemo(() => {
+    const out: Record<string, number> = {};
+    if (!filteredAdsByType || filteredAdsByType.length === 0) return out;
+
+    const groupMap = new Map<string, Ad[]>();
+    for (const ad of filteredAdsByType) {
+      const key = utils.getGroupingKey(ad);
+      const arr = groupMap.get(key) ?? [];
+      arr.push(ad);
+      groupMap.set(key, arr);
+    }
+
+    const phashKeys = Array.from(groupMap.keys()).filter((k) => k.startsWith('phash:'));
+
+    const { keyToRep, repSize } = utils.buildPhashClustersFromKeys(
+      phashKeys,
+      groupMap,
+      PHASH_HAMMING_THRESHOLD
+    );
+
+    for (const ad of filteredAdsByType) {
+      const key = utils.getGroupingKey(ad);
+      const mapped = keyToRep.get(key) ?? key;
+      let effectiveSize = 0;
+      if (mapped.startsWith('phash:')) {
+        effectiveSize = repSize.get(mapped) ?? groupMap.get(mapped)?.length ?? 1;
+      } else {
+        effectiveSize = groupMap.get(key)?.length ?? 1;
+      }
+      // Cap displayed related count so UI won't show more than configured max.
+      out[ad.id] = Math.min(Math.max(0, effectiveSize - 1), PHASH_GROUP_MAX_COLLAPSE);
+    }
+
+    return out;
+  }, [filteredAdsByType, PHASH_HAMMING_THRESHOLD, PHASH_GROUP_MAX_COLLAPSE]);
 
   const ungroupedPages = useMemo(
     () => utils.chunk(dedupedAds, itemsPerPage),
@@ -395,35 +479,36 @@ export function useAdArchive(
     [totalPages]
   );
 
-  const handleFilterChange = useCallback(async (filters: FilterOptions) => {
-    setIsLoading(true);
-    try {
-      const raw = await getAds(
-        filters.search,
-        filters.page,
-        filters.date,
-        filters.tags,
-        // publisherPlatform is optional on FilterOptions
-        filters.publisherPlatform
-      );
-      const fetched: Ad[] = extractDataArray(raw);
-      // apply client-side creative type filter so UI respects selectedCreativeType
-      const final =
-        selectedCreativeType === 'all'
-          ? fetched
-          : fetched.filter((ad) =>
-              selectedCreativeType === 'video'
-                ? ad.display_format === 'VIDEO'
-                : ad.display_format === 'IMAGE'
-            );
-      setAds(final);
-      setCurrentPage(1);
-    } catch (error) {
-      console.error('Error filtering ads:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
+  const handleFilterChange = useCallback(
+    async (filters: FilterOptions) => {
+      setIsLoading(true);
+      try {
+        const raw = await getAds(
+          filters.search,
+          filters.page,
+          filters.date,
+          filters.tags,
+          filters.publisherPlatform
+        );
+        const fetched: Ad[] = utils.extractDataArray(raw);
+        const final =
+          selectedCreativeType === 'all'
+            ? fetched
+            : fetched.filter((ad) =>
+                selectedCreativeType === 'video'
+                  ? ad.display_format === 'VIDEO'
+                  : ad.display_format === 'IMAGE'
+              );
+        setAds(final);
+        setCurrentPage(1);
+      } catch (error) {
+        console.error('Error filtering ads:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [selectedCreativeType]
+  );
 
   const handleTagsChange = useCallback(
     async (tags: string[]) => {
@@ -431,7 +516,7 @@ export function useAdArchive(
       setIsLoading(true);
       try {
         const raw = await getAds(productFilter || '', null, null, tags);
-        const filtered: Ad[] = extractDataArray(raw);
+        const filtered: Ad[] = utils.extractDataArray(raw);
         const final =
           selectedCreativeType === 'all'
             ? filtered
@@ -448,7 +533,7 @@ export function useAdArchive(
         setIsLoading(false);
       }
     },
-    [productFilter]
+    [productFilter, selectedCreativeType]
   );
 
   const handleSearch = useCallback(async () => {
@@ -457,7 +542,7 @@ export function useAdArchive(
     if (!searchValue && selectedTags.length === 0) {
       try {
         const raw = await getAds(undefined, null, null, undefined);
-        const allAds: Ad[] = extractDataArray(raw);
+        const allAds: Ad[] = utils.extractDataArray(raw);
         setAds(allAds);
         setCurrentPage(1);
       } catch (error) {
@@ -479,7 +564,6 @@ export function useAdArchive(
       setIsLoading(true);
 
       try {
-        // try to obtain currently authenticated user id (if any) and include it
         let userId: string | null = null;
         try {
           const userRes = await supabase.auth.getUser();
@@ -488,7 +572,6 @@ export function useAdArchive(
           console.debug('Could not get supabase user id for parse request', e);
         }
 
-        // generate a job id so we can track import_status for this request
         let jobId: string;
         try {
           const cryptoAny = globalThis.crypto as unknown as { randomUUID?: () => string };
@@ -501,7 +584,6 @@ export function useAdArchive(
           jobId = `job_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
         }
 
-        // Prepare a realtime subscription to import_status for this job
         let channel: ReturnType<(typeof supabase)['channel']> | null = null;
         try {
           channel = supabase
@@ -516,12 +598,10 @@ export function useAdArchive(
               },
               (payload: unknown) => {
                 try {
-                  const row = getRowFromPayload(payload);
+                  const row = utils.getRowFromPayload(payload);
                   if (!row) return;
-                  // If a userId was provided, ensure the row belongs to that user
                   const maybeUserId = row['user_id'];
                   if (userId && maybeUserId && String(maybeUserId) !== String(userId)) return;
-                  // update processing message and mark done on status
                   const message = row['message'];
                   if (typeof message === 'string') {
                     setProcessingMessage((prev) => prev || message);
@@ -546,9 +626,7 @@ export function useAdArchive(
 
                   if (status === 'done' || status === 'error') {
                     setProcessingDone(true);
-                    // schedule clearing of the display after a short delay
                     scheduleClearDisplay(6000);
-                    // unsubscribe when finished
                     try {
                       channel?.unsubscribe();
                     } catch (e) {
@@ -566,10 +644,8 @@ export function useAdArchive(
           channel = null;
         }
 
-        // set initial processing states
         console.debug('[AdArchive] starting parse, jobId=', jobId, 'userId=', userId);
-        setProcessingMessage('Креативи підвантажуються...');
-        // Do not open the modal automatically — show inline processing info instead.
+        setProcessingMessage('Creatives loading from Meta Ad Library  ...');
         setShowAINewsModal(false);
         setProcessingDone(false);
 
@@ -594,17 +670,10 @@ export function useAdArchive(
           >;
         }
 
-        // request/response logging removed
-
-        // persist job id locally so UI can read it later if needed
-        // record parse start in logs
-        // parse_start logging removed
         setImportJobId(jobId);
 
-        // store channel reference if job-specific subscription was created above
         if (channel) jobChannelRef.current = channel;
 
-        // Try to read any existing import_status row for this job so we show DB message immediately.
         try {
           const { data: existing, error: existingErr } = await supabase
             .from('import_status')
@@ -635,15 +704,10 @@ export function useAdArchive(
           console.debug('Exception reading initial import_status', e);
         }
 
-        // safely inspect result object
         const resultObj =
           result && typeof result === 'object' ? (result as Record<string, unknown>) : null;
         if (resultObj && resultObj['success'] === true) {
-          // Do not set a static success message here — rely on `import_status` DB updates
-          // The Make scenario should insert/update `import_status` rows; realtime
-          // subscription and initial DB read will surface messages and final status.
         } else {
-          // If the webhook returned an error, surface it in the inline status
           const errMsg = resultObj
             ? String(resultObj['message'] ?? resultObj['error'] ?? 'Unknown error from webhook')
             : 'Unknown error from webhook';
@@ -669,7 +733,7 @@ export function useAdArchive(
           null,
           selectedTags.length ? selectedTags : undefined
         );
-        const filtered: Ad[] = extractDataArray(raw);
+        const filtered: Ad[] = utils.extractDataArray(raw);
         const final =
           selectedCreativeType === 'all'
             ? filtered
@@ -686,14 +750,19 @@ export function useAdArchive(
         setIsLoading(false);
       }
     }
-  }, [productFilter, selectedTags, selectedCreativeType, numberToScrape]);
+  }, [
+    productFilter,
+    selectedTags,
+    selectedCreativeType,
+    numberToScrape,
+    scheduleClearDisplay,
+    pushRequestLog,
+  ]);
 
   const videoAds = useMemo(
     () => dedupedAds.filter((ad) => ad.display_format === 'VIDEO').length,
     [dedupedAds]
   );
-
-  const searchTimeout = useRef<number | null>(null);
 
   const handleProductFilterChange = useCallback(
     (value: string) => {
@@ -713,7 +782,7 @@ export function useAdArchive(
             null,
             selectedTags.length > 0 ? selectedTags : undefined
           );
-          const filtered: Ad[] = extractDataArray(raw);
+          const filtered: Ad[] = utils.extractDataArray(raw);
           const final =
             selectedCreativeType === 'all'
               ? filtered
@@ -732,7 +801,7 @@ export function useAdArchive(
       }, 300);
       searchTimeout.current = id;
     },
-    [selectedTags]
+    [selectedTags, selectedCreativeType]
   );
 
   useEffect(() => {
@@ -748,7 +817,7 @@ export function useAdArchive(
     setIsLoading(true);
     try {
       const raw = await getAds('', null, null, selectedTags);
-      const allAds: Ad[] = extractDataArray(raw);
+      const allAds: Ad[] = utils.extractDataArray(raw);
       setAds(allAds);
       setCurrentPage(1);
     } catch (error) {
@@ -756,13 +825,11 @@ export function useAdArchive(
     } finally {
       setIsLoading(false);
       try {
-        // notify any UI consumers to focus/clear input
         window.dispatchEvent(new CustomEvent('productFilterCleared'));
       } catch (e) {}
     }
   }, [selectedTags]);
 
-  // Polling: periodically refresh ads from the server when no heavy operation is underway.
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (!pollIntervalMs || pollIntervalMs <= 0) return;
@@ -770,21 +837,20 @@ export function useAdArchive(
     let mounted = true;
     const doPoll = async () => {
       if (!mounted) return;
-      if (isLoading) return; // avoid overlapping fetches
-      console.log('[Poll] Head-check: checking for new ads...');
+      if (isLoadingRef.current) return;
+
       try {
         setIsLoading(true);
         const res = await fetch('/api/ads/head');
         if (!res.ok) {
           console.warn('[Poll] Head-check failed, falling back to full fetch');
-          // fallback to full fetch once
           const raw = await getAds(
             productFilter || undefined,
             null,
             null,
             selectedTags && selectedTags.length > 0 ? selectedTags : undefined
           );
-          const fetched: Ad[] = extractDataArray(raw);
+          const fetched: Ad[] = utils.extractDataArray(raw);
           const final =
             selectedCreativeType === 'all'
               ? fetched
@@ -793,7 +859,6 @@ export function useAdArchive(
                     ? ad.display_format === 'VIDEO'
                     : ad.display_format === 'IMAGE'
                 );
-          // only update when non-empty
           if (final.length > 0) {
             setAds(final);
             setCurrentPage(1);
@@ -802,28 +867,19 @@ export function useAdArchive(
           }
         } else {
           const head = await res.json();
-          const headCount = typeof head.count === 'number' ? head.count : null;
-          const headLatest = head.latest_created_at || null;
+          const headPresent = typeof head.present === 'number' ? head.present : null;
 
-          // determine if head changed
-          const currentLatest = ads.length > 0 ? (ads[0].created_at as string | null) : null;
           const currentCount = typeof initialTotalAds === 'number' ? initialTotalAds : ads.length;
-
-          const changed =
-            (headCount !== null && headCount !== currentCount) ||
-            (headLatest && headLatest !== currentLatest);
-
-          console.log(`[Poll] head count=${headCount} latest=${headLatest} changed=${changed}`);
+          const changed = headPresent !== null && headPresent !== currentCount;
 
           if (changed) {
-            // fetch full data
             const raw = await getAds(
               productFilter || undefined,
               null,
               null,
               selectedTags && selectedTags.length > 0 ? selectedTags : undefined
             );
-            const fetched: Ad[] = extractDataArray(raw);
+            const fetched: Ad[] = utils.extractDataArray(raw);
             const final =
               selectedCreativeType === 'all'
                 ? fetched
@@ -864,18 +920,31 @@ export function useAdArchive(
       } finally {
         setIsLoading(false);
       }
+      // Additionally, check whether there are any rows missing `creative_hash` and trigger worker if needed.
+      try {
+        // Throttle client-side to avoid spamming the endpoint: store last trigger in ref
+        const last = window.__lastPhashCheck ?? 0;
+        const now = Date.now();
+        // call at most once per poll interval from client
+        if (now - last > Math.max(0, pollIntervalMs)) {
+          window.__lastPhashCheck = now;
+          try {
+            await fetch('/api/ads/check-phash');
+          } catch (e) {
+            /* ignore */
+          }
+        }
+      } catch (e) {
+        /* ignore */
+      }
     };
 
-    // run first poll after a short delay so initial render is stable
     const firstTimeout = window.setTimeout(() => {
       doPoll();
     }, 1000);
 
     const id = window.setInterval(doPoll, pollIntervalMs);
 
-    // Also poll when user focuses the window, when tab becomes visible again,
-    // or when history navigation occurs (popstate). These actions indicate
-    // user activity or a navigation that may require a fresh head-check.
     const onFocus = () => {
       try {
         doPoll();
@@ -914,22 +983,61 @@ export function useAdArchive(
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('popstate', onPopstate);
     };
-    // Intentionally include key deps so polling reacts to filter changes
-  }, [pollIntervalMs, productFilter, selectedTags, selectedCreativeType]);
+  }, [
+    pollIntervalMs,
+    productFilter,
+    selectedTags,
+    selectedCreativeType,
+    initialTotalAds,
+    ads.length,
+  ]);
 
-  // Allow external callers to subscribe to a specific job id. This will attach a
-  // realtime listener for that job and fetch the latest DB row immediately.
+  useEffect(() => {
+    const handler = async () => {
+      try {
+        setIsLoading(true);
+        const raw = await getAds(
+          productFilter || undefined,
+          null,
+          null,
+          selectedTags && selectedTags.length > 0 ? selectedTags : undefined
+        );
+        const fetched: Ad[] = utils.extractDataArray(raw);
+        const final =
+          selectedCreativeType === 'all'
+            ? fetched
+            : fetched.filter((ad) =>
+                selectedCreativeType === 'video'
+                  ? ad.display_format === 'VIDEO'
+                  : ad.display_format === 'IMAGE'
+              );
+        setAds(final);
+        setCurrentPage(1);
+      } catch (e) {
+        console.error('Error during soft refresh:', e);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    const listener = () => handler();
+    window.addEventListener('app:refresh', listener as EventListener);
+    return () => {
+      try {
+        window.removeEventListener('app:refresh', listener as EventListener);
+      } catch (e) {}
+    };
+  }, [productFilter, selectedTags, selectedCreativeType]);
+
   const subscribeToJob = useCallback(async (jobId: string, userId?: string | null) => {
     if (!jobId) return;
 
-    // cleanup previous job channel
     try {
       jobChannelRef.current?.unsubscribe();
     } catch (e) {
       console.debug('Error unsubscribing previous job channel', e);
     }
 
-    // Read latest row for the job
     try {
       const { data: existing, error: existingErr } = await supabase
         .from('import_status')
@@ -956,7 +1064,6 @@ export function useAdArchive(
       console.debug('Exception reading import_status in subscribeToJob', e);
     }
 
-    // create per-job realtime listener
     try {
       const channel = supabase
         .channel(`import-status-sub-${jobId}`)
@@ -965,9 +1072,8 @@ export function useAdArchive(
           { event: '*', schema: 'public', table: 'import_status', filter: `job_id=eq.${jobId}` },
           (payload: unknown) => {
             try {
-              const row = getRowFromPayload(payload);
+              const row = utils.getRowFromPayload(payload);
               if (!row) return;
-              // If userId was provided, ensure row belongs to that user
               const maybeUserId = row['user_id'];
               if (userId && maybeUserId && String(maybeUserId) !== String(userId)) return;
               const message = row['message'];
@@ -1017,6 +1123,7 @@ export function useAdArchive(
     availableTags,
     filteredAdsByType,
     adIdToGroupMap,
+    adIdToRelatedCount,
     ungroupedPages,
     totalPages,
     currentPageAds,

@@ -22,6 +22,21 @@ export function ProfileDropdown() {
   const [user, setUser] = useState<{ email: string; nickname?: string } | null>(null);
   const [showLogin, setShowLogin] = useState(false);
   const [nickname, setNickname] = useState<string>('');
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+
+  async function resolveIsAdminByEmail(email: string | null | undefined): Promise<boolean> {
+    if (!email) return false;
+    try {
+      const check = await fetch(
+        `/api/admins/check?email=${encodeURIComponent(email.toLowerCase())}`
+      );
+      const p = await check.json();
+      if (check.ok && p?.is_admin) return true;
+    } catch {
+      // ignore
+    }
+    return false;
+  }
 
   function getDisplayNameFromUser(u: unknown): string | undefined {
     if (!u || typeof u !== 'object') return undefined;
@@ -47,6 +62,9 @@ export function ProfileDropdown() {
             setUser({ email: u.email || '', nickname: metaName });
             setNickname(metaName);
             localStorage.setItem('nickname', metaName);
+            // Check admin status for this user by email (user_admins.email)
+            const admin = await resolveIsAdminByEmail(u.email || '');
+            if (admin) setIsAdmin(true);
           } else {
             // Fallback to cached nickname if available
             const cached = localStorage.getItem('nickname');
@@ -65,6 +83,8 @@ export function ProfileDropdown() {
                   setUser({ email: u.email || '', nickname: profileData.nickname });
                   setNickname(profileData.nickname);
                   localStorage.setItem('nickname', profileData.nickname);
+                  const admin = await resolveIsAdminByEmail(u.email || '');
+                  if (admin) setIsAdmin(true);
                 } else {
                   setUser({ email: u.email || '', nickname: undefined });
                 }
@@ -103,6 +123,11 @@ export function ProfileDropdown() {
           <Button className="bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-xl h-11 transition-all duration-200 hover:shadow-md hover:shadow-blue-500/25 w-full lg:w-auto">
             <User className="h-4 w-4 mr-2" />
             {nickname ? nickname : 'My Profile'}
+            {isAdmin ? (
+              <span className="ml-2 text-xs font-semibold bg-red-600 text-white px-2 py-0.5 rounded">
+                ADMIN
+              </span>
+            ) : null}
             <ChevronDown className="h-4 w-4 ml-2" />
           </Button>
         </DropdownMenuTrigger>
@@ -119,6 +144,17 @@ export function ProfileDropdown() {
                 </p>
               </div>
               <DropdownMenuSeparator className="bg-slate-200" />
+              {isAdmin && (
+                <DropdownMenuItem
+                  onClick={() => router.push('/admin')}
+                  className="hover:bg-slate-100 cursor-pointer text-blue-600 font-medium"
+                >
+                  Admin panel
+                  <span className="ml-2 text-xs font-semibold bg-red-600 text-white px-2 py-0.5 rounded-full">
+                    ADMIN
+                  </span>
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem
                 onClick={handleLogout}
                 className="hover:bg-red-50 text-red-600 hover:text-red-700 cursor-pointer"
@@ -244,6 +280,10 @@ export function ProfileDropdown() {
                 email,
                 nickname: nicknameFromData || localStorage.getItem('nickname') || undefined,
               });
+
+              // After successful auth, resolve admin flag from user_admins.email
+              const admin = await resolveIsAdminByEmail(email);
+              setIsAdmin(admin);
             } finally {
               setShowLogin(false);
             }
