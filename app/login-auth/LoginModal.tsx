@@ -35,7 +35,12 @@ export default function LoginModal({
         )
       ) : null}
 
-      <ModalWrapper isOpen={open} onClose={handleClose} panelClassName="max-w-md w-full">
+      <ModalWrapper
+        isOpen={open}
+        onClose={handleClose}
+        panelClassName="max-w-md w-full"
+        backdropClassName="fixed inset-0 z-[99999] flex items-center justify-center bg-black/95"
+      >
         <div className="relative bg-transparent">
           <button
             className="absolute z-50 top-5 right-5 bg-white hover:bg-slate-100 text-slate-700 rounded-full w-9 h-9 flex items-center justify-center"

@@ -129,11 +129,6 @@ const SectionItem = ({
           {text && text.length > 400 ? (
             <>
               <div className="text-sm text-slate-600 mb-2">{text.slice(0, 300)}...</div>
-              <div>
-                <Button variant="link" size="sm" onClick={openEditor} className="text-blue-600">
-                  Open editor
-                </Button>
-              </div>
             </>
           ) : (
             text

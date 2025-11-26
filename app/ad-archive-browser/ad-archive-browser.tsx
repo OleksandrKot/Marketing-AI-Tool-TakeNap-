@@ -35,6 +35,7 @@ export function AdArchiveBrowser({
     filteredAdsByType,
     currentPageAds,
     adIdToGroupMap,
+    adIdToRelatedCount,
     isLoading,
     showAINewsModal,
     processingMessage,
@@ -83,7 +84,7 @@ export function AdArchiveBrowser({
         handleTagsChange={handleTagsChange}
         pagesLength={pages.length}
         pages={pages}
-        filteredAdsCount={filteredAdsByType.length}
+        filteredAdsCount={totalAds}
         videoAds={videoAds}
         clearProductFilter={clearProductFilter}
         processingMessage={processingMessage}
@@ -124,6 +125,7 @@ export function AdArchiveBrowser({
         viewMode={viewMode}
         currentPageAds={currentPageAds}
         adIdToGroupMap={adIdToGroupMap}
+        adIdToRelatedCount={adIdToRelatedCount}
         filteredAdsByType={filteredAdsByType}
         selectedCreativeType={selectedCreativeType}
         onCloseModal={() => {

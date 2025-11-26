@@ -159,6 +159,16 @@ export function SearchControls({
         showLogs={showLogs}
         onToggleLogs={setShowLogs}
         onClearProcessing={clearProcessingDisplay}
+        autoClearProcessing={typeof autoClearProcessing === 'boolean' ? autoClearProcessing : true}
+        setAutoClearProcessing={(v: boolean) => {
+          try {
+            if (typeof v === 'boolean') {
+              setAutoClearProcessing?.(v);
+            }
+          } catch (e) {
+            console.debug('setAutoClearProcessing error', e);
+          }
+        }}
       />
 
       <div className="mb-8 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 items-center">

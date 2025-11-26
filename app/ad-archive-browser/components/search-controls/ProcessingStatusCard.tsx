@@ -2,6 +2,7 @@
 
 import { Button } from '@/components/ui/button';
 import { LogsToggle } from './LogsToggle';
+import * as RadixSwitch from '@radix-ui/react-switch';
 
 type ProcessingStatusCardProps = {
   isActiveProcessing: boolean;
@@ -13,6 +14,8 @@ type ProcessingStatusCardProps = {
   showLogs: boolean;
   onToggleLogs: (next: boolean) => void;
   onClearProcessing: () => void;
+  autoClearProcessing?: boolean;
+  setAutoClearProcessing?: (v: boolean) => void;
 };
 
 export function ProcessingStatusCard({
@@ -25,6 +28,8 @@ export function ProcessingStatusCard({
   showLogs,
   onToggleLogs,
   onClearProcessing,
+  autoClearProcessing = true,
+  setAutoClearProcessing = () => {},
 }: ProcessingStatusCardProps) {
   const statusColorClass = getStatusColor(normalizedStatus);
   const statusDotClass = getStatusDotColor(normalizedStatus);
@@ -53,6 +58,25 @@ export function ProcessingStatusCard({
 
       <div className="flex items-center md:ml-4 space-x-3 mt-2 md:mt-0">
         <LogsToggle checked={showLogs} onChange={onToggleLogs} />
+
+        <div className="flex items-center gap-3">
+          <RadixSwitch.Root
+            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${
+              autoClearProcessing ? 'bg-blue-600' : 'bg-slate-200'
+            }`}
+            checked={!!autoClearProcessing}
+            onCheckedChange={(v) => setAutoClearProcessing(Boolean(v))}
+            aria-label="Авто-очищення статусу"
+          >
+            <RadixSwitch.Thumb
+              className={`block h-5 w-5 rounded-full bg-white shadow transform transition-transform ${
+                autoClearProcessing ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </RadixSwitch.Root>
+          <span className="text-sm text-slate-700">Авто-очищення</span>
+        </div>
+
         <Button
           onClick={onClearProcessing}
           className="h-8 px-3 text-sm bg-slate-100 hover:bg-slate-200 text-slate-800"
@@ -98,7 +122,7 @@ function getStatusDotColor(status: string | null): string {
       return 'bg-yellow-500';
     case 'error':
       return 'bg-red-500';
-    case 'done':
+    case 'success ':
       return 'bg-green-500';
     default:
       return 'bg-blue-500';

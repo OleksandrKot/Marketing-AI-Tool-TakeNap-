@@ -1,0 +1,247 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import { format } from 'date-fns';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+
+type AccessRequest = {
+  id: string;
+  email: string;
+  status: string;
+  created_at: string;
+};
+
+export default function AccessRequestsPage() {
+  const [secret, setSecret] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [items, setItems] = useState<AccessRequest[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState('');
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  async function load() {
+    if (!secret) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/access-requests', {
+        headers: { 'x-admin-secret': secret },
+      });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.error || 'Failed to load requests');
+      setItems((payload?.data || []) as AccessRequest[]);
+      setSelectedIds(new Set());
+    } catch (e) {
+      setError((e as Error).message || 'Error');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    const stored =
+      typeof window !== 'undefined' ? window.sessionStorage.getItem('adminSecret') : null;
+    if (stored) {
+      setSecret(stored);
+      // auto-load later via explicit button to avoid double fetch
+    }
+  }, []);
+
+  function handleSecretChange(v: string) {
+    setSecret(v);
+    if (typeof window !== 'undefined') {
+      window.sessionStorage.setItem('adminSecret', v);
+    }
+  }
+
+  async function doAction(id: string, action: 'approve' | 'reject') {
+    if (!secret) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetch(`/api/access-requests/${encodeURIComponent(id)}/${action}`, {
+        method: 'POST',
+        headers: { 'x-admin-secret': secret },
+      });
+      const payload = await res.json();
+      if (!res.ok) throw new Error(payload?.error || 'Failed to perform action');
+      await load();
+    } catch (e) {
+      setError((e as Error).message || 'Error');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function bulkAction(action: 'approve' | 'reject') {
+    const ids = Array.from(selectedIds);
+    if (!ids.length || !secret) return;
+    setLoading(true);
+    setError(null);
+    try {
+      await Promise.all(ids.map((id) => doAction(id, action)));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((r) => r.email.toLowerCase().includes(q));
+  }, [items, search]);
+
+  const pendingCount = items.filter((r) => r.status === 'pending').length;
+
+  return (
+    <div className="space-y-5">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Access requests</h1>
+          <p className="text-sm text-slate-600 mt-1">
+            Review and approve users who requested access to the tool.
+          </p>
+          <p className="mt-2 text-xs text-slate-500">
+            Pending:&nbsp;
+            <span className="font-semibold">{pendingCount}</span>
+          </p>
+        </div>
+        <div className="flex flex-col items-stretch md:items-end gap-2">
+          <div className="flex items-center gap-2">
+            <Input
+              type="password"
+              value={secret}
+              onChange={(e) => handleSecretChange(e.target.value)}
+              placeholder="Admin secret"
+              className="w-48"
+            />
+            <Button onClick={load} disabled={!secret || loading} size="sm">
+              {loading ? 'Loading...' : 'Load'}
+            </Button>
+          </div>
+          {error ? <p className="text-xs text-red-600">{error}</p> : null}
+        </div>
+      </div>
+
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <Input
+          placeholder="Search by email"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="max-w-xs"
+        />
+
+        {selectedIds.size > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-600">
+              Selected: <span className="font-semibold">{selectedIds.size}</span>
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => bulkAction('approve')}
+              disabled={loading}
+            >
+              Approve selected
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => bulkAction('reject')}
+              disabled={loading}
+            >
+              Block selected
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+        <div className="grid grid-cols-[auto,2fr,2fr,1fr,auto] gap-3 px-4 py-2 text-xs font-semibold text-slate-500 border-b border-slate-200">
+          <div>
+            <input
+              type="checkbox"
+              checked={selectedIds.size > 0 && selectedIds.size === filtered.length}
+              onChange={(e) => {
+                if (e.target.checked) {
+                  setSelectedIds(new Set(filtered.map((r) => r.id)));
+                } else {
+                  setSelectedIds(new Set());
+                }
+              }}
+            />
+          </div>
+          <div>Email</div>
+          <div>Requested at</div>
+          <div>Status</div>
+          <div className="text-right">Actions</div>
+        </div>
+        {filtered.length === 0 ? (
+          <div className="px-4 py-6 text-sm text-slate-500">No requests loaded.</div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {filtered.map((r) => {
+              const checked = selectedIds.has(r.id);
+              return (
+                <div
+                  key={r.id}
+                  className="grid grid-cols-[auto,2fr,2fr,1fr,auto] gap-3 px-4 py-3 text-sm items-center"
+                >
+                  <div>
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        const next = new Set(selectedIds);
+                        if (e.target.checked) next.add(r.id);
+                        else next.delete(r.id);
+                        setSelectedIds(next);
+                      }}
+                    />
+                  </div>
+                  <div className="font-medium text-slate-900 truncate">{r.email}</div>
+                  <div className="text-xs text-slate-600">
+                    {r.created_at ? format(new Date(r.created_at), 'yyyy-MM-dd HH:mm') : '—'}
+                  </div>
+                  <div>
+                    <Badge
+                      variant={
+                        r.status === 'approved'
+                          ? 'default'
+                          : r.status === 'pending'
+                          ? 'secondary'
+                          : 'outline'
+                      }
+                    >
+                      {r.status}
+                    </Badge>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      disabled={loading || r.status === 'approved'}
+                      onClick={() => doAction(r.id, 'approve')}
+                    >
+                      Approve
+                    </Button>
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      disabled={loading || r.status === 'rejected'}
+                      onClick={() => doAction(r.id, 'reject')}
+                    >
+                      Block
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
