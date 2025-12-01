@@ -3,16 +3,35 @@ import { createServerSupabaseClient } from '@/lib/core/supabase';
 
 export const dynamic = 'force-dynamic';
 
+// Use semicolon as delimiter so Excel/Sheets in many EU locales
+// display columns correctly instead of everything in one column.
+const CSV_DELIMITER = ';';
+
 /**
  * Escape value for CSV:
  * - Convert objects to JSON
+ * - Replace line breaks with spaces (so each DB row = one CSV line)
  * - Escape double quotes
  * - Wrap everything in quotes
  */
 function csvEscape(val: unknown) {
   if (val === null || val === undefined) return '';
-  if (typeof val === 'object') val = JSON.stringify(val);
-  const s = String(val).replace(/"/g, '""'); // escape "
+
+  if (typeof val === 'object') {
+    val = JSON.stringify(val);
+  }
+
+  // Convert value to string
+  let s = String(val);
+
+  // Remove line breaks inside the cell – otherwise CSV viewers
+  // may think it's a new row and "merge" everything visually.
+  s = s.replace(/\r\n/g, ' ').replace(/\n/g, ' ').replace(/\r/g, ' ');
+
+  // Escape double quotes
+  s = s.replace(/"/g, '""');
+
+  // Wrap in quotes
   return `"${s}"`;
 }
 
@@ -103,13 +122,14 @@ export async function GET(request: NextRequest) {
      */
     const lines: string[] = [];
 
-    // Header
-    lines.push(columns.map((c) => csvEscape(c)).join(','));
+    // Header row
+    lines.push(columns.map((c) => csvEscape(c)).join(CSV_DELIMITER));
 
-    // Rows
+    // Data rows
     for (const row of rows) {
-      const csvRow = columns.map((col) => csvEscape(row[col]));
-      lines.push(csvRow.join(','));
+      const rowRecord = row as Record<string, unknown>;
+      const csvRow = columns.map((col) => csvEscape(rowRecord[col]));
+      lines.push(csvRow.join(CSV_DELIMITER));
     }
 
     // Add UTF-8 BOM for Excel support
