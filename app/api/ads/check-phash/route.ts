@@ -1,11 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/core/supabase';
 
-// Serverless-friendly phash check/processor. When deployed on Vercel we cannot spawn
-// detached child processes; in that case the endpoint will process a small batch
-// of missing rows inline (bounded) and return a summary. When not on Vercel the
-// previous behavior of spawning a detached worker is preserved for self-hosted runs.
-
 async function streamToBuffer(stream: unknown) {
   if (!stream) throw new Error('No stream');
   if (Buffer.isBuffer(stream)) return stream;

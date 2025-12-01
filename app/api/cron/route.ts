@@ -1,36 +1,41 @@
-import { NextRequest, NextResponse } from 'next/server';
+export const dynamic = 'force-dynamic';
 
-export const runtime = 'edge';
+import { NextRequest, NextResponse } from 'next/server';
+import { runPhashWorkerOnce } from '@/scripts/phashWorker.mjs'; // adjust path if needed
 
 export async function GET(request: NextRequest) {
   try {
-    const auth = request.headers.get('authorization') || request.headers.get('Authorization');
-    const expected = `Bearer ${process.env.CRON_SECRET}`;
-    if (!process.env.CRON_SECRET || auth !== expected) {
+    // --- Auth check using CRON_SECRET ---
+    const authHeader = request.headers.get('authorization') || '';
+    const expected = `Bearer ${process.env.CRON_SECRET || ''}`;
+    const authorized = !!process.env.CRON_SECRET && authHeader === expected;
+
+    if (!authorized) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    // Build internal URL to invoke check-phash. On Vercel use VERCEL_URL.
-    const host = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '';
-    const target = host ? `${host}/api/ads/check-phash` : `/api/ads/check-phash`;
+    // --- Run phash worker (single-pass, serverless-safe) ---
+    try {
+      await runPhashWorkerOnce();
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      console.error('phash worker failed:', errMsg);
+      return NextResponse.json(
+        {
+          error: 'phash worker failed',
+          details: errMsg,
+        },
+        { status: 500 }
+      );
+    }
 
-    // Forward the call to the internal endpoint, passing the same Authorization header.
-    const resp = await fetch(target, {
-      method: 'GET',
-      headers: {
-        Authorization: expected,
-      },
-    });
-
-    const contentType = resp.headers.get('content-type') || 'application/json';
-    const body = await resp.text();
-
-    return new NextResponse(body, {
-      status: resp.status,
-      headers: { 'Content-Type': contentType },
-    });
+    // --- Success response ---
+    return NextResponse.json(
+      { ok: true, message: 'phash worker completed catchup pass' },
+      { status: 200 }
+    );
   } catch (err) {
-    console.error('Cron route error', err);
+    console.error('Cron route fatal error:', err);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
