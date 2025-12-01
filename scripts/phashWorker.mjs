@@ -293,10 +293,7 @@ async function processNewRow(row) {
       creative_hash: ph,
     });
 
-    const { error } = await supabase
-      .from('ads_library')
-      .update({ creative_hash: ph })
-      .eq('id', id);
+    const { error } = await supabase.from('ads_library').update({ creative_hash: ph }).eq('id', id);
 
     if (error) {
       console.error('phash-worker: failed to update ads_library', {
