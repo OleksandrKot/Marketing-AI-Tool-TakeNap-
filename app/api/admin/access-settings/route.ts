@@ -1,14 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/core/supabase';
 
-const ADMIN_SECRET = process.env.ACCESS_REQUESTS_ADMIN_SECRET || process.env.ADMIN_SECRET || '';
-
-export async function GET(req: Request) {
-  const secret = req.headers.get('x-admin-secret') || '';
-  if (!ADMIN_SECRET || secret !== ADMIN_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
+export async function GET() {
   try {
     const client = createServerSupabaseClient();
     const resp = await client.from('access_settings').select('*').eq('id', 1).single();
@@ -22,11 +15,6 @@ export async function GET(req: Request) {
 }
 
 export async function POST(req: Request) {
-  const secret = req.headers.get('x-admin-secret') || '';
-  if (!ADMIN_SECRET || secret !== ADMIN_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   try {
     const body = await req.json();
     const patch: Record<string, unknown> = {};

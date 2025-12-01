@@ -14,7 +14,6 @@ type AccessRequest = {
 };
 
 export default function AccessRequestsPage() {
-  const [secret, setSecret] = useState('');
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<AccessRequest[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -22,16 +21,13 @@ export default function AccessRequestsPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   async function load() {
-    if (!secret) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/access-requests', {
-        headers: { 'x-admin-secret': secret },
-      });
+      const res = await fetch('/api/access-requests');
       const payload = await res.json();
       if (!res.ok) throw new Error(payload?.error || 'Failed to load requests');
-      setItems((payload?.data || []) as AccessRequest[]);
+      setItems(((payload?.data || []) as AccessRequest[]).filter((r) => r.status === 'pending'));
       setSelectedIds(new Set());
     } catch (e) {
       setError((e as Error).message || 'Error');
@@ -41,29 +37,16 @@ export default function AccessRequestsPage() {
   }
 
   useEffect(() => {
-    const stored =
-      typeof window !== 'undefined' ? window.sessionStorage.getItem('adminSecret') : null;
-    if (stored) {
-      setSecret(stored);
-      // auto-load later via explicit button to avoid double fetch
-    }
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function handleSecretChange(v: string) {
-    setSecret(v);
-    if (typeof window !== 'undefined') {
-      window.sessionStorage.setItem('adminSecret', v);
-    }
-  }
-
   async function doAction(id: string, action: 'approve' | 'reject') {
-    if (!secret) return;
     setLoading(true);
     setError(null);
     try {
       const res = await fetch(`/api/access-requests/${encodeURIComponent(id)}/${action}`, {
         method: 'POST',
-        headers: { 'x-admin-secret': secret },
       });
       const payload = await res.json();
       if (!res.ok) throw new Error(payload?.error || 'Failed to perform action');
@@ -77,7 +60,7 @@ export default function AccessRequestsPage() {
 
   async function bulkAction(action: 'approve' | 'reject') {
     const ids = Array.from(selectedIds);
-    if (!ids.length || !secret) return;
+    if (!ids.length) return;
     setLoading(true);
     setError(null);
     try {
@@ -89,8 +72,9 @@ export default function AccessRequestsPage() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((r) => r.email.toLowerCase().includes(q));
+    const pending = items.filter((r) => r.status === 'pending');
+    if (!q) return pending;
+    return pending.filter((r) => r.email.toLowerCase().includes(q));
   }, [items, search]);
 
   const pendingCount = items.filter((r) => r.status === 'pending').length;
@@ -109,18 +93,6 @@ export default function AccessRequestsPage() {
           </p>
         </div>
         <div className="flex flex-col items-stretch md:items-end gap-2">
-          <div className="flex items-center gap-2">
-            <Input
-              type="password"
-              value={secret}
-              onChange={(e) => handleSecretChange(e.target.value)}
-              placeholder="Admin secret"
-              className="w-48"
-            />
-            <Button onClick={load} disabled={!secret || loading} size="sm">
-              {loading ? 'Loading...' : 'Load'}
-            </Button>
-          </div>
           {error ? <p className="text-xs text-red-600">{error}</p> : null}
         </div>
       </div>
@@ -220,7 +192,7 @@ export default function AccessRequestsPage() {
                   </div>
                   <div className="flex justify-end gap-2">
                     <Button
-                      size="xs"
+                      size="sm"
                       variant="outline"
                       disabled={loading || r.status === 'approved'}
                       onClick={() => doAction(r.id, 'approve')}
@@ -228,7 +200,7 @@ export default function AccessRequestsPage() {
                       Approve
                     </Button>
                     <Button
-                      size="xs"
+                      size="sm"
                       variant="outline"
                       disabled={loading || r.status === 'rejected'}
                       onClick={() => doAction(r.id, 'reject')}

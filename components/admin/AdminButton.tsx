@@ -19,7 +19,6 @@ type UserRow = {
 
 export default function AdminButton() {
   const [open, setOpen] = useState(false);
-  const [secret, setSecret] = useState('');
   const [loading, setLoading] = useState(false);
   const [requests, setRequests] = useState<Array<AccessRequest | UserRow> | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +30,7 @@ export default function AdminButton() {
     setError(null);
     setSuccess(null);
     try {
-      const res = await fetch('/api/access-requests', { headers: { 'x-admin-secret': secret } });
+      const res = await fetch('/api/access-requests');
       const payload = await res.json();
       if (!res.ok) throw new Error(payload?.error || 'Failed to fetch');
       setRequests((payload && payload.data) || []);
@@ -48,7 +47,6 @@ export default function AdminButton() {
     try {
       const res = await fetch(`/api/access-requests/${encodeURIComponent(id)}/${action}`, {
         method: 'POST',
-        headers: { 'x-admin-secret': secret },
       });
       const payload = await res.json();
       if (!res.ok) throw new Error(payload?.error || 'Action failed');
@@ -68,7 +66,7 @@ export default function AdminButton() {
     try {
       const res = await fetch('/api/admins/add', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-secret': secret },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
       const payload = await res.json();
@@ -96,7 +94,7 @@ export default function AdminButton() {
     try {
       const res = await fetch('/api/admins/remove-by-email', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-admin-secret': secret },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
       });
       const payload = await res.json();
@@ -118,7 +116,6 @@ export default function AdminButton() {
     try {
       const res = await fetch('/api/admins/sync', {
         method: 'POST',
-        headers: { 'x-admin-secret': secret },
       });
       const payload = await res.json();
       if (!res.ok) throw new Error(payload?.error || 'Sync failed');
@@ -136,7 +133,7 @@ export default function AdminButton() {
     setError(null);
     setSuccess(null);
     try {
-      const res = await fetch('/api/admins/users', { headers: { 'x-admin-secret': secret } });
+      const res = await fetch('/api/admins/users');
       const payload = await res.json();
       if (!res.ok) throw new Error(payload?.error || 'Failed to fetch users');
       setRequests(payload.data || []);
@@ -154,7 +151,6 @@ export default function AdminButton() {
     try {
       const res = await fetch(`/api/admins/user/${encodeURIComponent(id)}/delete`, {
         method: 'POST',
-        headers: { 'x-admin-secret': secret },
       });
       const payload = await res.json();
       if (!res.ok) throw new Error(payload?.error || 'Delete failed');
@@ -174,7 +170,6 @@ export default function AdminButton() {
     try {
       const res = await fetch(`/api/admins/user/${encodeURIComponent(id)}/block`, {
         method: 'POST',
-        headers: { 'x-admin-secret': secret },
       });
       const payload = await res.json();
       if (!res.ok) throw new Error(payload?.error || 'Block failed');
@@ -209,37 +204,29 @@ export default function AdminButton() {
           </div>
 
           <div className="mb-4">
-            <label htmlFor="admin-secret" className="text-sm">
-              Admin secret
-            </label>
-            <input
-              id="admin-secret"
-              type="password"
-              value={secret}
-              onChange={(e) => setSecret(e.target.value)}
-              className="ml-2 border px-2 py-1 rounded"
-            />
-            <button
-              onClick={loadRequests}
-              disabled={loading || !secret}
-              className="ml-2 bg-blue-600 text-white px-3 py-1 rounded text-sm"
-            >
-              {loading ? 'Loading...' : 'Load Requests'}
-            </button>
-            <button
-              onClick={loadAllUsers}
-              disabled={loading || !secret}
-              className="ml-2 bg-teal-600 text-white px-3 py-1 rounded text-sm"
-            >
-              {loading ? 'Loading...' : 'Load Users'}
-            </button>
-            <button
-              onClick={syncUsers}
-              disabled={loading || !secret}
-              className="ml-2 bg-emerald-600 text-white px-3 py-1 rounded text-sm"
-            >
-              {loading ? 'Syncing...' : 'Sync users'}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={loadRequests}
+                disabled={loading}
+                className="bg-blue-600 text-white px-3 py-1 rounded text-sm"
+              >
+                {loading ? 'Loading...' : 'Load Requests'}
+              </button>
+              <button
+                onClick={loadAllUsers}
+                disabled={loading}
+                className="bg-teal-600 text-white px-3 py-1 rounded text-sm"
+              >
+                {loading ? 'Loading...' : 'Load Users'}
+              </button>
+              <button
+                onClick={syncUsers}
+                disabled={loading}
+                className="bg-emerald-600 text-white px-3 py-1 rounded text-sm"
+              >
+                {loading ? 'Syncing...' : 'Sync users'}
+              </button>
+            </div>
           </div>
 
           <div className="mb-4">
@@ -256,14 +243,14 @@ export default function AdminButton() {
             />
             <button
               onClick={() => makeAdmin(adminEmail)}
-              disabled={loading || !secret || !adminEmail}
+              disabled={loading || !adminEmail}
               className="ml-2 bg-indigo-600 text-white px-3 py-1 rounded text-sm"
             >
               Make Admin
             </button>
             <button
               onClick={() => removeAdminByEmail(adminEmail)}
-              disabled={loading || !secret || !adminEmail}
+              disabled={loading || !adminEmail}
               className="ml-2 bg-slate-400 text-white px-3 py-1 rounded text-sm"
             >
               Remove Admin

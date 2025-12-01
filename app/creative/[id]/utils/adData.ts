@@ -549,6 +549,16 @@ export const buildGroupedSections = (
 
   // Sound & audio meta
   push('Sound Transcription', meta['Sound Transcription']);
+
+  // Text that appears directly on the image/video (from visual prompt JSON)
+  try {
+    if (visualPromptJson && typeof visualPromptJson === 'object') {
+      const toi = visualPromptJson['text_on_image'];
+      if (toi) push('Text on Image', String(toi));
+    }
+  } catch (e) {
+    /* ignore */
+  }
   push('Audio Description', meta['Audio Description']);
 
   // Social proof, target audience

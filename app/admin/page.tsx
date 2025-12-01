@@ -1,12 +1,9 @@
 import Link from 'next/link';
+import DashboardControls from '@/components/admin/DashboardControls';
+import DashboardStats from '@/components/admin/DashboardStats';
 
-async function fetchJson<T>(url: string, adminSecret: string): Promise<T> {
-  const res = await fetch(url, {
-    headers: {
-      'x-admin-secret': adminSecret,
-    },
-    cache: 'no-store',
-  });
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url, { cache: 'no-store' });
   if (!res.ok) {
     const payload = await res.json().catch(() => ({} as Record<string, unknown>));
     const err = (payload as Record<string, unknown>)['error'];
@@ -24,35 +21,22 @@ type AdminUser = {
 };
 
 export default async function AdminDashboardPage() {
-  const adminSecret = process.env.ACCESS_REQUESTS_ADMIN_SECRET || process.env.ADMIN_SECRET || '';
-
   let users: AdminUser[] = [];
-  type AccessRequest = { id: string; email: string; status?: string; created_at?: string };
-  let accessRequests: AccessRequest[] = [];
+  try {
+    const base = process.env.NEXT_PUBLIC_APP_URL || '';
+    const root = base.replace(/\/$/, '');
+    const usersUrl = `${root}/api/admins/users`;
 
-  if (adminSecret) {
-    try {
-      const base = process.env.NEXT_PUBLIC_APP_URL || '';
-      const root = base.replace(/\/$/, '');
-      const usersUrl = `${root}/api/admins/users`;
-      const requestsUrl = `${root}/api/access-requests`;
+    const usersResp = await fetchJson<{ ok: boolean; data: AdminUser[] }>(usersUrl).catch(
+      () => null
+    );
 
-      const [usersResp, reqResp] = await Promise.all([
-        fetchJson<{ ok: boolean; data: AdminUser[] }>(usersUrl, adminSecret),
-        fetchJson<{ ok: boolean; data: AccessRequest[] }>(requestsUrl, adminSecret),
-      ]);
-
-      users = usersResp?.data || [];
-      accessRequests = reqResp?.data || [];
-    } catch {
-      // swallow errors – UI will show fallback
-    }
+    users = (usersResp && usersResp.data) || [];
+  } catch {
+    // swallow errors – UI will show fallback
   }
 
-  const totalUsers = users.length;
-  const blocked = users.filter((u) => u.is_blocked).length;
-  const admins = users.filter((u) => u.is_admin).length;
-  const pendingRequests = accessRequests.filter((r) => r.status === 'pending').length;
+  // derived stats are calculated in the client-side DashboardStats component
 
   const now = new Date();
   const sevenDaysAgo = new Date(now);
@@ -76,7 +60,7 @@ export default async function AdminDashboardPage() {
             High-level overview of users and access requests.
           </p>
         </div>
-        {!adminSecret ? (
+        {false ? (
           <p className="text-xs text-red-600 bg-red-50 border border-red-100 px-3 py-1 rounded-lg">
             Set <code>ACCESS_REQUESTS_ADMIN_SECRET</code> or <code>ADMIN_SECRET</code> in env to
             enable admin data.
@@ -84,25 +68,12 @@ export default async function AdminDashboardPage() {
         ) : null}
       </div>
 
-      <section className="grid gap-4 md:grid-cols-4">
-        <div className="rounded-2xl bg-white border border-slate-200 p-4">
-          <div className="text-xs font-semibold text-slate-500 uppercase mb-1">Total users</div>
-          <div className="text-2xl font-semibold text-slate-900">{totalUsers}</div>
-        </div>
-        <div className="rounded-2xl bg-white border border-slate-200 p-4">
-          <div className="text-xs font-semibold text-slate-500 uppercase mb-1">Admins</div>
-          <div className="text-2xl font-semibold text-slate-900">{admins}</div>
-        </div>
-        <div className="rounded-2xl bg-white border border-slate-200 p-4">
-          <div className="text-xs font-semibold text-slate-500 uppercase mb-1">Blocked</div>
-          <div className="text-2xl font-semibold text-slate-900">{blocked}</div>
-        </div>
-        <div className="rounded-2xl bg-white border border-slate-200 p-4">
-          <div className="text-xs font-semibold text-slate-500 uppercase mb-1">
-            Pending requests
-          </div>
-          <div className="text-2xl font-semibold text-slate-900">{pendingRequests}</div>
-        </div>
+      {/* Client-side live stats (keeps values up-to-date) */}
+      <DashboardStats />
+
+      {/* Interactive controls (client) */}
+      <section>
+        <DashboardControls />
       </section>
 
       <section className="grid gap-4 md:grid-cols-3">
