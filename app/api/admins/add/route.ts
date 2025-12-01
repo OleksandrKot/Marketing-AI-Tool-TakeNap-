@@ -1,14 +1,7 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/core/supabase';
 
-const ADMIN_SECRET = process.env.ACCESS_REQUESTS_ADMIN_SECRET || process.env.ADMIN_SECRET || '';
-
 export async function POST(req: Request) {
-  const secret = req.headers.get('x-admin-secret') || '';
-  if (!ADMIN_SECRET || secret !== ADMIN_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   try {
     const body = await req.json();
     let user_id = (body?.user_id || '').toString();

@@ -6,8 +6,6 @@ import { createServerSupabaseClient } from '@/lib/core/supabase';
 // of missing rows inline (bounded) and return a summary. When not on Vercel the
 // previous behavior of spawning a detached worker is preserved for self-hosted runs.
 
-let workerRunning = false;
-
 async function streamToBuffer(stream: unknown) {
   if (!stream) throw new Error('No stream');
   if (Buffer.isBuffer(stream)) return stream;
@@ -174,21 +172,22 @@ export async function GET() {
       return NextResponse.json({ ok: true, missing, processed });
     }
 
-    // Not on Vercel — spawn detached worker once per process lifecycle.
-    if (missing > 0 && !workerRunning) {
+    // Not on Vercel — spawn detached worker on each invocation when missing rows exist.
+    // The client polls `GET /api/ads/check-phash` at an interval; per request we trigger
+    // the detached worker so external processing runs independently. Keep it detached
+    // and ignore stdio so the server process isn't blocked.
+    if (missing > 0) {
       try {
         const { spawn } = await import('child_process');
         const child = spawn(process.execPath || 'node', ['scripts/phashWorker.mjs'], {
           detached: true,
           stdio: 'ignore',
         });
-        child.unref();
-        workerRunning = true;
-
-        // Clear the lock after 10 minutes
-        setTimeout(() => {
-          workerRunning = false;
-        }, 10 * 60 * 1000);
+        try {
+          child.unref();
+        } catch (e) {
+          /* ignore unref failures */
+        }
       } catch (e) {
         console.error('Failed to spawn phash worker', e);
       }

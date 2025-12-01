@@ -77,6 +77,7 @@ export function SearchControls({
   processingMessage,
   processingDone = false,
   importStatus = null,
+  importJobId = null,
   importSavedCreatives = null,
   importTotalCreatives = null,
   requestLogs = [],
@@ -156,6 +157,9 @@ export function SearchControls({
         normalizedStatus={normalizedStatus}
         importSavedCreatives={importSavedCreatives}
         importTotalCreatives={importTotalCreatives}
+        importStatus={importStatus}
+        importJobId={importJobId}
+        pageName={pages && pages.length > 0 ? pages[0] : ''}
         showLogs={showLogs}
         onToggleLogs={setShowLogs}
         onClearProcessing={clearProcessingDisplay}

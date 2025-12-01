@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, Tag } from 'lucide-react';
+import { Calendar, Tag, Check as CheckIcon } from 'lucide-react';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
@@ -12,9 +12,23 @@ interface AdCardProps {
   relatedAds?: Ad[];
   relatedCount?: number;
   from?: string;
+  index?: number;
+  // selection props
+  selectionMode?: boolean;
+  selected?: boolean;
+  onToggleSelect?: (id: string) => void;
 }
 
-function AdCardComponent({ ad, relatedAds = [], relatedCount, from }: AdCardProps) {
+function AdCardComponent({
+  ad,
+  relatedAds = [],
+  relatedCount,
+  from,
+  index,
+  selectionMode,
+  selected,
+  onToggleSelect,
+}: AdCardProps) {
   const [expanded, setExpanded] = useState(false);
   const title = ad.title || 'Untitled Ad';
   const isVideo = ad.display_format === 'VIDEO';
@@ -45,7 +59,13 @@ function AdCardComponent({ ad, relatedAds = [], relatedCount, from }: AdCardProp
 
   return (
     <Card className="group overflow-hidden bg-white border border-slate-200 rounded-2xl h-full flex flex-col hover:border-blue-200 hover:shadow-lg transition-all duration-300 ease-out">
-      <CardHeader className="p-6 pb-4 flex flex-row items-start justify-between">
+      <CardHeader className="relative p-6 pb-4 flex flex-row items-start justify-between">
+        {/* index badge for debugging order */}
+        {typeof index === 'number' && (
+          <div className="absolute left-3 top-3 bg-white border border-slate-100 text-xs text-slate-700 rounded-full px-2 py-0.5 shadow-sm">
+            #{index}
+          </div>
+        )}
         <div className="flex-1 min-w-0">
           <h3 className="font-medium text-slate-900 truncate text-lg leading-tight mb-1">
             {truncateText(title, 35)}
@@ -57,9 +77,25 @@ function AdCardComponent({ ad, relatedAds = [], relatedCount, from }: AdCardProp
             📹 Video
           </Badge>
         )}
+        {/* selection checkbox (top-right) */}
+        {selectionMode ? (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              if (onToggleSelect) onToggleSelect(String(ad.id));
+            }}
+            className={`absolute right-3 top-3 w-7 h-7 rounded-full flex items-center justify-center transition-colors duration-150 ${
+              selected ? 'bg-blue-600' : 'border border-slate-300 bg-white'
+            }`}
+            title={selected ? 'Deselect' : 'Select'}
+          >
+            {selected ? <CheckIcon className="h-4 w-4 text-white" /> : null}
+          </button>
+        ) : null}
       </CardHeader>
 
-      <CardContent className="p-6 pt-0 flex-grow">
+      <CardContent className="p-6 pt-0 flex flex-col flex-grow">
         <div className="mb-3 bg-slate-100 rounded-xl overflow-hidden group-hover:shadow-md transition-shadow duration-300 flex items-center justify-center h-56 md:h-64">
           <img
             src={publicSrc}
@@ -91,67 +127,81 @@ function AdCardComponent({ ad, relatedAds = [], relatedCount, from }: AdCardProp
           </div>
         )}
 
-        <div className="flex items-center justify-between text-xs text-slate-400 font-medium mt-3">
-          <div className="flex items-center">
-            <Calendar className="h-3.5 w-3.5 mr-1.5" />
-            <span>{formatDate(ad.created_at)}</span>
+        <div className="mt-auto">
+          <div className="flex items-center justify-between text-xs text-slate-400 font-medium mt-3">
+            <div className="flex items-center">
+              <Calendar className="h-3.5 w-3.5 mr-1.5" />
+              <span>{formatDate(ad.created_at)}</span>
+            </div>
+            <div className="flex items-center">
+              <span className="text-orange-600 font-medium">Active: {activeDays} days</span>
+              <div className="w-2 h-2 bg-green-500 rounded-full ml-2" />
+            </div>
           </div>
-          <div className="flex items-center">
-            <span className="text-orange-600 font-medium">Active: {activeDays} days</span>
-            <div className="w-2 h-2 bg-green-500 rounded-full ml-2" />
-          </div>
-        </div>
 
-        {relatedAds && relatedAds.length > 0 && (
-          <div className="mt-4">
-            {!expanded ? (
-              <button
-                type="button"
-                onClick={() => setExpanded(true)}
-                className="text-sm text-slate-600 hover:text-slate-800 font-medium"
-              >
-                Show {relatedCount ?? relatedAds.length} similar
-              </button>
-            ) : (
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-slate-600 font-medium">Similar creatives</span>
-                  <button
-                    type="button"
-                    onClick={() => setExpanded(false)}
-                    className="text-sm text-slate-500 hover:text-slate-700"
-                  >
-                    Hide
-                  </button>
-                </div>
-                <div className="grid grid-cols-4 gap-2">
-                  {relatedAds.slice(0, 8).map((r) => {
-                    const src = r.signed_image_url
-                      ? r.signed_image_url
-                      : r.ad_archive_id
-                      ? getPublicImageUrl(
-                          `${
-                            r.display_format === 'VIDEO'
-                              ? 'test10public_preview'
-                              : 'test9bucket_photo'
-                          }/${r.ad_archive_id}.jpeg`
-                        )
-                      : r.image_url || '/placeholder.svg';
-                    return (
-                      <Link key={r.id} href={`/creative/${r.id}`} className="block">
-                        <img
-                          src={src}
-                          alt={r.title || 'related'}
-                          className="w-full h-20 object-cover rounded-md border border-slate-100"
-                        />
-                      </Link>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
+          <div className="flex items-center justify-between text-xs text-slate-400 font-medium mt-2">
+            <div />
+            <div className="flex items-center">
+              <span className="text-slate-700 font-medium mr-3">
+                Variations:{' '}
+                <span className="text-slate-900">
+                  {typeof relatedCount === 'number' ? relatedCount : relatedAds?.length ?? 0}
+                </span>
+              </span>
+            </div>
           </div>
-        )}
+
+          {relatedAds && relatedAds.length > 0 && (
+            <div className="mt-4">
+              {!expanded ? (
+                <button
+                  type="button"
+                  onClick={() => setExpanded(true)}
+                  className="text-sm text-slate-600 hover:text-slate-800 font-medium"
+                >
+                  Show {relatedCount ?? relatedAds.length} similar
+                </button>
+              ) : (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-slate-600 font-medium">Similar creatives</span>
+                    <button
+                      type="button"
+                      onClick={() => setExpanded(false)}
+                      className="text-sm text-slate-500 hover:text-slate-700"
+                    >
+                      Hide
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-4 gap-2">
+                    {relatedAds.slice(0, 8).map((r) => {
+                      const src = r.signed_image_url
+                        ? r.signed_image_url
+                        : r.ad_archive_id
+                        ? getPublicImageUrl(
+                            `${
+                              r.display_format === 'VIDEO'
+                                ? 'test10public_preview'
+                                : 'test9bucket_photo'
+                            }/${r.ad_archive_id}.jpeg`
+                          )
+                        : r.image_url || '/placeholder.svg';
+                      return (
+                        <Link key={r.id} href={`/creative/${r.id}`} className="block">
+                          <img
+                            src={src}
+                            alt={r.title || 'related'}
+                            className="w-full h-20 object-cover rounded-md border border-slate-100"
+                          />
+                        </Link>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </CardContent>
 
       <CardFooter className="p-6 pt-0">

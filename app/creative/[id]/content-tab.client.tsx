@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/core/supabase';
 import { useRouter } from 'next/navigation';
 import { Copy, Check, ExternalLink, Link, MoreHorizontal } from 'lucide-react';
+import { useToast } from '@/components/ui/toast';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -54,6 +55,7 @@ export default function ContentTabClient({
   // Note: the structured attributes modal is dynamically imported below
   // via `DynamicStructuredAttributesModal` when needed.
   const adData = ad; // server-prepared ad
+  const { showToast } = useToast();
   const [localGroupedSections, setLocalGroupedSections] = useState(groupedSections);
 
   useEffect(() => {
@@ -77,6 +79,40 @@ export default function ContentTabClient({
       // ignore
     }
   };
+
+  // Build duplicate preview items once for rendering
+  const buildDupItems = (): Ad[] => {
+    const dupItems: Ad[] = [];
+    if (adData.duplicates_preview_image) {
+      const parts = adData.duplicates_preview_image
+        .split(';')
+        .map((s: string) => s.trim())
+        .filter((s: string) => s);
+      for (let i = 0; i < parts.length; i++) {
+        const url = parts[i];
+        const isHttp = String(url).startsWith('http');
+        const cleaned = String(url).replace(/^\/+/, '');
+        const partsArr = cleaned.split('/').filter(Boolean);
+        const fakeId = -(i + 1);
+        const fakeAd: Partial<Ad> = {
+          id: fakeId,
+          title: adData.title ? `${adData.title} (Duplicate)` : 'Duplicate',
+          page_name: adData.page_name || '',
+          display_format: 'IMAGE',
+        };
+        if (isHttp) fakeAd.image_url = url;
+        else if (partsArr.length >= 1) {
+          fakeAd.ad_archive_id = partsArr[partsArr.length - 1].replace(/\.[^/.]+$/, '');
+        }
+        dupItems.push(fakeAd as unknown as Ad);
+      }
+    }
+    return dupItems;
+  };
+
+  const dupItems = buildDupItems();
+  const combined = [...(relatedAds || []), ...(dupItems || [])];
+  const relatedTotal = combined.length;
 
   const handleCopyToClipboard = useCallback(
     async (text: string, fieldName: string): Promise<boolean> => {
@@ -210,56 +246,91 @@ export default function ContentTabClient({
           )}
         </div>
 
-        {/* Render duplicates as related-style cards so they match Related Ads styling */}
-        {((relatedAds && relatedAds.length > 0) || adData.duplicates_preview_image) && (
-          <Card className="border-slate-200 rounded-2xl">
-            <CardContent className="p-0">
-              <div className="bg-blue-50 p-6 border-b border-slate-200">
-                <h2 className="text-xl font-semibold text-slate-900">Related Ads and Duplicates</h2>
-              </div>
-              <div className="p-6">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {(() => {
-                    // Build duplicate items from duplicates_preview_image (semicolon list)
-                    const dupItems: Ad[] = [];
-                    if (adData.duplicates_preview_image) {
-                      const parts = adData.duplicates_preview_image
-                        .split(';')
-                        .map((s: string) => s.trim())
-                        .filter((s: string) => s);
-                      for (let i = 0; i < parts.length; i++) {
-                        const url = parts[i];
-                        const isHttp = String(url).startsWith('http');
-                        const cleaned = String(url).replace(/^\/+/, '');
-                        const partsArr = cleaned.split('/').filter(Boolean);
-                        const fakeId = -(i + 1);
-                        const fakeAd: Partial<Ad> = {
-                          id: fakeId,
-                          title: adData.title ? `${adData.title} (Duplicate)` : 'Duplicate',
-                          page_name: adData.page_name || '',
-                          display_format: 'IMAGE',
-                        };
-                        if (isHttp) fakeAd.image_url = url;
-                        else if (partsArr.length >= 1) {
-                          // treat as storage path where last segment may be archive id
-                          fakeAd.ad_archive_id = partsArr[partsArr.length - 1].replace(
-                            /\.[^/.]+$/,
-                            ''
-                          );
-                        }
-                        dupItems.push(fakeAd as unknown as Ad);
-                      }
-                    }
+        <div className="mt-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              const find = (t: string) =>
+                groupedSections.find(
+                  (g) => String(g.title).toLowerCase() === String(t).toLowerCase()
+                )?.text || '';
 
-                    const combined = [...(relatedAds || []), ...(dupItems || [])];
-                    if (combined.length === 0) return null;
-                    return combined.map((relatedAd) => (
-                      <div
-                        key={relatedAd.id}
-                        role="button"
-                        tabIndex={0}
-                        className="bg-white border border-slate-200 rounded-xl p-4 hover:border-blue-200 hover:shadow-lg transition-all duration-300 cursor-pointer"
-                        onClick={() => {
+              const pageName = adData.page_name || '';
+              const creativeUrl = adData.meta_ad_url || adData.link_url || '';
+              const adText = find('Ad Text') || '';
+              const sound = find('Sound Transcription') || '';
+              const textOnImage = find('Text on Image') || '';
+
+              if (!sound && !textOnImage) {
+                showToast({
+                  message: 'No sound transcription or text-on-image available to export.',
+                  type: 'error',
+                });
+                return;
+              }
+
+              const rows: string[] = [];
+              const addKV = (k: string, v: string) => {
+                const esc = '"' + (v || '').replace(/"/g, '""') + '"';
+                rows.push('"' + k + '",' + esc);
+              };
+
+              addKV('Page_name', pageName);
+              addKV('Creative_URL', creativeUrl);
+              addKV('Ad_text', adText);
+              addKV('Sound_transcription', sound);
+              addKV('Text_on_image', textOnImage);
+
+              rows.push('');
+
+              const bom = '\uFEFF';
+              const blob = new Blob([bom + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `creative-${adData.id}-text-audio.csv`;
+              document.body.appendChild(a);
+              a.click();
+              a.remove();
+              URL.revokeObjectURL(url);
+              showToast({ message: 'CSV exported', type: 'success' });
+            }}
+          >
+            Export Text & Audio (CSV)
+          </Button>
+        </div>
+
+        <Card className="border-slate-200 rounded-2xl">
+          <CardContent className="p-0">
+            <div className="bg-blue-50 p-6 border-b border-slate-200">
+              <h2 className="text-xl font-semibold text-slate-900">Related Ads ({relatedTotal})</h2>
+            </div>
+            <div className="p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {combined.length === 0 ? (
+                  <div className="col-span-full text-center py-8 text-slate-500">
+                    No related creatives
+                  </div>
+                ) : (
+                  combined.map((relatedAd) => (
+                    <div
+                      key={relatedAd.id}
+                      role="button"
+                      tabIndex={0}
+                      className="bg-white border border-slate-200 rounded-xl p-4 hover:border-blue-200 hover:shadow-lg transition-all duration-300 cursor-pointer"
+                      onClick={() => {
+                        const allRelatedIds = [
+                          adData.id,
+                          ...(relatedAds || []).map((ra) => ra.id),
+                        ].filter((id) => id !== relatedAd.id);
+                        const relatedParam =
+                          allRelatedIds.length > 0 ? `?related=${allRelatedIds.join(',')}` : '';
+                        router.push(`/creative/${relatedAd.id}${relatedParam}`);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
                           const allRelatedIds = [
                             adData.id,
                             ...(relatedAds || []).map((ra) => ra.id),
@@ -267,58 +338,46 @@ export default function ContentTabClient({
                           const relatedParam =
                             allRelatedIds.length > 0 ? `?related=${allRelatedIds.join(',')}` : '';
                           router.push(`/creative/${relatedAd.id}${relatedParam}`);
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            e.preventDefault();
-                            const allRelatedIds = [
-                              adData.id,
-                              ...(relatedAds || []).map((ra) => ra.id),
-                            ].filter((id) => id !== relatedAd.id);
-                            const relatedParam =
-                              allRelatedIds.length > 0 ? `?related=${allRelatedIds.join(',')}` : '';
-                            router.push(`/creative/${relatedAd.id}${relatedParam}`);
-                          }
-                        }}
-                      >
-                        <div className="aspect-video bg-slate-100 rounded-lg overflow-hidden mb-3">
-                          {relatedAd.ad_archive_id ? (
-                            <StorageImage
-                              bucket={
-                                relatedAd.display_format === 'VIDEO'
-                                  ? 'test10public_preview'
-                                  : 'test9bucket_photo'
-                              }
-                              path={`${relatedAd.ad_archive_id}.jpeg`}
-                              alt={relatedAd.title || 'Related ad'}
-                              fill={true}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : relatedAd.image_url ? (
-                            <img
-                              src={relatedAd.image_url}
-                              alt={relatedAd.title || 'Related ad'}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : null}
-                        </div>
-                        <h3 className="font-medium text-slate-900 mb-1 line-clamp-2">
-                          {relatedAd.title || 'Untitled Ad'}
-                        </h3>
-                        <p className="text-sm text-slate-500 mb-2">{relatedAd.page_name}</p>
-                        {relatedAd.display_format === 'VIDEO' && (
-                          <span className="inline-block bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded-full">
-                            📹 Video
-                          </span>
-                        )}
+                        }
+                      }}
+                    >
+                      <div className="aspect-video bg-slate-100 rounded-lg overflow-hidden mb-3">
+                        {relatedAd.ad_archive_id ? (
+                          <StorageImage
+                            bucket={
+                              relatedAd.display_format === 'VIDEO'
+                                ? 'test10public_preview'
+                                : 'test9bucket_photo'
+                            }
+                            path={`${relatedAd.ad_archive_id}.jpeg`}
+                            alt={relatedAd.title || 'Related ad'}
+                            fill={true}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : relatedAd.image_url ? (
+                          <img
+                            src={relatedAd.image_url}
+                            alt={relatedAd.title || 'Related ad'}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : null}
                       </div>
-                    ));
-                  })()}
-                </div>
+                      <h3 className="font-medium text-slate-900 mb-1 line-clamp-2">
+                        {relatedAd.title || 'Untitled Ad'}
+                      </h3>
+                      <p className="text-sm text-slate-500 mb-2">{relatedAd.page_name}</p>
+                      {relatedAd.display_format === 'VIDEO' && (
+                        <span className="inline-block bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded-full">
+                          📹 Video
+                        </span>
+                      )}
+                    </div>
+                  ))
+                )}
               </div>
-            </CardContent>
-          </Card>
-        )}
+            </div>
+          </CardContent>
+        </Card>
 
         {adData.text && (
           <Card className="border-slate-200 rounded-2xl">
@@ -473,7 +532,7 @@ export default function ContentTabClient({
                 <div className="mb-2">
                   <DynamicStructuredAttributesModal
                     groupedSections={localGroupedSections}
-                    ad={adData}
+                    ad={adData as unknown as Record<string, unknown>}
                     onApply={applyAttributesToVisual}
                   />
                 </div>

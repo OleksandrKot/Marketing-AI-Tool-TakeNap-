@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 
@@ -17,7 +16,6 @@ type AccessSettings = {
 };
 
 export default function AdminSettingsPage() {
-  const [secret, setSecret] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -26,26 +24,15 @@ export default function AdminSettingsPage() {
   const [blockedInput, setBlockedInput] = useState('');
 
   useEffect(() => {
-    const stored =
-      typeof window !== 'undefined' ? window.sessionStorage.getItem('adminSecret') : null;
-    if (stored) setSecret(stored);
+    loadSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function handleSecretChange(v: string) {
-    setSecret(v);
-    if (typeof window !== 'undefined') {
-      window.sessionStorage.setItem('adminSecret', v);
-    }
-  }
-
   async function loadSettings() {
-    if (!secret) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/admin/access-settings', {
-        headers: { 'x-admin-secret': secret },
-      });
+      const res = await fetch('/api/admin/access-settings');
       const payload = await res.json();
       if (!res.ok) throw new Error(payload?.error || 'Failed to load settings');
       const data = payload?.data as AccessSettings;
@@ -60,7 +47,7 @@ export default function AdminSettingsPage() {
   }
 
   async function saveSettings() {
-    if (!secret || !settings) return;
+    if (!settings) return;
     setSaving(true);
     setError(null);
     try {
@@ -77,10 +64,7 @@ export default function AdminSettingsPage() {
       };
       const res = await fetch('/api/admin/access-settings', {
         method: 'POST',
-        headers: {
-          'x-admin-secret': secret,
-          'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
       const payload = await res.json();
@@ -110,14 +94,7 @@ export default function AdminSettingsPage() {
         </div>
         <div className="flex flex-col items-stretch md:items-end gap-2">
           <div className="flex items-center gap-2">
-            <Input
-              type="password"
-              value={secret}
-              onChange={(e) => handleSecretChange(e.target.value)}
-              placeholder="Admin secret"
-              className="w-48"
-            />
-            <Button size="sm" onClick={loadSettings} disabled={!secret || loading}>
+            <Button size="sm" onClick={loadSettings} disabled={loading}>
               {loading ? 'Loading...' : 'Load'}
             </Button>
           </div>
@@ -259,7 +236,7 @@ export default function AdminSettingsPage() {
           </section>
 
           <div className="flex justify-end">
-            <Button onClick={saveSettings} disabled={!secret || saving}>
+            <Button onClick={saveSettings} disabled={saving}>
               {saving ? 'Saving...' : 'Save settings'}
             </Button>
           </div>

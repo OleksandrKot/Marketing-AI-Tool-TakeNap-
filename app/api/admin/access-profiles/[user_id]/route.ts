@@ -2,14 +2,7 @@ import { NextResponse } from 'next/server';
 import { updateAccessProfile } from '@/lib/access/profiles';
 import { createServerSupabaseClient } from '@/lib/core/supabase';
 
-const ADMIN_SECRET = process.env.ACCESS_REQUESTS_ADMIN_SECRET || process.env.ADMIN_SECRET || '';
-
 export async function PATCH(req: Request, { params }: { params: { user_id: string } }) {
-  const secret = req.headers.get('x-admin-secret') || '';
-  if (!ADMIN_SECRET || secret !== ADMIN_SECRET) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-  }
-
   const userId = params.user_id;
   if (!userId) {
     return NextResponse.json({ error: 'user_id is required' }, { status: 400 });

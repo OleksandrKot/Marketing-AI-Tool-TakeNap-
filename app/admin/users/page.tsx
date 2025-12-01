@@ -12,47 +12,42 @@ type AdminUser = {
   created_at: string;
   is_admin?: boolean;
   is_blocked?: boolean;
+  not_registered?: boolean;
 };
 
 export default function AdminUsersPage() {
-  const [secret, setSecret] = useState('');
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState<AdminUser[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
   useEffect(() => {
-    const stored =
-      typeof window !== 'undefined' ? window.sessionStorage.getItem('adminSecret') : null;
-    if (stored) setSecret(stored);
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function handleSecretChange(v: string) {
-    setSecret(v);
-    if (typeof window !== 'undefined') {
-      window.sessionStorage.setItem('adminSecret', v);
-    }
-  }
-
   async function load() {
-    if (!secret) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/admin/users', {
-        headers: { 'x-admin-secret': secret },
-      });
+      const res = await fetch('/api/admins/users');
       const payload = await res.json();
       if (!res.ok) throw new Error(payload?.error || 'Failed to load users');
-      const rawUsers = (payload?.users || []) as Array<{
+      const raw = (payload?.data || []) as Array<{
         id?: string;
-        email?: string;
-        created_at?: string;
+        email?: string | null;
+        created_at?: string | null;
+        is_admin?: boolean;
+        is_blocked?: boolean;
+        not_registered?: boolean;
       }>;
-      const mapped: AdminUser[] = rawUsers.map((u) => ({
+      const mapped: AdminUser[] = raw.map((u) => ({
         id: u.id || '',
         email: u.email || '',
         created_at: u.created_at || '',
+        is_admin: !!u.is_admin,
+        is_blocked: !!u.is_blocked,
+        not_registered: !!u.not_registered,
       }));
       setUsers(mapped);
     } catch (e) {
@@ -63,14 +58,12 @@ export default function AdminUsersPage() {
   }
 
   async function post(url: string, body?: unknown) {
-    if (!secret) return;
     setLoading(true);
     setError(null);
     try {
       const res = await fetch(url, {
         method: 'POST',
         headers: {
-          'x-admin-secret': secret,
           ...(body ? { 'Content-Type': 'application/json' } : {}),
         },
         body: body ? JSON.stringify(body) : undefined,
@@ -99,18 +92,6 @@ export default function AdminUsersPage() {
           </p>
         </div>
         <div className="flex flex-col items-stretch md:items-end gap-2">
-          <div className="flex items-center gap-2">
-            <Input
-              type="password"
-              value={secret}
-              onChange={(e) => handleSecretChange(e.target.value)}
-              placeholder="Admin secret"
-              className="w-48"
-            />
-            <Button onClick={load} disabled={!secret || loading} size="sm">
-              {loading ? 'Loading...' : 'Load'}
-            </Button>
-          </div>
           {error ? <p className="text-xs text-red-600">{error}</p> : null}
         </div>
       </div>
@@ -146,7 +127,7 @@ export default function AdminUsersPage() {
                 </div>
                 <div className="flex items-center gap-1">
                   {u.is_admin ? (
-                    <Badge variant="default">admin</Badge>
+                    <Badge variant="destructive">admin</Badge>
                   ) : (
                     <Badge variant="outline">user</Badge>
                   )}
@@ -155,11 +136,16 @@ export default function AdminUsersPage() {
                       blocked
                     </Badge>
                   ) : null}
+                  {u.not_registered ? (
+                    <Badge variant="outline" className="border-yellow-400 text-yellow-700">
+                      not registered
+                    </Badge>
+                  ) : null}
                 </div>
                 <div className="flex justify-end gap-2">
                   {u.is_admin ? (
                     <Button
-                      size="xs"
+                      size="sm"
                       variant="outline"
                       disabled={loading}
                       onClick={() => post('/api/admins/remove-by-email', { email: u.email })}
@@ -168,7 +154,7 @@ export default function AdminUsersPage() {
                     </Button>
                   ) : (
                     <Button
-                      size="xs"
+                      size="sm"
                       variant="outline"
                       disabled={loading}
                       onClick={() => post('/api/admins/add', { email: u.email })}
@@ -176,19 +162,31 @@ export default function AdminUsersPage() {
                       Make admin
                     </Button>
                   )}
+
+                  {/* Block */}
                   <Button
-                    size="xs"
+                    size="sm"
                     variant="outline"
                     disabled={loading}
-                    onClick={() => post(`/api/admins/user/${encodeURIComponent(u.id)}/block`)}
+                    onClick={() =>
+                      u.id
+                        ? post(`/api/admins/user/${encodeURIComponent(u.id)}/block`)
+                        : post('/api/admins/block-by-email', { email: u.email })
+                    }
                   >
                     Block
                   </Button>
+
+                  {/* Delete */}
                   <Button
-                    size="xs"
+                    size="sm"
                     variant="outline"
                     disabled={loading}
-                    onClick={() => post(`/api/admins/user/${encodeURIComponent(u.id)}/delete`)}
+                    onClick={() =>
+                      u.id
+                        ? post(`/api/admins/user/${encodeURIComponent(u.id)}/delete`)
+                        : post('/api/admins/delete-by-email', { email: u.email })
+                    }
                   >
                     Delete
                   </Button>

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { User, LogOut, ChevronDown } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -124,9 +125,9 @@ export function ProfileDropdown() {
             <User className="h-4 w-4 mr-2" />
             {nickname ? nickname : 'My Profile'}
             {isAdmin ? (
-              <span className="ml-2 text-xs font-semibold bg-red-600 text-white px-2 py-0.5 rounded">
+              <Badge variant="destructive" className="ml-2">
                 ADMIN
-              </span>
+              </Badge>
             ) : null}
             <ChevronDown className="h-4 w-4 ml-2" />
           </Button>
@@ -150,9 +151,9 @@ export function ProfileDropdown() {
                   className="hover:bg-slate-100 cursor-pointer text-blue-600 font-medium"
                 >
                   Admin panel
-                  <span className="ml-2 text-xs font-semibold bg-red-600 text-white px-2 py-0.5 rounded-full">
+                  <Badge variant="destructive" className="ml-2">
                     ADMIN
-                  </span>
+                  </Badge>
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem

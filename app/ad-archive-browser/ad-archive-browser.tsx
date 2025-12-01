@@ -1,6 +1,7 @@
 'use client';
 
 import Header from './components/Header';
+import { useEffect } from 'react';
 import SearchControls from './components/search-controls';
 import ResultsGrid from './components/ResultsGrid';
 import PaginationBar from './components/PaginationBar';
@@ -20,6 +21,7 @@ export function AdArchiveBrowser({
   initialFilters,
   initialTotalAds,
 }: AdArchiveBrowserProps) {
+  type SortMode = 'auto' | 'most_variations' | 'least_variations' | 'newest';
   // Pass explicit cleared filters to avoid relying on a client-side effect
   // to reset filters after mount. This initializes hook state correctly
   // so the component renders with cleared filters immediately.
@@ -28,7 +30,7 @@ export function AdArchiveBrowser({
     initialAds,
     initialFilters ?? clearedFilters,
     initialTotalAds,
-    5 * 60 * 1000 // poll every 5 minutes by default
+    30 * 1000 // poll every 30 seconds by default
   ) as UseAdArchiveReturn;
 
   const {
@@ -66,7 +68,20 @@ export function AdArchiveBrowser({
     importTotalCreatives,
     autoClearProcessing,
     setAutoClearProcessing,
+    userSortMode,
+    setUserSortMode,
   } = state;
+
+  // Default sort on main archive to ascending variations (least -> most)
+  useEffect(() => {
+    try {
+      if (userSortMode === 'auto' || !userSortMode) setUserSortMode('least_variations');
+    } catch (e) {
+      /* noop */
+    }
+    // run once on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div className="container mx-auto px-6 py-12 max-w-7xl">
@@ -116,6 +131,25 @@ export function AdArchiveBrowser({
           productFilter={productFilter}
           selectedTags={selectedTags}
         />
+      </div>
+
+      <div className="flex items-center justify-end mb-4">
+        <div className="flex items-center gap-3">
+          <label htmlFor="archive-sort" className="text-sm text-slate-600 mr-2">
+            Sort:
+          </label>
+          <select
+            id="archive-sort"
+            value={userSortMode}
+            onChange={(e) => setUserSortMode(e.target.value as SortMode)}
+            className="px-3 py-2 border border-slate-200 rounded-md text-sm"
+          >
+            <option value="auto">Auto (intelligent)</option>
+            <option value="most_variations">Most variations</option>
+            <option value="least_variations">Least variations</option>
+            <option value="newest">Newest in database</option>
+          </select>
+        </div>
       </div>
 
       <ResultsGrid

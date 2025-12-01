@@ -21,6 +21,10 @@ type Props = {
   selectedCreativeType: 'all' | 'video' | 'image';
   onCloseModal?: () => void;
   processingDone?: boolean;
+  // selection mode props
+  selectionMode?: boolean;
+  selectedIds?: Record<string, boolean>;
+  onToggleSelect?: (id: string) => void;
 };
 
 function ResultsGrid({
@@ -35,6 +39,9 @@ function ResultsGrid({
   selectedCreativeType,
   onCloseModal,
   processingDone,
+  selectionMode,
+  selectedIds,
+  onToggleSelect,
 }: Props) {
   return (
     <>
@@ -74,7 +81,17 @@ function ResultsGrid({
               /* noop */
             }
             return (
-              <AdCard key={ad.id} ad={ad} relatedAds={relatedAds} relatedCount={relatedCount} />
+              <AdCard
+                key={ad.id}
+                ad={ad}
+                relatedAds={relatedAds}
+                relatedCount={relatedCount}
+                index={idx + 1}
+                // selection props
+                selectionMode={selectionMode}
+                selected={selectedIds ? Boolean(selectedIds[String(ad.id)]) : false}
+                onToggleSelect={onToggleSelect}
+              />
             );
           })}
 

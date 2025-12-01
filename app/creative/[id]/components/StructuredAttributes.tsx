@@ -31,6 +31,10 @@ type StructuredAttributesProps = {
   onGeneratedChange?: (val: string) => void;
   // Raw ad data – used as an additional property source
   ad?: Record<string, unknown>;
+  // When true, do not initialize from or persist to localStorage — useful
+  // when the component is embedded in a modal where original state must
+  // be preserved per-opening.
+  ignoreLocalStorage?: boolean;
 };
 
 export type StructuredAttributesRef = {
@@ -209,7 +213,7 @@ function formatPillLabel(label: string): string {
 }
 
 const StructuredAttributes = (
-  { groupedSections, onGeneratedChange, ad }: StructuredAttributesProps,
+  { groupedSections, onGeneratedChange, ad, ignoreLocalStorage = false }: StructuredAttributesProps,
   ref: React.Ref<StructuredAttributesRef>
 ) => {
   const format = 'json' as const;
@@ -251,12 +255,6 @@ const StructuredAttributes = (
       }
     }
 
-    /**
-     * Helper: take a value for a prompt field from:
-     *  - visualJson[jsonKey] if present
-     *  - fallback from ad (outKey or jsonKey)
-     * and append it as a Block.
-     */
     const addPromptField = (cfg: { jsonKey: string; label: string; outKey: string }) => {
       let raw: unknown;
 
@@ -400,13 +398,29 @@ const StructuredAttributes = (
    */
   const [blocks, setBlocks] = useState<Block[]>(() => {
     try {
-      const key = `structuredAttrs:${
-        typeof window !== 'undefined' ? window.location.pathname : 'global'
-      }`;
-      const raw = typeof window !== 'undefined' ? window.localStorage.getItem(key) : null;
-      if (raw) {
-        const parsed = JSON.parse(raw) as Block[];
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (!ignoreLocalStorage) {
+        const key = `structuredAttrs:${
+          typeof window !== 'undefined' ? window.location.pathname : 'global'
+        }`;
+        const raw = typeof window !== 'undefined' ? window.localStorage.getItem(key) : null;
+        if (raw) {
+          const parsed = JSON.parse(raw) as Block[];
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        }
+      } else {
+        // Ephemeral modal mode: start with a minimal set of fields for quick editing
+        const base = mapFromSections();
+        const wanted = ['Subject', 'Scene', 'Style', 'Emotions'];
+        const result: Block[] = [];
+        for (const label of wanted) {
+          const found = base.find((b) => normalizeKey(b.label) === normalizeKey(label));
+          if (found) result.push(found);
+          else {
+            const def = DEFAULT_FIELDS.find((d) => normalizeKey(d.label) === normalizeKey(label));
+            result.push({ id: uid(), label, value: def ? def.value : '', included: true });
+          }
+        }
+        return result;
       }
     } catch {
       // ignore
@@ -415,6 +429,8 @@ const StructuredAttributes = (
   });
 
   const dragIndex = useRef<number | null>(null);
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
+  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
 
   // Set of normalized labels used in blocks, to avoid duplicate properties
   const usedPropKeys = useMemo(() => {
@@ -504,6 +520,7 @@ const StructuredAttributes = (
    * Autosave blocks to localStorage (per pathname).
    */
   useEffect(() => {
+    if (ignoreLocalStorage) return;
     if (typeof window === 'undefined') return;
     const key = `structuredAttrs:${window.location.pathname || 'global'}`;
     const t = window.setTimeout(() => {
@@ -514,7 +531,7 @@ const StructuredAttributes = (
       }
     }, 600);
     return () => window.clearTimeout(t);
-  }, [blocks]);
+  }, [blocks, ignoreLocalStorage]);
 
   /**
    * When groupedSections change and there are no blocks yet,
@@ -533,6 +550,7 @@ const StructuredAttributes = (
 
   const onDragStart = (i: number) => {
     dragIndex.current = i;
+    setDraggingIndex(i);
   };
 
   const onDragOver = (e: React.DragEvent) => {
@@ -577,6 +595,16 @@ const StructuredAttributes = (
       return copy;
     });
     dragIndex.current = null;
+    setDraggingIndex(null);
+    setHoverIndex(null);
+  };
+
+  const onDragEnter = (i: number) => {
+    setHoverIndex(i);
+  };
+
+  const onDragLeave = () => {
+    setHoverIndex(null);
   };
 
   /**
@@ -738,17 +766,21 @@ const StructuredAttributes = (
             {blocks.map((b, i) => (
               <div
                 key={b.id}
-                draggable
+                draggable={blocks.length > 1}
                 onDragStart={() => onDragStart(i)}
                 onDragOver={onDragOver}
                 onDrop={(e) => onDrop(e, i)}
-                className="border rounded-md p-2 bg-white flex items-start gap-2 mb-1"
+                onDragEnter={() => onDragEnter(i)}
+                onDragLeave={onDragLeave}
+                className={`border rounded-md p-2 bg-white flex items-start gap-2 mb-1 ${
+                  draggingIndex === i ? 'bg-blue-50' : ''
+                } ${hoverIndex === i ? 'ring-2 ring-dashed ring-slate-300' : ''}`}
               >
                 <div className="text-slate-400 mt-1 cursor-grab">
-                  <Move className="h-3 w-3" />
+                  {blocks.length > 1 ? <Move className="h-3 w-3" /> : null}
                 </div>
                 <div className="flex-1">
-                  <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center justify-between gap-2 mb-2">
                     <div className="font-medium text-slate-800 text-sm">{b.label}</div>
                     <div className="flex items-center gap-1">
                       <Button variant="ghost" size="icon" onClick={() => removeBlock(b.id)}>
@@ -756,6 +788,17 @@ const StructuredAttributes = (
                       </Button>
                     </div>
                   </div>
+                  <Textarea
+                    value={b.value}
+                    onChange={(e) =>
+                      setBlocks((prev) =>
+                        prev.map((blk) =>
+                          blk.id === b.id ? { ...blk, value: e.target.value } : blk
+                        )
+                      )
+                    }
+                    className="min-h-[80px]"
+                  />
                 </div>
               </div>
             ))}

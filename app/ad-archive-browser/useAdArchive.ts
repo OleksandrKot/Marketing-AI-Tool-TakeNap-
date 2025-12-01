@@ -39,6 +39,10 @@ export function useAdArchive(
   const [importSavedCreatives, setImportSavedCreatives] = useState<number | null>(null);
   const [importTotalCreatives, setImportTotalCreatives] = useState<number | null>(null);
   const [autoClearProcessing, setAutoClearProcessing] = useState<boolean>(true);
+  const [userSortMode, setUserSortMode] = useState<
+    'auto' | 'most_variations' | 'least_variations' | 'newest'
+  >('auto');
+  const [lastFilterChange, setLastFilterChange] = useState<number>(0);
   const jobChannelRef = useRef<ReturnType<(typeof supabase)['channel']> | null>(null);
   const clearDisplayTimeoutRef = useRef<number | null>(null);
   const searchTimeout = useRef<number | null>(null);
@@ -189,7 +193,7 @@ export function useAdArchive(
                   if (!row) return;
                   const message = row['message'];
                   if (typeof message === 'string') {
-                    setProcessingMessage((prev) => prev || message);
+                    setProcessingMessage(String(message));
                     clearScheduledDisplay();
                     try {
                       pushRequestLog({
@@ -233,7 +237,7 @@ export function useAdArchive(
             console.debug('Error fetching latest import_status for user', latestErr);
           } else if (latest && mounted) {
             if (latest.message) {
-              setProcessingMessage((prev) => prev || latest.message);
+              setProcessingMessage(String(latest.message));
               clearScheduledDisplay();
               try {
                 pushRequestLog({
@@ -320,7 +324,7 @@ export function useAdArchive(
   // Hamming distance threshold for phash clustering. Lower = stricter (only
   // very similar images cluster). Increase only if you want more merging.
   // For 8x8 hashes max distance is 64; a value around 6-10 is typical.
-  const PHASH_HAMMING_THRESHOLD = 4;
+  const PHASH_HAMMING_THRESHOLD = 6;
 
   const dedupedAds = useMemo(() => {
     if (!filteredAdsByType || filteredAdsByType.length === 0) return [] as Ad[];
@@ -395,14 +399,6 @@ export function useAdArchive(
     PHASH_HAMMING_THRESHOLD,
   ]);
 
-  const adIdToGroupMap: Record<string, Ad[]> = useMemo(() => {
-    const out: Record<string, Ad[]> = {};
-    groupedAll.forEach((groupAds) => {
-      for (const ad of groupAds) out[ad.id] = groupAds;
-    });
-    return out;
-  }, [groupedAll]);
-
   const adIdToRelatedCount: Record<string, number> = useMemo(() => {
     const out: Record<string, number> = {};
     if (!filteredAdsByType || filteredAdsByType.length === 0) return out;
@@ -432,16 +428,126 @@ export function useAdArchive(
       } else {
         effectiveSize = groupMap.get(key)?.length ?? 1;
       }
-      // Cap displayed related count so UI won't show more than configured max.
-      out[ad.id] = Math.min(Math.max(0, effectiveSize - 1), PHASH_GROUP_MAX_COLLAPSE);
+      out[ad.id] = Math.max(0, effectiveSize - 1);
     }
 
     return out;
   }, [filteredAdsByType, PHASH_HAMMING_THRESHOLD, PHASH_GROUP_MAX_COLLAPSE]);
 
+  // adIdToRelatedCount is now available; create a sorted copy of dedupedAds
+  // so we can sort by variations.
+  const sortedDedupedAds = useMemo(() => {
+    try {
+      const arr = [...dedupedAds];
+      const effectiveMode = (() => {
+        if (userSortMode === 'auto') {
+          // If any filter was applied recently, auto-sort by most variations; otherwise newest
+          return lastFilterChange > 0 ? 'most_variations' : 'newest';
+        }
+        return userSortMode;
+      })();
+
+      if (effectiveMode === 'most_variations') {
+        const sorted = arr.sort((a, b) => {
+          const na = adIdToRelatedCount[a.id] ?? 0;
+          const nb = adIdToRelatedCount[b.id] ?? 0;
+          if (nb !== na) return nb - na;
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        });
+        try {
+          if (typeof window !== 'undefined') {
+            // Log mode and top items to help debug sorting issues in browser
+            // eslint-disable-next-line no-console
+            console.debug(
+              '[useAdArchive] sort=most_variations top=',
+              sorted
+                .slice(0, 8)
+                .map((x) => ({ id: x.id, variations: adIdToRelatedCount[x.id] ?? 0 }))
+            );
+          }
+        } catch (e) {
+          /* noop */
+        }
+        return sorted;
+      }
+
+      if (effectiveMode === 'least_variations') {
+        const sorted = arr.sort((a, b) => {
+          const na = adIdToRelatedCount[a.id] ?? 0;
+          const nb = adIdToRelatedCount[b.id] ?? 0;
+          if (na !== nb) return na - nb;
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        });
+        try {
+          if (typeof window !== 'undefined') {
+            // eslint-disable-next-line no-console
+            console.debug(
+              '[useAdArchive] sort=least_variations top=',
+              sorted
+                .slice(0, 8)
+                .map((x) => ({ id: x.id, variations: adIdToRelatedCount[x.id] ?? 0 }))
+            );
+          }
+        } catch (e) {
+          /* noop */
+        }
+        return sorted;
+      }
+
+      // newest
+      const sorted = arr.sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
+      try {
+        if (typeof window !== 'undefined') {
+          // eslint-disable-next-line no-console
+          console.debug(
+            '[useAdArchive] sort=newest top=',
+            sorted.slice(0, 8).map((x) => ({ id: x.id, variations: adIdToRelatedCount[x.id] ?? 0 }))
+          );
+        }
+      } catch (e) {
+        /* noop */
+      }
+      return sorted;
+    } catch (e) {
+      return dedupedAds;
+    }
+  }, [dedupedAds, userSortMode, lastFilterChange, adIdToRelatedCount]);
+
+  // Debug helper: log sort mode and a small sample of counts/order when relevant changes occur
+  useEffect(() => {
+    try {
+      if (typeof window === 'undefined') return;
+      // Prepare small samples
+      const sampleCounts = Object.keys(adIdToRelatedCount)
+        .slice(0, 12)
+        .map((k) => ({ id: k, count: adIdToRelatedCount[k] }));
+      // eslint-disable-next-line no-console
+      console.debug(
+        '[useAdArchive DEBUG] userSortMode=',
+        userSortMode,
+        'lastFilterChange=',
+        lastFilterChange,
+        'sampleCounts=',
+        sampleCounts
+      );
+    } catch (e) {
+      /* noop */
+    }
+  }, [userSortMode, lastFilterChange, adIdToRelatedCount]);
+
+  const adIdToGroupMap: Record<string, Ad[]> = useMemo(() => {
+    const out: Record<string, Ad[]> = {};
+    groupedAll.forEach((groupAds) => {
+      for (const ad of groupAds) out[ad.id] = groupAds;
+    });
+    return out;
+  }, [groupedAll]);
+
   const ungroupedPages = useMemo(
-    () => utils.chunk(dedupedAds, itemsPerPage),
-    [dedupedAds, itemsPerPage]
+    () => utils.chunk(sortedDedupedAds, itemsPerPage),
+    [sortedDedupedAds, itemsPerPage]
   );
 
   const totalPages = useMemo(() => {
@@ -454,6 +560,15 @@ export function useAdArchive(
   useEffect(() => {
     setCurrentPage((p) => Math.min(p, totalPages));
   }, [totalPages]);
+
+  // When sort mode changes, reset to first page so users see top results immediately.
+  useEffect(() => {
+    try {
+      setCurrentPage(1);
+    } catch (e) {
+      /* noop */
+    }
+  }, [userSortMode]);
 
   const currentPageAds = useMemo(
     () => ungroupedPages[currentPage - 1] || [],
@@ -481,6 +596,7 @@ export function useAdArchive(
 
   const handleFilterChange = useCallback(
     async (filters: FilterOptions) => {
+      setLastFilterChange(Date.now());
       setIsLoading(true);
       try {
         const raw = await getAds(
@@ -513,6 +629,7 @@ export function useAdArchive(
   const handleTagsChange = useCallback(
     async (tags: string[]) => {
       setSelectedTags(tags);
+      setLastFilterChange(Date.now());
       setIsLoading(true);
       try {
         const raw = await getAds(productFilter || '', null, null, tags);
@@ -604,7 +721,7 @@ export function useAdArchive(
                   if (userId && maybeUserId && String(maybeUserId) !== String(userId)) return;
                   const message = row['message'];
                   if (typeof message === 'string') {
-                    setProcessingMessage((prev) => prev || message);
+                    setProcessingMessage(String(message));
                     try {
                       pushRequestLog({
                         type: 'status',
@@ -687,7 +804,7 @@ export function useAdArchive(
             console.debug('Error fetching initial import_status row', existingErr);
           } else if (existing) {
             if (existing.message) {
-              setProcessingMessage((prev) => prev || existing.message);
+              setProcessingMessage(String(existing.message));
               clearScheduledDisplay();
             }
             if (existing.status) setImportStatus(existing.status);
@@ -774,6 +891,7 @@ export function useAdArchive(
       }
 
       const id = window.setTimeout(async () => {
+        setLastFilterChange(Date.now());
         setIsLoading(true);
         try {
           const raw = await getAds(
@@ -1051,7 +1169,7 @@ export function useAdArchive(
         console.debug('Error fetching import_status row for subscribeToJob', existingErr);
       } else if (existing) {
         if (existing.message) {
-          setProcessingMessage((prev) => prev || existing.message);
+          setProcessingMessage(String(existing.message));
         }
         if (existing.status) setImportStatus(existing.status);
         if (typeof existing.saved_creatives === 'number')
@@ -1078,7 +1196,7 @@ export function useAdArchive(
               if (userId && maybeUserId && String(maybeUserId) !== String(userId)) return;
               const message = row['message'];
               if (typeof message === 'string') {
-                setProcessingMessage((prev) => prev || message);
+                setProcessingMessage(String(message));
               }
               const status = row['status'];
               if (typeof status === 'string') setImportStatus(status);
@@ -1100,6 +1218,32 @@ export function useAdArchive(
       console.debug('Could not create job import_status subscription', e);
     }
   }, []);
+
+  // Auto-subscribe to a job-specific import_status channel when importJobId becomes available.
+  useEffect(() => {
+    try {
+      if (!importJobId) return;
+      // attempt to get current user id and subscribe to job channel scoped to user
+      (async () => {
+        try {
+          const userRes = await supabase.auth.getUser();
+          const uid = userRes?.data?.user?.id ?? null;
+          await subscribeToJob(importJobId, uid);
+        } catch (e) {
+          // fallback: subscribe without user id filter
+          try {
+            await subscribeToJob(importJobId);
+          } catch (err) {
+            console.debug('Auto subscribeToJob failed', err);
+          }
+        }
+      })();
+    } catch (e) {
+      console.debug('Auto-subscribe effect error', e);
+    }
+    // intentionally only when importJobId changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [importJobId]);
 
   return {
     ads,
@@ -1124,6 +1268,8 @@ export function useAdArchive(
     filteredAdsByType,
     adIdToGroupMap,
     adIdToRelatedCount,
+    userSortMode,
+    setUserSortMode,
     ungroupedPages,
     totalPages,
     currentPageAds,
