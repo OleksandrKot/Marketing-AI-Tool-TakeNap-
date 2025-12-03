@@ -270,22 +270,36 @@ export default function ContentTabClient({
                 return;
               }
 
-              const rows: string[] = [];
-              const addKV = (k: string, v: string) => {
-                const esc = '"' + (v || '').replace(/"/g, '""') + '"';
-                rows.push('"' + k + '",' + esc);
-              };
+              // Escape value for CSV cell (Excel-friendly)
+              const esc = (v: string) => `"${(v || '').replace(/"/g, '""')}"`;
 
-              addKV('Page_name', pageName);
-              addKV('Creative_URL', creativeUrl);
-              addKV('Ad_text', adText);
-              addKV('Sound_transcription', sound);
-              addKV('Text_on_image', textOnImage);
+              // "DB-style" table for text/audio only
+              const headers = [
+                'id',
+                'page_name',
+                'creative_url',
+                'ad_text',
+                'sound_transcription',
+                'text_on_image',
+              ].join(';'); // column names без кавычек
 
-              rows.push('');
+              const values = [
+                String(adData.id ?? ''),
+                pageName,
+                creativeUrl,
+                adText,
+                sound,
+                textOnImage,
+              ]
+                .map(esc)
+                .join(';'); // значения в кавычках
+
+              const csv = headers + '\n' + values;
 
               const bom = '\uFEFF';
-              const blob = new Blob([bom + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+              const blob = new Blob([bom + csv], {
+                type: 'text/csv;charset=utf-8;',
+              });
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
               a.href = url;
@@ -294,6 +308,7 @@ export default function ContentTabClient({
               a.click();
               a.remove();
               URL.revokeObjectURL(url);
+
               showToast({ message: 'CSV exported', type: 'success' });
             }}
           >

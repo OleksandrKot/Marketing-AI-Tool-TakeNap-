@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useToast } from '@/components/ui/toast';
 import { format } from 'date-fns';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
@@ -17,6 +18,8 @@ export default function AccessRequestsPage() {
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState<AccessRequest[]>([]);
   const [error, setError] = useState<string | null>(null);
+
+  const { showToast } = useToast();
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
@@ -45,12 +48,39 @@ export default function AccessRequestsPage() {
     setLoading(true);
     setError(null);
     try {
+      // Try to include acting admin email for audit/debug
+      let actedBy: string | null = null;
+      try {
+        const { data: sessionData } = await (
+          await import('@/lib/core/supabase')
+        ).supabase.auth.getSession();
+        actedBy = (sessionData as unknown as Record<string, unknown>)?.session?.user?.email as
+          | string
+          | null;
+      } catch {
+        actedBy = null;
+      }
+
       const res = await fetch(`/api/access-requests/${encodeURIComponent(id)}/${action}`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ acted_by_email: actedBy }),
       });
       const payload = await res.json();
       if (!res.ok) throw new Error(payload?.error || 'Failed to perform action');
       await load();
+
+      if (payload?.emailSent) {
+        const sent: unknown = payload.emailSent;
+        if (sent && (sent as { ok?: boolean }).ok) {
+          showToast({ message: 'Approved — notification email sent to user', type: 'success' });
+        } else {
+          showToast({ message: 'Approved — notification email could not be sent', type: 'error' });
+          console.debug('emailSend result', sent);
+        }
+      } else {
+        showToast({ message: 'Action performed', type: 'success' });
+      }
     } catch (e) {
       setError((e as Error).message || 'Error');
     } finally {

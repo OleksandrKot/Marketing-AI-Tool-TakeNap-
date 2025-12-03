@@ -1,5 +1,6 @@
 'use client';
 import { useCallback, useEffect, useState } from 'react';
+import { useAdmin } from '@/components/admin/AdminProvider';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/core/supabase';
@@ -17,7 +18,7 @@ export default function AccessGate() {
   const [message, setMessage] = useState<string | null>(null);
   const [adminStatus, setAdminStatus] = useState<string | null>(null);
   const [approvedStatus, setApprovedStatus] = useState<string | null>(null);
-
+  const adminCtx = useAdmin();
   const doCheck = useCallback(async () => {
     let mounted = true;
     setChecking(true);
@@ -38,7 +39,6 @@ export default function AccessGate() {
         }
         return;
       }
-      const uid = ((user as Record<string, unknown>)?.['id'] as string | undefined) || '';
       const userEmail = ((user as Record<string, unknown>)?.['email'] as string | undefined) || '';
 
       // If the user is signed in, allow access to the main app immediately.
@@ -48,16 +48,7 @@ export default function AccessGate() {
         setChecking(false);
       }
 
-      // Fetch admin/approval for display
-      try {
-        const adminCheck = await fetch(`/api/admins/check?user_id=${encodeURIComponent(uid)}`);
-        const p = await adminCheck.json();
-        if (adminCheck.ok) {
-          if (mounted) setAdminStatus(String(Boolean(p?.is_admin)));
-        }
-      } catch (e) {
-        if (mounted) setAdminStatus('error');
-      }
+      // Admin status is handled by the global AdminProvider; do not fetch here.
 
       try {
         const req = await fetch(
@@ -80,6 +71,17 @@ export default function AccessGate() {
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (adminCtx.loading) {
+      setAdminStatus(null);
+    } else if (adminCtx.isAdmin) {
+      setAdminStatus('true');
+    } else {
+      setAdminStatus('false');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [adminCtx.isAdmin, adminCtx.loading]);
 
   useEffect(() => {
     doCheck();

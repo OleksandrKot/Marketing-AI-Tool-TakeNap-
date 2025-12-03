@@ -1,16 +1,11 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import DashboardControls from '@/components/admin/DashboardControls';
 import DashboardStats from '@/components/admin/DashboardStats';
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { cache: 'no-store' });
-  if (!res.ok) {
-    const payload = await res.json().catch(() => ({} as Record<string, unknown>));
-    const err = (payload as Record<string, unknown>)['error'];
-    throw new Error(String(err ?? `Failed request: ${res.status}`));
-  }
-  return res.json();
-}
+import { useAdmin } from '@/components/admin/AdminProvider';
 
 type AdminUser = {
   id: string;
@@ -20,23 +15,36 @@ type AdminUser = {
   is_blocked?: boolean;
 };
 
-export default async function AdminDashboardPage() {
-  let users: AdminUser[] = [];
-  try {
-    const base = process.env.NEXT_PUBLIC_APP_URL || '';
-    const root = base.replace(/\/$/, '');
-    const usersUrl = `${root}/api/admins/users`;
+export default function AdminDashboardPage() {
+  const adminCtx = useAdmin();
+  const router = useRouter();
+  const [users, setUsers] = useState<AdminUser[]>([]);
 
-    const usersResp = await fetchJson<{ ok: boolean; data: AdminUser[] }>(usersUrl).catch(
-      () => null
-    );
+  useEffect(() => {
+    if (!adminCtx.loading && adminCtx.isAdmin === false) {
+      // Not an admin — redirect away
+      router.replace('/');
+    }
+  }, [adminCtx.isAdmin, adminCtx.loading, router]);
 
-    users = (usersResp && usersResp.data) || [];
-  } catch {
-    // swallow errors – UI will show fallback
-  }
+  useEffect(() => {
+    async function load() {
+      // loading/error state not needed in this view; log errors to console
+      try {
+        const res = await fetch('/api/admins/users', { cache: 'no-store' });
+        const payload = await res.json();
+        if (!res.ok) throw new Error(payload?.error || 'Failed to load users');
+        setUsers(payload.data || []);
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error(e);
+      } finally {
+        // no UI loading state to clear
+      }
+    }
 
-  // derived stats are calculated in the client-side DashboardStats component
+    if (!adminCtx.loading && adminCtx.isAdmin) load();
+  }, [adminCtx.loading, adminCtx.isAdmin]);
 
   const now = new Date();
   const sevenDaysAgo = new Date(now);
@@ -50,6 +58,18 @@ export default async function AdminDashboardPage() {
   const newUsers30d = users.filter(
     (u) => new Date(u.created_at) >= thirtyDaysAgo && new Date(u.created_at) <= now
   ).length;
+
+  if (adminCtx.loading) {
+    return (
+      <div className="py-8 text-center text-sm text-slate-600">Checking admin permissions…</div>
+    );
+  }
+
+  if (!adminCtx.isAdmin) {
+    return (
+      <div className="py-8 text-center text-sm text-red-600">Access denied — admins only.</div>
+    );
+  }
 
   return (
     <div className="space-y-6">

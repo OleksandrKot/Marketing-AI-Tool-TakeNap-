@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useAdmin } from '@/components/admin/AdminProvider';
 import { User, LogOut, ChevronDown } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -24,20 +25,9 @@ export function ProfileDropdown() {
   const [showLogin, setShowLogin] = useState(false);
   const [nickname, setNickname] = useState<string>('');
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const adminCtx = useAdmin();
 
-  async function resolveIsAdminByEmail(email: string | null | undefined): Promise<boolean> {
-    if (!email) return false;
-    try {
-      const check = await fetch(
-        `/api/admins/check?email=${encodeURIComponent(email.toLowerCase())}`
-      );
-      const p = await check.json();
-      if (check.ok && p?.is_admin) return true;
-    } catch {
-      // ignore
-    }
-    return false;
-  }
+  // admin status is provided by AdminProvider; it will update when auth state changes
 
   function getDisplayNameFromUser(u: unknown): string | undefined {
     if (!u || typeof u !== 'object') return undefined;
@@ -63,9 +53,6 @@ export function ProfileDropdown() {
             setUser({ email: u.email || '', nickname: metaName });
             setNickname(metaName);
             localStorage.setItem('nickname', metaName);
-            // Check admin status for this user by email (user_admins.email)
-            const admin = await resolveIsAdminByEmail(u.email || '');
-            if (admin) setIsAdmin(true);
           } else {
             // Fallback to cached nickname if available
             const cached = localStorage.getItem('nickname');
@@ -84,8 +71,6 @@ export function ProfileDropdown() {
                   setUser({ email: u.email || '', nickname: profileData.nickname });
                   setNickname(profileData.nickname);
                   localStorage.setItem('nickname', profileData.nickname);
-                  const admin = await resolveIsAdminByEmail(u.email || '');
-                  if (admin) setIsAdmin(true);
                 } else {
                   setUser({ email: u.email || '', nickname: undefined });
                 }
@@ -104,6 +89,10 @@ export function ProfileDropdown() {
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    setIsAdmin(Boolean(adminCtx.isAdmin));
+  }, [adminCtx.isAdmin]);
 
   const handleLogout = async () => {
     setUser(null);
@@ -282,9 +271,7 @@ export function ProfileDropdown() {
                 nickname: nicknameFromData || localStorage.getItem('nickname') || undefined,
               });
 
-              // After successful auth, resolve admin flag from user_admins.email
-              const admin = await resolveIsAdminByEmail(email);
-              setIsAdmin(admin);
+              // AdminProvider listens to auth changes and will update admin flag; no local fetch here.
             } finally {
               setShowLogin(false);
             }

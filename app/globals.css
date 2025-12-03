@@ -90,4 +90,19 @@ select {
   .modal-content {
     @apply bg-white rounded-2xl shadow-xl p-0 max-w-md w-full relative overflow-auto max-h-[90vh];
   }
+
+  /* Prevent scrolling and interaction during initial page load */
+  html.no-scroll,
+  body.no-scroll {
+    overflow: hidden !important;
+    touch-action: none !important;
+    -ms-touch-action: none !important;
+    height: 100% !important;
+  }
+
+  html.no-scroll *,
+  body.no-scroll * {
+    pointer-events: none !important;
+    user-select: none !important;
+  }
 }

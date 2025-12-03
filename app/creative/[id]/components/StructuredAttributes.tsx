@@ -40,6 +40,8 @@ type StructuredAttributesProps = {
 export type StructuredAttributesRef = {
   // Allows parent component to apply external JSON into the blocks
   applyJson?: (obj: Record<string, unknown>) => void;
+  // Reset blocks to initial state built from sections/ad and optionally apply JSON
+  resetToInitial?: (obj?: Record<string, unknown>) => void;
 } | null;
 
 function uid() {
@@ -656,47 +658,74 @@ const StructuredAttributes = (
    *  - update existing blocks
    *  - append unknown keys as new blocks
    */
-  useImperativeHandle(ref, () => ({
-    applyJson: (obj: Record<string, unknown>) => {
-      if (!obj || typeof obj !== 'object') return;
-      setBlocks((prev) => {
-        const copy = [...prev];
-        const usedKeys = new Set<string>();
+  // helper to apply JSON into blocks (re-usable by resetToInitial)
+  const applyJsonInternal = (obj: Record<string, unknown>) => {
+    if (!obj || typeof obj !== 'object') return;
+    setBlocks((prev) => {
+      const copy = [...prev];
+      const usedKeys = new Set<string>();
 
-        // normalized key map for lookup
-        const normObj: Record<string, string> = {};
-        for (const k of Object.keys(obj)) {
-          const nk = normalizeKey(k);
-          normObj[nk] = k;
-        }
+      // normalized key map for lookup
+      const normObj: Record<string, string> = {};
+      for (const k of Object.keys(obj)) {
+        const nk = normalizeKey(k);
+        normObj[nk] = k;
+      }
 
-        // update existing blocks where label matches
-        for (let i = 0; i < copy.length; i++) {
-          const blk = copy[i];
-          const blkKey = normalizeKey(blk.label);
-          const matchedObjKey = normObj[blkKey];
-          if (matchedObjKey && Object.prototype.hasOwnProperty.call(obj, matchedObjKey)) {
-            copy[i] = {
-              ...blk,
-              value: stringifyValue((obj as Record<string, unknown>)[matchedObjKey]),
-              included: true,
-            };
-            usedKeys.add(matchedObjKey);
-          }
-        }
-
-        // append leftover keys as new blocks
-        for (const k of Object.keys(obj)) {
-          if (usedKeys.has(k)) continue;
-          copy.push({
-            id: uid(),
-            label: prettifyKey(k),
-            value: stringifyValue((obj as Record<string, unknown>)[k]),
+      // update existing blocks where label matches
+      for (let i = 0; i < copy.length; i++) {
+        const blk = copy[i];
+        const blkKey = normalizeKey(blk.label);
+        const matchedObjKey = normObj[blkKey];
+        if (matchedObjKey && Object.prototype.hasOwnProperty.call(obj, matchedObjKey)) {
+          copy[i] = {
+            ...blk,
+            value: stringifyValue((obj as Record<string, unknown>)[matchedObjKey]),
             included: true,
-          });
+          };
+          usedKeys.add(matchedObjKey);
         }
-        return copy;
-      });
+      }
+
+      // append leftover keys as new blocks
+      for (const k of Object.keys(obj)) {
+        if (usedKeys.has(k)) continue;
+        copy.push({
+          id: uid(),
+          label: prettifyKey(k),
+          value: stringifyValue((obj as Record<string, unknown>)[k]),
+          included: true,
+        });
+      }
+      return copy;
+    });
+  };
+
+  useImperativeHandle(ref, () => ({
+    applyJson: applyJsonInternal,
+    resetToInitial: (obj?: Record<string, unknown>) => {
+      try {
+        // rebuild base blocks from sections/ad to restore original order
+        setBlocks(mapFromSections());
+        dragIndex.current = null;
+        setDraggingIndex(null);
+        setHoverIndex(null);
+        setGenerated(null);
+
+        // If a JSON object is provided, apply it after the base blocks are set
+        if (obj && typeof obj === 'object') {
+          // schedule to ensure mapFromSections changes have applied
+          setTimeout(() => {
+            try {
+              applyJsonInternal(obj);
+            } catch (e) {
+              // ignore
+            }
+          }, 0);
+        }
+      } catch (e) {
+        // noop
+      }
     },
   }));
 

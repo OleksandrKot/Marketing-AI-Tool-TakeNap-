@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import ModalWrapper from '@/components/modals/ModalWrapper';
-import StructuredAttributes from './StructuredAttributes';
+import StructuredAttributes, { type StructuredAttributesRef } from './StructuredAttributes';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Copy } from 'lucide-react';
@@ -19,7 +19,7 @@ export default function StructuredAttributesModal({
 }) {
   const [open, setOpen] = useState(false);
   const [generated, setGenerated] = useState<string>('');
-  const editorRef = useRef<{ applyJson?: (obj: Record<string, unknown>) => void } | null>(null);
+  const editorRef = useRef<StructuredAttributesRef>(null);
   const { showToast } = useToast();
 
   // When opening the modal, if the provided `ad` contains a `shortPromptJson`,
@@ -71,28 +71,29 @@ export default function StructuredAttributesModal({
   };
 
   const resetToOriginal = () => {
-    // reset generated preview and instruct editor to rebuild
-    setGenerated('');
-    if (editorRef.current && editorRef.current.applyJson) {
-      try {
-        const sp = ad ? (ad as Record<string, unknown>)['shortPromptJson'] : null;
+    try {
+      const sp = ad ? (ad as Record<string, unknown>)['shortPromptJson'] : null;
+      if (editorRef.current && editorRef.current.resetToInitial) {
         if (sp && typeof sp === 'object') {
-          editorRef.current.applyJson(sp as Record<string, unknown>);
+          setGenerated(JSON.stringify(sp as Record<string, unknown>, null, 2));
+          editorRef.current.resetToInitial(sp as Record<string, unknown>);
         } else if (sp && typeof sp === 'string') {
           try {
             const parsed = JSON.parse(String(sp));
-            editorRef.current.applyJson(parsed);
+            setGenerated(JSON.stringify(parsed as Record<string, unknown>, null, 2));
+            editorRef.current.resetToInitial(parsed as Record<string, unknown>);
           } catch {
-            // no-op
+            setGenerated('');
+            editorRef.current.resetToInitial();
           }
         } else {
-          // fallback: ask editor to rebuild from sections by applying empty object
-          editorRef.current.applyJson({});
+          setGenerated('');
+          editorRef.current.resetToInitial();
         }
         showToast({ message: 'Reset to original prompt', type: 'success' });
-      } catch {
-        showToast({ message: 'Reset failed', type: 'error' });
       }
+    } catch (e) {
+      showToast({ message: 'Reset failed', type: 'error' });
     }
   };
 
