@@ -37,25 +37,35 @@ async function streamToBuffer(stream: unknown) {
     });
   }
 
-  const reader =
-    typeof (s.getReader as unknown) === 'function'
-      ? (
-          s.getReader as unknown as () => { read: () => Promise<{ done: boolean; value: unknown }> }
-        )()
-      : typeof (s.body?.getReader as unknown) === 'function'
-      ? (
-          s.body!.getReader as unknown as () => {
-            read: () => Promise<{ done: boolean; value: unknown }>;
-          }
-        )()
-      : null;
+  type Reader = { read: () => Promise<{ done: boolean; value: unknown }> };
+  const maybeGetReader = (obj: unknown): Reader | null => {
+    if (!obj) return null;
+    if (typeof (obj as Record<string, unknown>).getReader === 'function') {
+      return (obj as { getReader: () => Reader }).getReader();
+    }
+    return null;
+  };
+
+  const reader = maybeGetReader(s) || maybeGetReader((s as { body?: unknown }).body) || null;
+
   if (reader && typeof reader.read === 'function') {
     const chunks: Buffer[] = [];
     while (true) {
       // eslint-disable-next-line no-await-in-loop
       const { done, value } = await reader.read();
       if (done) break;
-      chunks.push(Buffer.isBuffer(value) ? value : Buffer.from(value));
+      if (Buffer.isBuffer(value)) {
+        chunks.push(value);
+      } else if (typeof value === 'string') {
+        chunks.push(Buffer.from(value));
+      } else if (value instanceof Uint8Array) {
+        chunks.push(Buffer.from(value));
+      } else if (Array.isArray(value)) {
+        chunks.push(Buffer.from(value as number[]));
+      } else {
+        // Fallback - coerce unknown to string
+        chunks.push(Buffer.from(String(value)));
+      }
     }
     return Buffer.concat(chunks);
   }

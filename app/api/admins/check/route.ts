@@ -37,6 +37,17 @@ export async function GET(req: Request) {
             return NextResponse.json({ ok: true, is_admin: !!byEmail.data.is_admin });
           }
         }
+        // If an email query param was provided, also try checking by that email as a fallback
+        if (email) {
+          const byEmailParam = await client
+            .from('user_admins')
+            .select('is_admin')
+            .eq('email', email.toLowerCase())
+            .single();
+          if (!byEmailParam.error && byEmailParam.data) {
+            return NextResponse.json({ ok: true, is_admin: !!byEmailParam.data.is_admin });
+          }
+        }
       } catch (e) {
         // ignore lookup errors
       }
