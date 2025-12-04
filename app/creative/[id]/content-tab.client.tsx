@@ -80,39 +80,27 @@ export default function ContentTabClient({
     }
   };
 
-  // Build duplicate preview items once for rendering
-  const buildDupItems = (): Ad[] => {
-    const dupItems: Ad[] = [];
-    if (adData.duplicates_preview_image) {
-      const parts = adData.duplicates_preview_image
-        .split(';')
-        .map((s: string) => s.trim())
-        .filter((s: string) => s);
-      for (let i = 0; i < parts.length; i++) {
-        const url = parts[i];
-        const isHttp = String(url).startsWith('http');
-        const cleaned = String(url).replace(/^\/+/, '');
-        const partsArr = cleaned.split('/').filter(Boolean);
-        const fakeId = -(i + 1);
-        const fakeAd: Partial<Ad> = {
-          id: fakeId,
-          title: adData.title ? `${adData.title} (Duplicate)` : 'Duplicate',
-          page_name: adData.page_name || '',
-          display_format: 'IMAGE',
-        };
-        if (isHttp) fakeAd.image_url = url;
-        else if (partsArr.length >= 1) {
-          fakeAd.ad_archive_id = partsArr[partsArr.length - 1].replace(/\.[^/.]+$/, '');
-        }
-        dupItems.push(fakeAd as unknown as Ad);
+  // Per AC: Related Ads must come exclusively from Scraper JSON (relatedAds prop)
+  // Do not merge or infer duplicates from other sources. Preserve order from JSON.
+  // Keep only items that have a valid id (number or string). Skip malformed entries.
+  const scraperRelated = Array.isArray(relatedAds)
+    ? relatedAds.filter((it) =>
+        Boolean(it && (typeof (it as Ad).id === 'string' || typeof (it as Ad).id === 'number'))
+      )
+    : [];
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const iv = setInterval(() => {
+      try {
+        router.refresh();
+      } catch (e) {
+        // ignore
       }
-    }
-    return dupItems;
-  };
-
-  const dupItems = buildDupItems();
-  const combined = [...(relatedAds || []), ...(dupItems || [])];
-  const relatedTotal = combined.length;
+    }, 60000);
+    return () => clearInterval(iv);
+  }, [autoRefresh, router]);
+  const relatedTotal = scraperRelated.length;
 
   const handleCopyToClipboard = useCallback(
     async (text: string, fieldName: string): Promise<boolean> => {
@@ -281,7 +269,7 @@ export default function ContentTabClient({
                 'ad_text',
                 'sound_transcription',
                 'text_on_image',
-              ].join(';'); // column names без кавычек
+              ].join(';');
 
               const values = [
                 String(adData.id ?? ''),
@@ -292,7 +280,7 @@ export default function ContentTabClient({
                 textOnImage,
               ]
                 .map(esc)
-                .join(';'); // значения в кавычках
+                .join(';');
 
               const csv = headers + '\n' + values;
 
@@ -319,29 +307,60 @@ export default function ContentTabClient({
         <Card className="border-slate-200 rounded-2xl">
           <CardContent className="p-0">
             <div className="bg-blue-50 p-6 border-b border-slate-200">
-              <h2 className="text-xl font-semibold text-slate-900">Related Ads ({relatedTotal})</h2>
+              <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold text-slate-900">
+                  Related Ads ({relatedTotal})
+                </h2>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      try {
+                        router.refresh();
+                        showToast({ message: 'Refreshed related ads', type: 'success' });
+                      } catch (e) {
+                        showToast({ message: 'Refresh failed', type: 'error' });
+                      }
+                    }}
+                  >
+                    Refresh
+                  </Button>
+                  <Button
+                    variant={autoRefresh ? 'default' : 'outline'}
+                    size="sm"
+                    onClick={() => setAutoRefresh((s) => !s)}
+                  >
+                    {autoRefresh ? 'Auto: On' : 'Auto: Off'}
+                  </Button>
+                </div>
+              </div>
             </div>
             <div className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {combined.length === 0 ? (
+                {scraperRelated.length === 0 ? (
                   <div className="col-span-full text-center py-8 text-slate-500">
-                    No related creatives
+                    No related ads detected
                   </div>
                 ) : (
-                  combined.map((relatedAd) => (
+                  scraperRelated.map((relatedAd) => (
                     <div
-                      key={relatedAd.id}
+                      key={relatedAd?.id ?? JSON.stringify(relatedAd)}
                       role="button"
                       tabIndex={0}
                       className="bg-white border border-slate-200 rounded-xl p-4 hover:border-blue-200 hover:shadow-lg transition-all duration-300 cursor-pointer"
                       onClick={() => {
-                        const allRelatedIds = [
-                          adData.id,
-                          ...(relatedAds || []).map((ra) => ra.id),
-                        ].filter((id) => id !== relatedAd.id);
-                        const relatedParam =
-                          allRelatedIds.length > 0 ? `?related=${allRelatedIds.join(',')}` : '';
-                        router.push(`/creative/${relatedAd.id}${relatedParam}`);
+                        try {
+                          const allRelatedIds = [
+                            adData.id,
+                            ...(scraperRelated || []).map((ra) => ra.id),
+                          ].filter((id) => id !== relatedAd.id);
+                          const relatedParam =
+                            allRelatedIds.length > 0 ? `?related=${allRelatedIds.join(',')}` : '';
+                          router.push(`/creative/${relatedAd.id}${relatedParam}`);
+                        } catch (e) {
+                          // If relatedAd id malformed or navigation fails, fail gracefully
+                        }
                       }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
@@ -381,7 +400,7 @@ export default function ContentTabClient({
                         {relatedAd.title || 'Untitled Ad'}
                       </h3>
                       <p className="text-sm text-slate-500 mb-2">{relatedAd.page_name}</p>
-                      {relatedAd.display_format === 'VIDEO' && (
+                      {relatedAd?.display_format === 'VIDEO' && (
                         <span className="inline-block bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded-full">
                           📹 Video
                         </span>

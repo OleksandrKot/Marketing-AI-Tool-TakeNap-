@@ -54,9 +54,10 @@ export default function AccessRequestsPage() {
         const { data: sessionData } = await (
           await import('@/lib/core/supabase')
         ).supabase.auth.getSession();
-        actedBy = (sessionData as unknown as Record<string, unknown>)?.session?.user?.email as
-          | string
-          | null;
+        // Narrow the shape instead of using `any`
+        const maybeEmail = (sessionData as unknown as { session?: { user?: { email?: string } } })
+          ?.session?.user?.email;
+        actedBy = typeof maybeEmail === 'string' ? maybeEmail : null;
       } catch {
         actedBy = null;
       }
