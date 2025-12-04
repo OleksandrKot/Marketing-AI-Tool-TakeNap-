@@ -26,7 +26,6 @@ export default function ModalWrapper({
     const prevOverflow = body.style.overflow;
     const hadHtmlClass = html.classList.contains('modal-open');
     const hadBodyClass = body.classList.contains('modal-open');
-    console.log(scrollbarWidth);
     html.style.setProperty('padding-right', `${scrollbarWidth}px`);
 
     if (isOpen) {

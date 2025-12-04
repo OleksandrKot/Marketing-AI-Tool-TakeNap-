@@ -23,15 +23,20 @@ interface FilterOptions {
   hookFormat: string;
   characterFormat: string;
   variationCount?: string;
+  funnels?: string[]; // selected funnels (multi)
 }
 
 interface FilteredContainerProps {
   initialPageName?: string;
+  initialFunnels?: string[];
 }
 
 type SortMode = 'auto' | 'most_variations' | 'least_variations' | 'newest';
 
-export default function FilteredContainer({ initialPageName = '' }: FilteredContainerProps) {
+export default function FilteredContainer({
+  initialPageName = '',
+  initialFunnels,
+}: FilteredContainerProps) {
   const [ads, setAds] = useState<Ad[]>([]);
   const [filteredAds, setFilteredAds] = useState<Ad[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -46,6 +51,7 @@ export default function FilteredContainer({ initialPageName = '' }: FilteredCont
     hookFormats: [] as string[],
     characterFormats: [] as string[],
     variationBuckets: [] as string[],
+    funnels: [] as string[],
   });
 
   const [availableCounts, setAvailableCounts] = useState(() => ({
@@ -59,7 +65,9 @@ export default function FilteredContainer({ initialPageName = '' }: FilteredCont
     hookFormats: {} as Record<string, number>,
     characterFormats: {} as Record<string, number>,
     variationCounts: {} as Record<string, number>,
+    funnels: {} as Record<string, number>,
   }));
+  const [adIdToFunnels, setAdIdToFunnels] = useState<Record<string, string[]>>({});
   const [currentFilters, setCurrentFilters] = useState<FilterOptions | null>(null);
   // Auto-sort mode: default to 'most_variations' so filtered results are
   // automatically ordered from most -> least variations per AC1.
@@ -68,6 +76,7 @@ export default function FilteredContainer({ initialPageName = '' }: FilteredCont
   >('most_variations');
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
+  const [resetFlash, setResetFlash] = useState(false);
   const { showToast } = useToast();
 
   const toggleSelectId = (id: string) => {
@@ -77,100 +86,121 @@ export default function FilteredContainer({ initialPageName = '' }: FilteredCont
       else next[id] = true;
       return next;
     });
+    // manual toggle cancels universal select-all state
   };
 
-  const getTextOnImage = (ad: Ad) => {
-    try {
-      const parts: string[] = [];
-      if (ad.title) parts.push(String(ad.title));
-      if (ad.hook) parts.push(String(ad.hook));
-      if (ad.cta_text) parts.push(String(ad.cta_text));
-      if (parts.length) return parts.join(' | ');
-      return '';
-    } catch (e) {
-      return '';
-    }
+  // helper removed: unused and triggered lint "no-unused-vars"
+
+  const extractFunnelsFromAd = (ad: Ad) => {
+    const set: Set<string> = new Set();
+    const addUrl = (raw?: string | null) => {
+      if (!raw) return;
+      const str = String(raw);
+      // find urls
+      try {
+        const urlRe = /https?:\/\/[\w\-._~:\/?#\[\]@!$&'()*+,;=%]+/gi;
+        const matches = str.match(urlRe) || (str.includes('/') ? [str] : []);
+        for (const m of matches) {
+          try {
+            const u = new URL(m);
+            const hostAndPath = (u.host + u.pathname).replace(/\/+$/, '').toLowerCase();
+            set.add(hostAndPath);
+            if (u.pathname && u.pathname !== '/') set.add(u.pathname.toLowerCase());
+          } catch (e) {
+            const cleaned = String(m).replace(/^\/+/, '').replace(/\/+$/, '').toLowerCase();
+            if (cleaned) set.add('/' + cleaned);
+          }
+        }
+      } catch (e) {
+        // noop
+      }
+    };
+
+    addUrl(ad.link_url);
+    addUrl(ad.meta_ad_url as string | undefined);
+    const dupLinks = (ad as unknown as { duplicates_links?: string }).duplicates_links;
+    if (dupLinks) addUrl(dupLinks);
+    if (ad.text) addUrl(ad.text);
+    return Array.from(set);
   };
 
   const downloadSelected = () => {
     const ids = Object.keys(selectedIds || {});
-    if (!ids.length) return;
-    const rows: string[] = [];
-    const missing: string[] = [];
-
-    const escape = (s: string) => '"' + (s || '').replace(/"/g, '""') + '"';
-
-    // For readability, produce a vertical block per creative: Field,Value
-    for (const id of ids) {
-      const ad = ads.find((a) => String(a.id) === String(id));
-      if (!ad) {
-        missing.push(id);
-        continue;
-      }
-      rows.push('"Creative_ID",' + escape(String(ad.id)));
-      rows.push('"Page_name",' + escape(ad.page_name || ''));
-      rows.push('"Creative_URL",' + escape(ad.meta_ad_url || ad.link_url || ''));
-      rows.push('"Ad_text",' + escape(ad.text || ad.caption || ''));
-      const audio = String(
-        (ad as Record<string, unknown>)['subtitles'] ??
-          (ad as Record<string, unknown>)['sound_transcription'] ??
-          ''
-      );
-      rows.push('"Audio_transcription",' + escape(audio));
-      rows.push('"Text_on_image",' + escape(getTextOnImage(ad) || ''));
-      // blank separator between creatives
-      rows.push('');
-    }
-
-    if (rows.length === 0) {
+    if (!ids.length) {
       try {
-        showToast({ message: 'No items could be exported.', type: 'error' });
+        showToast({ message: 'Please select at least one creative to export.', type: 'error' });
       } catch (e) {}
       return;
     }
 
-    const bom = '\uFEFF';
-    const blob = new Blob([bom + rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `selected_creatives_text_audio.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
-
-    if (missing.length) {
+    (async () => {
       try {
-        showToast({ message: 'Some items could not be exported', type: 'error' });
-      } catch (e) {}
-    } else {
-      try {
-        showToast({ message: 'Selected creatives exported', type: 'success' });
-      } catch (e) {}
-    }
+        console.log('[FilteredContainer] downloadSelected ids=', ids);
+        const res = await fetch('/api/ads/export-csv', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids }),
+        });
 
-    // exit selection mode
-    setSelectionMode(false);
-    setSelectedIds({});
+        if (!res.ok) {
+          let errMsg = 'Failed to export CSV';
+          try {
+            const j = await res.json();
+            if (j?.error) errMsg = String(j.error);
+          } catch (e) {
+            // noop
+          }
+          try {
+            showToast({ message: errMsg, type: 'error' });
+          } catch (e) {}
+          return;
+        }
+
+        const blob = await res.blob();
+
+        // Build filename locally depending on whether filters are applied
+        const date = new Date().toISOString().slice(0, 10);
+        const filters = currentFilters;
+        const filtersEmpty =
+          !filters ||
+          Object.values(filters).every((v) => v === '' || v === undefined || v === null);
+        const filename = filtersEmpty
+          ? `creo_data_export_${date}.csv`
+          : `creo_data_filtered_${date}.csv`;
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+
+        try {
+          showToast({ message: 'Selected creatives exported', type: 'success' });
+        } catch (e) {}
+
+        setSelectionMode(false);
+        setSelectedIds({});
+      } catch (e) {
+        try {
+          showToast({ message: 'Export failed', type: 'error' });
+        } catch (err) {}
+      }
+    })();
   };
 
-  // Завантажуємо всі ads при ініціалізації
   useEffect(() => {
     const loadAds = async () => {
       try {
         const raw = await getAds();
-        // Use a small helper to safely extract an array from server responses
-        // which may either be the array itself or an object with a `data` array.
         const allAds: Ad[] = extractDataArray<Ad>(raw);
         setAds(allAds);
 
-        // Створюємо доступні опції для фільтрів
         const pageNames = Array.from(
           new Set(allAds.map((ad) => ad.page_name).filter(Boolean))
         ).sort();
-        // Normalize publisher_platform which may contain comma-separated values like
-        // "FACEBOOK, INSTAGRAM, MESSENGER" into individual lowercase keys: ["facebook","instagram","messenger"]
         const publisherPlatforms = Array.from(
           new Set(
             allAds
@@ -207,6 +237,19 @@ export default function FilteredContainer({ initialPageName = '' }: FilteredCont
         const characterFormats = Array.from(
           new Set(allAds.map((ad) => ad.character).filter((item): item is string => item !== null))
         ).sort();
+        // Extract funnels from ads
+        const funnelsSet = new Set<string>();
+        const adIdToFunnelsMap: Record<string, string[]> = {};
+        for (const ad of allAds) {
+          try {
+            const fls = extractFunnelsFromAd(ad);
+            adIdToFunnelsMap[String(ad.id)] = fls;
+            for (const f of fls) funnelsSet.add(f);
+          } catch (e) {
+            adIdToFunnelsMap[String(ad.id)] = [];
+          }
+        }
+        const funnels = Array.from(funnelsSet).sort();
         const opts = {
           pageNames,
           publisherPlatforms,
@@ -218,8 +261,10 @@ export default function FilteredContainer({ initialPageName = '' }: FilteredCont
           hookFormats,
           characterFormats,
           variationBuckets: ['more_than_10', '5_10', '3_5', 'less_than_3'],
+          funnels,
         };
         setAvailableOptions(opts);
+        setAdIdToFunnels(adIdToFunnelsMap);
         // Apply initial page filter if present
         if (initialPageName) {
           const filteredByPage = allAds.filter((ad) => ad.page_name === initialPageName);
@@ -242,9 +287,39 @@ export default function FilteredContainer({ initialPageName = '' }: FilteredCont
             topicFormat: '',
             hookFormat: '',
             characterFormat: '',
+            funnels: [],
           };
-          const initialCounts = computeCountsForOptions(opts, emptyFilters, allAds);
+          const initialCounts = computeCountsForOptions(
+            opts,
+            emptyFilters,
+            allAds,
+            adIdToFunnelsMap
+          );
           setAvailableCounts(initialCounts);
+          // If the page was opened with an initial funnels param, apply it now
+          try {
+            const rawFunnels = (initialFunnels ?? []) as string[];
+            if (Array.isArray(rawFunnels) && rawFunnels.length > 0) {
+              const presetFilters: FilterOptions = {
+                pageName: '',
+                publisherPlatform: '',
+                ctaType: '',
+                displayFormat: '',
+                dateRange: '',
+                searchQuery: '',
+                conceptFormat: '',
+                realizationFormat: '',
+                topicFormat: '',
+                hookFormat: '',
+                characterFormat: '',
+                funnels: rawFunnels,
+              };
+              // apply filters as if user selected funnels in the UI
+              handleFiltersChange(presetFilters);
+            }
+          } catch (e) {
+            /* noop */
+          }
         } catch (e) {
           console.debug('Failed to initialize availableCounts', e);
         }
@@ -262,12 +337,20 @@ export default function FilteredContainer({ initialPageName = '' }: FilteredCont
   const computeCountsForOptions = (
     opts: typeof availableOptions,
     filters: FilterOptions,
-    sourceAds: Ad[] = ads
+    sourceAds: Ad[] = ads,
+    // allow passing a precomputed adId->funnels map so initial counts
+    // can be computed synchronously before state updates propagate
+    adIdToFunnelsArg?: Record<string, string[]>
   ) => {
     const compute = (values: string[], key: keyof FilterOptions | 'variationCount') => {
       const out: Record<string, number> = {};
       for (const v of values) {
-        const candidate = { ...filters, [key]: v } as FilterOptions;
+        let candidate: FilterOptions;
+        if (key === 'funnels') {
+          candidate = { ...filters, funnels: [v] } as FilterOptions;
+        } else {
+          candidate = { ...filters, [key]: v } as FilterOptions;
+        }
         let subset = [...sourceAds];
 
         if (candidate.searchQuery) {
@@ -305,6 +388,18 @@ export default function FilteredContainer({ initialPageName = '' }: FilteredCont
         if (candidate.hookFormat) subset = subset.filter((ad) => ad.hook === candidate.hookFormat);
         if (candidate.characterFormat)
           subset = subset.filter((ad) => ad.character === candidate.characterFormat);
+
+        // Funnels: candidate.funnels is array of selected funnel strings
+        if (candidate.funnels && Array.isArray(candidate.funnels)) {
+          const sel: string[] = candidate.funnels.map((s: string) => String(s).toLowerCase());
+          const funnelsMap = adIdToFunnelsArg ?? adIdToFunnels;
+          subset = subset.filter((ad) => {
+            const adFunnels = funnelsMap[String(ad.id)] || [];
+            return sel.some((sv) =>
+              adFunnels.some((af) => String(af).includes(sv) || sv.includes(String(af)))
+            );
+          });
+        }
 
         if (candidate.dateRange) {
           const now = new Date();
@@ -403,6 +498,7 @@ export default function FilteredContainer({ initialPageName = '' }: FilteredCont
       hookFormats: compute(opts.hookFormats, 'hookFormat'),
       characterFormats: compute(opts.characterFormats, 'characterFormat'),
       variationCounts: compute(opts.variationBuckets as string[], 'variationCount'),
+      funnels: compute(opts.funnels as string[], 'funnels'),
     };
   };
 
@@ -413,9 +509,7 @@ export default function FilteredContainer({ initialPageName = '' }: FilteredCont
         // eslint-disable-next-line no-console
         console.debug('[FilteredContainer] handleFiltersChange incomingFilters=', filters);
       }
-    } catch (e) {
-      /* noop */
-    }
+    } catch (e) {}
     // store current filters so counts can be computed
 
     // compute counts for every option based on current filters
@@ -522,6 +616,17 @@ export default function FilteredContainer({ initialPageName = '' }: FilteredCont
       filtered = filtered.filter((ad) => {
         const adDate = new Date(ad.created_at);
         return adDate >= startDate;
+      });
+    }
+
+    // Funnels filter (multi-select OR)
+    if (filters.funnels && Array.isArray(filters.funnels) && filters.funnels.length > 0) {
+      const sels = filters.funnels.map((s) => String(s).toLowerCase());
+      filtered = filtered.filter((ad) => {
+        const adFunnels = adIdToFunnels[String(ad.id)] || [];
+        return sels.some((sv) =>
+          adFunnels.some((af) => String(af).includes(sv) || sv.includes(String(af)))
+        );
       });
     }
 
@@ -792,7 +897,11 @@ export default function FilteredContainer({ initialPageName = '' }: FilteredCont
             </div>
           )}
         </div>
-        <div className="flex items-center justify-between mb-4">
+        <div
+          className={`flex items-center justify-between mb-4 ${
+            resetFlash ? 'opacity-70 transition-opacity duration-300' : ''
+          }`}
+        >
           <div />
           <div className="flex items-center gap-3">
             <label htmlFor="filtered-sort" className="text-sm text-slate-600 mr-2">
@@ -809,31 +918,104 @@ export default function FilteredContainer({ initialPageName = '' }: FilteredCont
               <option value="newest">Newest</option>
             </select>
             <div className="ml-3">
-              <button
-                type="button"
-                onClick={() => {
-                  if (selectionMode && Object.keys(selectedIds).length > 0) {
-                    downloadSelected();
-                    return;
-                  }
-                  if (selectionMode) {
-                    // cancel mode
-                    setSelectionMode(false);
-                    setSelectedIds({});
-                  } else {
-                    setSelectionMode(true);
-                  }
-                }}
-                className={`px-3 py-2 text-sm rounded-md border ${
-                  selectionMode ? 'bg-blue-600 text-white border-blue-600' : 'border-slate-200'
-                }`}
-              >
-                {selectionMode
-                  ? Object.keys(selectedIds).length > 0
-                    ? 'Download selected'
-                    : 'Cancel selection'
-                  : 'Select to download audio and text transcription'}
-              </button>
+              <div className="flex items-center gap-2">
+                {!selectionMode ? (
+                  <button
+                    type="button"
+                    onClick={() => setSelectionMode(true)}
+                    className="px-3 py-2 text-sm rounded-md border border-slate-200"
+                  >
+                    Select to download creo data
+                  </button>
+                ) : (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Download only if selections exist
+                        if (Object.keys(selectedIds).length > 0) {
+                          downloadSelected();
+                        } else {
+                          try {
+                            showToast({
+                              message: 'Please select at least one creative to export.',
+                              type: 'error',
+                            });
+                          } catch (e) {}
+                        }
+                      }}
+                      disabled={Object.keys(selectedIds).length === 0}
+                      className={`px-3 py-2 text-sm rounded-md border ${
+                        Object.keys(selectedIds).length === 0
+                          ? 'bg-slate-100 text-slate-400 cursor-not-allowed border-slate-200'
+                          : 'bg-blue-600 text-white border-blue-600'
+                      }`}
+                    >
+                      Download selected
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Reset selection but keep select mode active
+                        setSelectedIds({});
+                        try {
+                          showToast({ message: 'Selection cleared', type: 'success' });
+                        } catch (e) {}
+                        // visual soft fade
+                        setResetFlash(true);
+                        setTimeout(() => setResetFlash(false), 260);
+                      }}
+                      className={`px-3 py-2 text-sm rounded-md border bg-white text-slate-700 border-slate-200`}
+                    >
+                      Reset selection
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Ensure selection mode is on
+                        const filters = currentFilters;
+                        const filtersEmpty =
+                          !filters ||
+                          Object.values(filters).every(
+                            (v) => v === '' || v === undefined || v === null
+                          );
+
+                        const targetAds = filtersEmpty ? ads : filteredAds;
+                        const next: Record<string, boolean> = {};
+                        for (const a of targetAds) next[String(a.id)] = true;
+                        setSelectedIds(next);
+
+                        try {
+                          showToast({
+                            message: `Selected ${Object.keys(next).length} creatives`,
+                            type: 'success',
+                          });
+                        } catch (e) {}
+                      }}
+                      className={`px-3 py-2 text-sm rounded-md border bg-slate-50 hover:bg-slate-100 border-slate-200`}
+                    >
+                      Select All
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        // Exit selection mode and clear state
+                        setSelectionMode(false);
+                        setSelectedIds({});
+                        try {
+                          showToast({ message: 'Exited selection mode', type: 'success' });
+                        } catch (e) {}
+                      }}
+                      className={`px-3 py-2 text-sm rounded-md border bg-white text-slate-700 border-slate-200`}
+                    >
+                      Exit selection
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>

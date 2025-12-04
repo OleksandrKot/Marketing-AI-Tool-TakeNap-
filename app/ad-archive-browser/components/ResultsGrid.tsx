@@ -90,6 +90,7 @@ function ResultsGrid({
                 // selection props
                 selectionMode={selectionMode}
                 selected={selectedIds ? Boolean(selectedIds[String(ad.id)]) : false}
+                selectedIds={selectedIds}
                 onToggleSelect={onToggleSelect}
               />
             );

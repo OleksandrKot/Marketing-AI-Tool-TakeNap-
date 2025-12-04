@@ -15,6 +15,7 @@ interface FilterOptions {
   hookFormat: string;
   characterFormat: string;
   variationCount?: string;
+  funnels?: string[];
 }
 
 interface FilterPanelProps {
@@ -30,6 +31,7 @@ interface FilterPanelProps {
     hookFormats: string[];
     characterFormats: string[];
     variationBuckets: string[];
+    funnels: string[];
   };
   initialPageName?: string;
   counts?: {
@@ -43,6 +45,7 @@ interface FilterPanelProps {
     hookFormats: Record<string, number>;
     characterFormats: Record<string, number>;
     variationCounts?: Record<string, number>;
+    funnels?: Record<string, number>;
   };
 }
 
@@ -65,7 +68,9 @@ function FilterPanelComponent({
     hookFormat: '',
     characterFormat: '',
     variationCount: '',
+    funnels: [],
   });
+  const [funnelInput, setFunnelInput] = useState('');
   // counts is provided from props
 
   // Initialize pageName from prop when component mounts
@@ -81,6 +86,40 @@ function FilterPanelComponent({
 
   const handleFilterChange = (key: keyof FilterOptions, value: string) => {
     const newFilters = { ...filters, [key]: value };
+    setFilters(newFilters);
+    onFiltersChange(newFilters);
+  };
+
+  const handleAddFunnel = (value?: string) => {
+    const raw = ((value ?? funnelInput) || '').trim();
+    if (!raw) return;
+    const parts = raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const next = Array.isArray(filters.funnels) ? [...filters.funnels] : [];
+    for (const p of parts) {
+      if (!next.includes(p)) next.unshift(p);
+    }
+    const newFilters = { ...filters, funnels: next };
+    setFilters(newFilters);
+    setFunnelInput('');
+    onFiltersChange(newFilters);
+  };
+
+  const handleRemoveFunnel = (value: string) => {
+    const next = (filters.funnels || []).filter((f) => f !== value);
+    const newFilters = { ...filters, funnels: next };
+    setFilters(newFilters);
+    onFiltersChange(newFilters);
+  };
+
+  const toggleFunnelFromList = (value: string) => {
+    const next = Array.isArray(filters.funnels) ? [...filters.funnels] : [];
+    const idx = next.indexOf(value);
+    if (idx >= 0) next.splice(idx, 1);
+    else next.unshift(value);
+    const newFilters = { ...filters, funnels: next };
     setFilters(newFilters);
     onFiltersChange(newFilters);
   };
@@ -110,7 +149,9 @@ function FilterPanelComponent({
         <h2 className="text-xl font-semibold text-slate-900">Filters</h2>
         <button
           onClick={clearFilters}
-          className="text-sm text-slate-600 hover:text-slate-800 underline"
+          aria-label="Clear all filters"
+          title="Clear all filters"
+          className="text-sm text-slate-600 hover:text-slate-800 underline focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
         >
           Clear all
         </button>
@@ -122,6 +163,7 @@ function FilterPanelComponent({
           <div className="block text-sm font-medium text-slate-700 mb-2">Search</div>
           <input
             type="text"
+            aria-label="Search by title or text"
             value={filters.searchQuery}
             onChange={(e) => handleFilterChange('searchQuery', e.target.value)}
             placeholder="Search by title or text..."
@@ -140,6 +182,7 @@ function FilterPanelComponent({
             ) : null}
           </div>
           <select
+            aria-label="Filter by page name"
             value={filters.pageName}
             onChange={(e) => handleFilterChange('pageName', e.target.value)}
             className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
@@ -169,6 +212,7 @@ function FilterPanelComponent({
             ) : null}
           </div>
           <select
+            aria-label="Filter by platform"
             value={filters.publisherPlatform}
             onChange={(e) => handleFilterChange('publisherPlatform', e.target.value)}
             className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
@@ -197,6 +241,7 @@ function FilterPanelComponent({
             ) : null}
           </div>
           <select
+            aria-label="Filter by CTA type"
             value={filters.ctaType}
             onChange={(e) => handleFilterChange('ctaType', e.target.value)}
             className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
@@ -226,6 +271,7 @@ function FilterPanelComponent({
             ) : null}
           </div>
           <select
+            aria-label="Filter by display format"
             value={filters.displayFormat}
             onChange={(e) => handleFilterChange('displayFormat', e.target.value)}
             className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
@@ -246,6 +292,7 @@ function FilterPanelComponent({
         <div>
           <div className="block text-sm font-medium text-slate-700 mb-2">Creation Period</div>
           <select
+            aria-label="Filter by creation period"
             value={filters.dateRange}
             onChange={(e) => handleFilterChange('dateRange', e.target.value)}
             className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
@@ -270,6 +317,7 @@ function FilterPanelComponent({
             ) : null}
           </div>
           <select
+            aria-label="Filter by concept format"
             value={filters.conceptFormat}
             onChange={(e) => handleFilterChange('conceptFormat', e.target.value)}
             className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
@@ -298,6 +346,7 @@ function FilterPanelComponent({
             ) : null}
           </div>
           <select
+            aria-label="Filter by realization format"
             value={filters.realizationFormat}
             onChange={(e) => handleFilterChange('realizationFormat', e.target.value)}
             className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
@@ -327,6 +376,7 @@ function FilterPanelComponent({
             ) : null}
           </div>
           <select
+            aria-label="Filter by topic"
             value={filters.topicFormat}
             onChange={(e) => handleFilterChange('topicFormat', e.target.value)}
             className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
@@ -353,6 +403,7 @@ function FilterPanelComponent({
             ) : null}
           </div>
           <select
+            aria-label="Filter by hook"
             value={filters.hookFormat}
             onChange={(e) => handleFilterChange('hookFormat', e.target.value)}
             className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
@@ -381,6 +432,7 @@ function FilterPanelComponent({
             ) : null}
           </div>
           <select
+            aria-label="Filter by character"
             value={filters.characterFormat}
             onChange={(e) => handleFilterChange('characterFormat', e.target.value)}
             className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
@@ -409,6 +461,7 @@ function FilterPanelComponent({
             ) : null}
           </div>
           <select
+            aria-label="Filter by variation count"
             value={filters.variationCount}
             onChange={(e) => handleFilterChange('variationCount', e.target.value)}
             className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
@@ -432,6 +485,91 @@ function FilterPanelComponent({
               );
             })}
           </select>
+        </div>
+
+        {/* Funnels Filter */}
+        <div>
+          <div className="block text-sm font-medium text-slate-700 mb-2">Funnel</div>
+          <div className="mb-2">
+            <input
+              id="funnelInput"
+              type="text"
+              aria-label="Paste funnel URL or value"
+              value={funnelInput}
+              onChange={(e) => setFunnelInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handleAddFunnel();
+                }
+              }}
+              placeholder="Paste funnel URL or value"
+              className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder-slate-400"
+            />
+            <div className="mt-2 flex flex-wrap gap-2">
+              {(filters.funnels || []).map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  aria-label={`Remove funnel ${f}`}
+                  title={`Remove funnel ${f}`}
+                  onClick={() => handleRemoveFunnel(f)}
+                  className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                >
+                  {f} ×
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div
+            className="max-h-40 overflow-auto border border-slate-100 rounded-md p-2"
+            role="region"
+            aria-label="Available funnels"
+          >
+            {availableOptions.funnels.length === 0 ? (
+              <div className="text-sm text-slate-500">No funnels detected</div>
+            ) : (
+              availableOptions.funnels
+                .filter(
+                  (opt) => funnelInput.trim() === '' || opt.includes(funnelInput.toLowerCase())
+                )
+                .slice(0, 200)
+                .map((opt) => (
+                  <div
+                    key={opt}
+                    className="flex items-center justify-between py-1 px-2"
+                    role="listitem"
+                  >
+                    <div className="text-sm text-slate-700 truncate">{opt}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="text-xs text-slate-500" aria-hidden>
+                        {counts?.funnels && typeof counts.funnels[opt] !== 'undefined'
+                          ? `(${counts.funnels[opt]})`
+                          : ''}
+                      </div>
+                      <button
+                        type="button"
+                        aria-pressed={(filters.funnels || []).includes(opt)}
+                        aria-label={`Toggle funnel ${opt}. ${
+                          counts?.funnels && typeof counts.funnels[opt] !== 'undefined'
+                            ? `${counts.funnels[opt]} matches`
+                            : ''
+                        }`}
+                        onClick={() => toggleFunnelFromList(opt)}
+                        className={`text-xs px-2 py-1 rounded-md border focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
+                          (filters.funnels || []).includes(opt)
+                            ? 'bg-blue-600 text-white border-blue-600'
+                            : 'bg-white text-slate-700 border-slate-200'
+                        }`}
+                      >
+                        {(filters.funnels || []).includes(opt) ? 'Selected' : 'Select'}
+                      </button>
+                    </div>
+                  </div>
+                ))
+            )}
+          </div>
         </div>
       </div>
     </div>

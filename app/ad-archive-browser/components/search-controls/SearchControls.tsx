@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import type { FilterOptions } from '@/lib/core/types';
 import { StatsBar } from '@/components/stats/stats-bar';
@@ -84,6 +85,7 @@ export function SearchControls({
   clearRequestLogs = () => {},
 }: Props) {
   const [showLogs, setShowLogs] = useState(false);
+  const router = useRouter();
   const { requireLoginAndRun, showLogin, closeLogin, showSignInTip } = useSignInGate();
 
   useEffect(() => {
@@ -122,7 +124,30 @@ export function SearchControls({
       ? 'Search Videos Only'
       : 'Search Static Only';
 
-  const handleSearch = () => requireLoginAndRun(onSearch);
+  const handleSearch = () => {
+    // If productFilter looks like a funnel (contains a slash or a host-like token),
+    // open the Advanced Filter page with funnels prefilled so users can inspect results.
+    try {
+      const val = (productFilter || '').trim();
+      if (val && !val.includes('facebook.com/ads/library')) {
+        // Heuristic: treat comma-separated values or any value containing '/' or a dot as funnel
+        const parts = val
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+        const looksLikeFunnel = parts.every((p) => p.includes('/') || p.includes('.'));
+        if (looksLikeFunnel) {
+          const q = parts.map((p) => encodeURIComponent(p)).join(',');
+          router.push(`/advance-filter?funnels=${q}`);
+          return;
+        }
+      }
+    } catch (e) {
+      /* ignore and fallback to normal search */
+    }
+
+    requireLoginAndRun(onSearch);
+  };
 
   return (
     <>

@@ -17,6 +17,8 @@ interface AdCardProps {
   selectionMode?: boolean;
   selected?: boolean;
   onToggleSelect?: (id: string) => void;
+  // map of selected ids so variations can reflect selection state
+  selectedIds?: Record<string, boolean>;
 }
 
 function AdCardComponent({
@@ -28,6 +30,7 @@ function AdCardComponent({
   selectionMode,
   selected,
   onToggleSelect,
+  selectedIds,
 }: AdCardProps) {
   const [expanded, setExpanded] = useState(false);
   const title = ad.title || 'Untitled Ad';
@@ -127,6 +130,17 @@ function AdCardComponent({
           </div>
         )}
 
+        {/* Debug: show IDs so user can reconcile UI <-> DB quickly */}
+        <div className="mt-3 text-xs text-slate-400">
+          <div>
+            id: <span className="font-mono text-slate-700">{String(ad.id)}</span>
+          </div>
+          <div>
+            ad_archive_id:{' '}
+            <span className="font-mono text-slate-700">{String(ad.ad_archive_id ?? '')}</span>
+          </div>
+        </div>
+
         <div className="mt-auto">
           <div className="flex items-center justify-between text-xs text-slate-400 font-medium mt-3">
             <div className="flex items-center">
@@ -186,14 +200,34 @@ function AdCardComponent({
                             }/${r.ad_archive_id}.jpeg`
                           )
                         : r.image_url || '/placeholder.svg';
+                      const relSelected = selectedIds ? Boolean(selectedIds[String(r.id)]) : false;
                       return (
-                        <Link key={r.id} href={`/creative/${r.id}`} className="block">
-                          <img
-                            src={src}
-                            alt={r.title || 'related'}
-                            className="w-full h-20 object-cover rounded-md border border-slate-100"
-                          />
-                        </Link>
+                        <div key={r.id} className="relative">
+                          <Link href={`/creative/${r.id}`} className="block">
+                            <img
+                              src={src}
+                              alt={r.title || 'related'}
+                              className="w-full h-20 object-cover rounded-md border border-slate-100"
+                            />
+                          </Link>
+                          {selectionMode ? (
+                            <button
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                if (onToggleSelect) onToggleSelect(String(r.id));
+                              }}
+                              title={relSelected ? 'Deselect variation' : 'Select variation'}
+                              className={`absolute right-2 top-2 w-6 h-6 rounded-full flex items-center justify-center transition-colors duration-150 text-xs ${
+                                relSelected
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-white border border-slate-200'
+                              }`}
+                            >
+                              {relSelected ? <CheckIcon className="h-3.5 w-3.5" /> : null}
+                            </button>
+                          ) : null}
+                        </div>
                       );
                     })}
                   </div>
