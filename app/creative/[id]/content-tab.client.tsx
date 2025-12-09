@@ -41,6 +41,7 @@ export default function ContentTabClient({
   const leftColRef = useRef<HTMLDivElement | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showLogin, setShowLogin] = useState(false);
+  const [showPromptEditor, setShowPromptEditor] = useState(false);
   const LoginModal = dynamic(() => import('@/app/login-auth/LoginModal'), {
     ssr: false,
     loading: () => null,
@@ -49,6 +50,11 @@ export default function ContentTabClient({
   const DynamicStructuredAttributesModal = dynamic(
     () => import('./components/StructuredAttributesModal').then((m) => m.default),
     { ssr: false, loading: () => <div className="p-2">Loading editor...</div> }
+  );
+
+  const PromptEditorModal = dynamic(
+    () => import('@/app/view-details/[id]/PromptEditorModal').then((m) => m.default),
+    { ssr: false, loading: () => null }
   );
 
   // Loader component to avoid importing the heavy editor until user requests it
@@ -543,7 +549,15 @@ export default function ContentTabClient({
             title="Visual Description"
             defaultOpen={true}
             actions={
-              <div className="flex items-center">
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowPromptEditor(true)}
+                  className="text-blue-600 border-blue-200 hover:bg-blue-50"
+                >
+                  Edit prompt
+                </Button>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -609,6 +623,13 @@ export default function ContentTabClient({
         </div>
       </div>
       {showLogin ? <LoginModal onClose={() => setShowLogin(false)} /> : null}
+      {showPromptEditor && (
+        <PromptEditorModal
+          ad={ad}
+          isOpen={showPromptEditor}
+          onClose={() => setShowPromptEditor(false)}
+        />
+      )}
     </div>
   );
 }

@@ -1,11 +1,11 @@
 'use client';
 import React, { useState, useRef, useEffect, memo } from 'react';
 import { Button } from '@/components/ui/button';
-import { LayoutGrid, Layers, Heart, Menu, X } from 'lucide-react';
+import { LayoutGrid, Layers, Heart, Menu, X, BarChart3 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 
 interface PageNavigationProps {
-  currentPage: 'library' | 'adaptations' | 'personas' | 'favorites' | 'folders';
+  currentPage: 'library' | 'adaptations' | 'personas' | 'favorites' | 'folders' | 'dashboard';
 }
 
 function PageNavigationComponent({ currentPage }: PageNavigationProps) {
@@ -49,6 +49,9 @@ function PageNavigationComponent({ currentPage }: PageNavigationProps) {
         break;
       case 'personas':
         router.push('/personas-settings');
+        break;
+      case 'dashboard':
+        router.push('/dashboard');
         break;
     }
   };
@@ -99,6 +102,17 @@ function PageNavigationComponent({ currentPage }: PageNavigationProps) {
             role="menuitem"
             onClick={() => {
               setOpen(false);
+              handleNavigation('dashboard');
+            }}
+            className={`justify-start`}
+          >
+            <BarChart3 className="h-4 w-4 mr-2" /> Dashboard
+          </Button>
+          <Button
+            variant="ghost"
+            role="menuitem"
+            onClick={() => {
+              setOpen(false);
               handleNavigation('folders');
             }}
             className={`justify-start`}
@@ -132,6 +146,18 @@ function PageNavigationComponent({ currentPage }: PageNavigationProps) {
         >
           <LayoutGrid className="h-4 w-4 mr-2" />
           Creative Library
+        </Button>
+        <Button
+          variant="ghost"
+          onClick={() => handleNavigation('dashboard')}
+          className={`h-11 px-4 rounded-none font-medium transition-all duration-200 ${
+            currentPage === 'dashboard'
+              ? 'bg-blue-100 text-blue-700 border-r border-slate-200 hover:bg-blue-500 hover:text-white'
+              : 'bg-white text-slate-600 hover:bg-slate-700 hover:text-white border-r border-slate-200'
+          }`}
+        >
+          <BarChart3 className="h-4 w-4 mr-2" />
+          Dashboard
         </Button>
         <Button
           variant="ghost"
