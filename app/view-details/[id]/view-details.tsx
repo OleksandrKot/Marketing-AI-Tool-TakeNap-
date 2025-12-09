@@ -1,11 +1,10 @@
 'use client';
 
-import { useState, useCallback, memo } from 'react';
+import React, { useState, useCallback, memo, useMemo } from 'react';
 import { useFavorites } from '@/lib/hooks/useFavorites';
 import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import ModalLoading from '@/components/ui/modal-loading';
-// StorageImage is no longer used here; StorageVideo handles preview rendering
 import StorageVideo from '@/lib/storage/StorageVideo';
 import StorageImage from '@/lib/storage/StorageImage';
 import {
@@ -27,6 +26,19 @@ import {
   Check,
   Layers,
 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { ProfileDropdown } from '@/app/login-auth/components/profile-dropdown';
+import { formatDate } from '@/lib/core/utils';
+import type { Ad } from '@/lib/core/types';
+import PromptEditorModal from './PromptEditorModal';
+import { supabase } from '@/lib/core/supabase';
+
+type SupabaseSessionLike = { session?: { user?: Record<string, unknown> } };
+
+// Dynamic imports defined once at module scope.
+// This avoids re-creating dynamic components on each render.
 const CollectionModal = dynamic(
   () => import('@/components/modals/collection-modal').then((m) => m.default),
   {
@@ -34,56 +46,346 @@ const CollectionModal = dynamic(
     ssr: false,
   }
 );
-import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { ProfileDropdown } from '@/app/login-auth/components/profile-dropdown';
-import { formatDate } from '@/lib/core/utils';
-import type { Ad } from '@/lib/core/types';
-import PromptEditor from './PromptEditor';
-import { supabase } from '@/lib/core/supabase';
-type SupabaseSessionLike = { session?: { user?: Record<string, unknown> } };
 
-// Динамічне завантаження компонентів
 const ShareModal = dynamic(() => import('../../creative/[id]/share-modal'), {
   loading: () => <ModalLoading />,
   ssr: false,
+});
+
+const LoginModal = dynamic(() => import('@/app/login-auth/LoginModal'), {
+  ssr: false,
+  loading: () => null,
 });
 
 interface ViewDetailsProps {
   ad: Ad;
 }
 
-const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
+/**
+ * Helper: safely open a URL in a new tab.
+ */
+function openInNewTab(url: string | null | undefined) {
+  if (!url) return;
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+/**
+ * Right column: Creative info block.
+ * Memoized to avoid re-rendering when only left-column state changes.
+ */
+interface CreativeInfoCardProps {
+  ad: Ad;
+  isVideo: boolean;
+  activeDays: number;
+  copiedField: string | null;
+  onCopy: (value: string, field: string) => void;
+  onOpenMetaAd: () => void;
+  onOpenMetaPage: () => void;
+}
+
+const CreativeInfoCard = memo(function CreativeInfoCard({
+  ad,
+  isVideo,
+  activeDays,
+  copiedField,
+  onCopy,
+  onOpenMetaAd,
+  onOpenMetaPage,
+}: CreativeInfoCardProps) {
+  return (
+    <Card className="border-slate-200 rounded-2xl">
+      <CardContent className="p-0">
+        <div className="bg-blue-50 p-6 border-b border-slate-200">
+          <div className="flex items-center">
+            <Info className="h-5 w-5 text-blue-600 mr-2" />
+            <h2 className="text-xl font-semibold text-slate-900">Creative Info</h2>
+          </div>
+        </div>
+        <div className="p-6 space-y-4">
+          {/* Quick Meta Library actions */}
+          {(ad.meta_ad_url || ad.ad_archive_id || ad.page_name) && (
+            <div className="flex items-center gap-3 mb-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onOpenMetaAd}
+                className="text-slate-700"
+                title="Open in Meta Ad Library"
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Open in Meta Ad Library
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onOpenMetaPage}
+                className="text-slate-700"
+                title="Open Meta Library Page"
+              >
+                <Link className="h-4 w-4 mr-2" />
+                Open Meta Library Page
+              </Button>
+            </div>
+          )}
+
+          <div className="bg-slate-50 rounded-xl p-4">
+            <h3 className="text-sm font-medium text-slate-500 mb-2">Format</h3>
+            <Badge
+              className={`${
+                isVideo
+                  ? 'bg-blue-50 text-blue-700 border-blue-200'
+                  : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+              } font-medium px-3 py-1.5 rounded-full border`}
+            >
+              {isVideo ? (
+                <>
+                  <Play className="h-3 w-3 mr-1" />
+                  Video
+                </>
+              ) : (
+                <>
+                  <ImageIcon className="h-3 w-3 mr-1" />
+                  Image
+                </>
+              )}
+            </Badge>
+          </div>
+
+          <div className="bg-slate-50 rounded-xl p-4">
+            <h3 className="text-sm font-medium text-slate-500 mb-2">Created Date</h3>
+            <div className="flex items-center">
+              <Calendar className="h-4 w-4 mr-2 text-slate-400" />
+              <p className="text-slate-900 font-medium">{formatDate(ad.created_at)}</p>
+            </div>
+          </div>
+
+          <div className="bg-slate-50 rounded-xl p-4">
+            <h3 className="text-sm font-medium text-slate-500 mb-2">Active Days</h3>
+            <div className="flex items-center">
+              <Clock className="h-4 w-4 mr-2 text-slate-400" />
+              <p className="text-slate-900 font-medium">{activeDays} days</p>
+            </div>
+          </div>
+
+          <div className="bg-slate-50 rounded-xl p-4">
+            <h3 className="text-sm font-medium text-slate-500 mb-2">Platform</h3>
+            <p className="text-slate-900 font-medium">{ad.publisher_platform || 'N/A'}</p>
+          </div>
+
+          {ad.ad_archive_id && (
+            <div className="bg-slate-50 rounded-xl p-4">
+              <h3 className="text-sm font-medium text-slate-500 mb-2">Archive ID</h3>
+              <div className="flex items-center justify-between">
+                <p className="text-slate-900 font-mono text-sm break-all">{ad.ad_archive_id}</p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onCopy(ad.ad_archive_id!, 'archive_id')}
+                  className="text-slate-500 hover:text-slate-700 ml-2"
+                >
+                  {copiedField === 'archive_id' ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+
+/**
+ * Right column: Links card.
+ */
+interface LinksCardProps {
+  ad: Ad;
+  copiedField: string | null;
+  onCopy: (value: string, field: string) => void;
+  onOpenMetaAd: () => void;
+  onOpenMetaPage: () => void;
+}
+
+const LinksCard = memo(function LinksCard({
+  ad,
+  copiedField,
+  onCopy,
+  onOpenMetaAd,
+  onOpenMetaPage,
+}: LinksCardProps) {
+  if (!ad.link_url && !ad.meta_ad_url && !ad.ad_archive_id && !ad.page_name) {
+    return null;
+  }
+
+  return (
+    <Card className="border-slate-200 rounded-2xl">
+      <CardContent className="p-0">
+        <div className="bg-emerald-50 p-6 border-b border-slate-200">
+          <div className="flex items-center">
+            <Link className="h-5 w-5 text-emerald-600 mr-2" />
+            <h2 className="text-xl font-semibold text-slate-900">Links</h2>
+          </div>
+        </div>
+        <div className="p-6 space-y-4">
+          {(ad.meta_ad_url || ad.ad_archive_id || ad.page_name) && (
+            <div className="flex items-center gap-3 mb-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onOpenMetaAd}
+                className="text-slate-700"
+                title="Open in Meta Ad Library"
+              >
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Open in Meta Ad Library
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onOpenMetaPage}
+                className="text-slate-700"
+                title="Open Meta Library Page"
+              >
+                <Link className="h-4 w-4 mr-2" />
+                Open Meta Library Page
+              </Button>
+            </div>
+          )}
+
+          {ad.link_url && (
+            <div>
+              <h3 className="text-sm font-medium text-slate-500 mb-2">Landing Page</h3>
+              <div className="flex items-center justify-between bg-slate-50 rounded-lg p-3">
+                <a
+                  href={ad.link_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:text-blue-700 text-sm break-all flex-1 mr-2"
+                >
+                  {ad.link_url}
+                </a>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onCopy(ad.link_url!, 'link_url')}
+                  className="text-slate-500 hover:text-slate-700"
+                >
+                  {copiedField === 'link_url' ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {ad.meta_ad_url && (
+            <div>
+              <h3 className="text-sm font-medium text-slate-500 mb-2">Meta Ad Library</h3>
+              <div className="flex items-center justify-between bg-slate-50 rounded-lg p-3">
+                <a
+                  href={ad.meta_ad_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 hover:text-blue-700 text-sm break-all flex-1 mr-2"
+                >
+                  {ad.meta_ad_url}
+                </a>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onCopy(ad.meta_ad_url!, 'meta_ad_url')}
+                  className="text-slate-500 hover:text-slate-700"
+                >
+                  {copiedField === 'meta_ad_url' ? (
+                    <Check className="h-4 w-4" />
+                  ) : (
+                    <Copy className="h-4 w-4" />
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+
+/**
+ * Right column: Visual description card with prompt editor.
+ */
+interface VisualDescriptionCardProps {
+  ad: Ad;
+  showPromptEditor: boolean;
+  onOpenPrompt: () => void;
+  onClosePrompt: () => void;
+}
+
+const VisualDescriptionCard = memo(function VisualDescriptionCard({
+  ad,
+  showPromptEditor,
+  onOpenPrompt,
+  onClosePrompt,
+}: VisualDescriptionCardProps) {
+  return (
+    <Card className="border-slate-200 rounded-2xl">
+      <CardContent className="p-0">
+        <div className="bg-slate-50 p-6 border-b border-slate-200">
+          <h2 className="text-xl font-semibold text-slate-900">Visual Description</h2>
+        </div>
+        <div className="p-6">
+          <Button onClick={onOpenPrompt} className="bg-blue-600 hover:bg-blue-700 text-white">
+            Edit prompt
+          </Button>
+          {showPromptEditor && (
+            <PromptEditorModal ad={ad} isOpen={showPromptEditor} onClose={onClosePrompt} />
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+
+/**
+ * Main ViewDetails component.
+ */
+const ViewDetailsInner = ({ ad }: ViewDetailsProps) => {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [isLoading, setIsLoading] = useState(false);
   const { isFavorite, toggleFavorite } = useFavorites();
-  const creativeId = ad.ad_archive_id || ad.id.toString();
+
+  const [isLoading, setIsLoading] = useState(false);
   const [isLikedLocal, setIsLikedLocal] = useState(false);
   const [showCollectionsModal, setShowCollectionsModal] = useState(false);
-  // derive persistent liked state from store
-  const isLiked = isFavorite(creativeId) || isLikedLocal;
   const [showShareModal, setShowShareModal] = useState(false);
-  // local loading state for media (StorageVideo will call onLoaded for video)
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showLogin, setShowLogin] = useState(false);
-  const LoginModal = dynamic(() => import('@/app/login-auth/LoginModal'), {
-    ssr: false,
-    loading: () => null,
-  });
+  const [showPromptEditor, setShowPromptEditor] = useState(false);
 
-  const isVideo = ad.display_format === 'VIDEO';
-  const createdDate = new Date(ad.created_at);
-  const today = new Date();
-  const activeDays = Math.floor((today.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24));
+  // Derived values memoized so they don't get recomputed on every render.
+  const isVideo = useMemo(() => ad.display_format === 'VIDEO', [ad.display_format]);
+  const creativeId = useMemo(() => ad.ad_archive_id || ad.id.toString(), [ad.ad_archive_id, ad.id]);
+  const isLiked = useMemo(
+    () => isFavorite(creativeId) || isLikedLocal,
+    [isFavorite, creativeId, isLikedLocal]
+  );
+
+  const activeDays = useMemo(() => {
+    const createdDate = new Date(ad.created_at);
+    const today = new Date();
+    return Math.floor((today.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24));
+  }, [ad.created_at]);
 
   const handleBack = useCallback(() => {
-    // If the caller provided a `from` param (for example ?from=advance-filter)
-    // we prefer returning to that specific page. Otherwise, attempt a history
-    // back and fall back to the library root.
     const from = searchParams?.get?.('from');
     if (from === 'advance-filter' || from === 'filter' || from === 'filter-constructor') {
       router.push('/advance-filter');
@@ -101,7 +403,7 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
   const handleDownload = useCallback(async () => {
     setIsLoading(true);
     try {
-      // prefer storage signed urls when we have an archive id
+      // Video download via signed URL
       if (ad.ad_archive_id && isVideo) {
         const res = await fetch('/api/storage/signed-url', {
           method: 'POST',
@@ -131,7 +433,7 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
         return;
       }
 
-      // photo flow: prefer storage signed url if available
+      // Image download via signed URL
       if (ad.ad_archive_id && !isVideo) {
         const res = await fetch('/api/storage/signed-url', {
           method: 'POST',
@@ -160,7 +462,7 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
         return;
       }
 
-      // fallback to direct image url
+      // Fallback: direct external image/video URL
       const urlToDownload = ad.image_url;
       if (!urlToDownload) return;
       const response = await fetch(urlToDownload);
@@ -181,11 +483,10 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
   }, [ad, isVideo]);
 
   const handleLike = useCallback(() => {
-    // toggle persistent favorite
     toggleFavorite(creativeId);
-    // keep a tiny local flicker for immediate UI when storage events are slow
-    setIsLikedLocal((p) => !p);
-    // clear the local flicker after a short time so store value is authoritative
+    setIsLikedLocal((prev) => !prev);
+
+    // After a short delay, rely only on global favorite state
     setTimeout(() => setIsLikedLocal(false), 500);
   }, [toggleFavorite, creativeId]);
 
@@ -194,7 +495,8 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
   }, []);
 
   const handleRestartVideo = useCallback(() => {
-    const video = document.querySelector('video');
+    // We assume there is only one main <video> element on the page.
+    const video = document.querySelector('video') as HTMLVideoElement | null;
     if (video) {
       video.currentTime = 0;
       video.play();
@@ -224,11 +526,49 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
     }
   }, []);
 
-  // (CollapsiblePanel and cleanAndSplit moved to content-tab/adData utilities.)
+  const handleOpenMetaAd = useCallback(() => {
+    const adUrl =
+      ad.meta_ad_url ||
+      (ad.ad_archive_id
+        ? `https://www.facebook.com/ads/library/?id=${encodeURIComponent(ad.ad_archive_id)}`
+        : null);
+    openInNewTab(adUrl);
+  }, [ad.meta_ad_url, ad.ad_archive_id]);
 
-  // use shared ScriptRenderer component
+  const handleOpenMetaPage = useCallback(() => {
+    if (!ad.page_name) return;
+    const q = encodeURIComponent(ad.page_name || '');
+    const pageUrl = `https://www.facebook.com/ads/library/?q=${q}&active_status=all&ad_type=all&country=US`;
+    openInNewTab(pageUrl);
+  }, [ad.page_name]);
 
-  // Do not use external ad.image_url/video_preview_image_url as per storage-first policy
+  const handleOpenLanding = useCallback(() => {
+    openInNewTab(ad.link_url);
+  }, [ad.link_url]);
+
+  const handleOpenPrompt = useCallback(() => {
+    setShowPromptEditor(true);
+  }, []);
+
+  const handleClosePrompt = useCallback(() => {
+    setShowPromptEditor(false);
+  }, []);
+
+  const handleOpenCollections = useCallback(() => {
+    setShowCollectionsModal(true);
+  }, []);
+
+  const handleCloseCollections = useCallback(() => {
+    setShowCollectionsModal(false);
+  }, []);
+
+  const handleCloseShare = useCallback(() => {
+    setShowShareModal(false);
+  }, []);
+
+  const handleCloseLogin = useCallback(() => {
+    setShowLogin(false);
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -245,7 +585,6 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                 <ArrowLeft className="h-5 w-5 mr-2" />
                 Back
               </Button>
-              {/* If we arrived from Filter Constructor, surface a compact close action */}
               {searchParams?.get?.('from') === 'advance-filter' && (
                 <Button
                   variant="ghost"
@@ -258,7 +597,6 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
               )}
             </div>
             <div>
-              {/* Competitor name (page_name) shown above the title for clarity */}
               <div className="flex items-center gap-3">
                 <Button
                   variant="ghost"
@@ -297,7 +635,7 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => setShowCollectionsModal(true)}
+              onClick={handleOpenCollections}
               className="text-slate-400 hover:text-slate-600"
               title="Add to collections"
             >
@@ -391,7 +729,7 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
               {ad.link_url && (
                 <Button
                   variant="outline"
-                  onClick={() => window.open(ad.link_url, '_blank', 'noopener,noreferrer')}
+                  onClick={handleOpenLanding}
                   className="border-emerald-600 text-emerald-600 hover:bg-emerald-50 font-medium rounded-xl h-11 transition-all duration-200"
                 >
                   <ExternalLink className="h-4 w-4 mr-2" />
@@ -399,267 +737,60 @@ const ViewDetails = memo(function ViewDetails({ ad }: ViewDetailsProps) {
                 </Button>
               )}
             </div>
-
-            {/* Visual Description moved to content tab (avoid duplicate header) */}
-
-            {/* Formats & Creative Concepts moved to Content tab to avoid duplication */}
-
-            {/* Additional content moved to Content tab to avoid duplication */}
           </div>
 
           {/* Right Column - Details & Scripts */}
           <div className="space-y-6">
-            {/* Creative Information */}
-            <Card className="border-slate-200 rounded-2xl">
-              <CardContent className="p-0">
-                <div className="bg-blue-50 p-6 border-b border-slate-200">
-                  <div className="flex items-center">
-                    <Info className="h-5 w-5 text-blue-600 mr-2" />
-                    <h2 className="text-xl font-semibold text-slate-900">Creative Info</h2>
-                  </div>
-                </div>
-                <div className="p-6 space-y-4">
-                  {/* Quick Meta Library actions */}
-                  {(ad.meta_ad_url || ad.ad_archive_id || ad.page_name) && (
-                    <div className="flex items-center gap-3 mb-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          const adUrl =
-                            ad.meta_ad_url ||
-                            (ad.ad_archive_id
-                              ? `https://www.facebook.com/ads/library/?id=${encodeURIComponent(
-                                  ad.ad_archive_id
-                                )}`
-                              : null);
-                          if (adUrl) window.open(adUrl, '_blank', 'noopener,noreferrer');
-                        }}
-                        className="text-slate-700"
-                        title="Open in Meta Ad Library"
-                      >
-                        <ExternalLink className="h-4 w-4 mr-2" />
-                        Open in Meta Ad Library
-                      </Button>
+            <CreativeInfoCard
+              ad={ad}
+              isVideo={isVideo}
+              activeDays={activeDays}
+              copiedField={copiedField}
+              onCopy={handleCopyToClipboard}
+              onOpenMetaAd={handleOpenMetaAd}
+              onOpenMetaPage={handleOpenMetaPage}
+            />
 
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          if (!ad.page_name) return;
-                          const q = encodeURIComponent(ad.page_name || '');
-                          const pageUrl = `https://www.facebook.com/ads/library/?q=${q}&active_status=all&ad_type=all&country=US`;
-                          window.open(pageUrl, '_blank', 'noopener,noreferrer');
-                        }}
-                        className="text-slate-700"
-                        title="Open Meta Library Page"
-                      >
-                        <Link className="h-4 w-4 mr-2" />
-                        Open Meta Library Page
-                      </Button>
-                    </div>
-                  )}
-                  <div className="bg-slate-50 rounded-xl p-4">
-                    <h3 className="text-sm font-medium text-slate-500 mb-2">Format</h3>
-                    <Badge
-                      className={`${
-                        isVideo
-                          ? 'bg-blue-50 text-blue-700 border-blue-200'
-                          : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                      } font-medium px-3 py-1.5 rounded-full border`}
-                    >
-                      {isVideo ? (
-                        <>
-                          <Play className="h-3 w-3 mr-1" />
-                          Video
-                        </>
-                      ) : (
-                        <>
-                          <ImageIcon className="h-3 w-3 mr-1" />
-                          Image
-                        </>
-                      )}
-                    </Badge>
-                  </div>
+            <LinksCard
+              ad={ad}
+              copiedField={copiedField}
+              onCopy={handleCopyToClipboard}
+              onOpenMetaAd={handleOpenMetaAd}
+              onOpenMetaPage={handleOpenMetaPage}
+            />
 
-                  <div className="bg-slate-50 rounded-xl p-4">
-                    <h3 className="text-sm font-medium text-slate-500 mb-2">Created Date</h3>
-                    <div className="flex items-center">
-                      <Calendar className="h-4 w-4 mr-2 text-slate-400" />
-                      <p className="text-slate-900 font-medium">{formatDate(ad.created_at)}</p>
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-50 rounded-xl p-4">
-                    <h3 className="text-sm font-medium text-slate-500 mb-2">Active Days</h3>
-                    <div className="flex items-center">
-                      <Clock className="h-4 w-4 mr-2 text-slate-400" />
-                      <p className="text-slate-900 font-medium">{activeDays} days</p>
-                    </div>
-                  </div>
-
-                  <div className="bg-slate-50 rounded-xl p-4">
-                    <h3 className="text-sm font-medium text-slate-500 mb-2">Platform</h3>
-                    <p className="text-slate-900 font-medium">{ad.publisher_platform || 'N/A'}</p>
-                  </div>
-
-                  {ad.ad_archive_id && (
-                    <div className="bg-slate-50 rounded-xl p-4">
-                      <h3 className="text-sm font-medium text-slate-500 mb-2">Archive ID</h3>
-                      <div className="flex items-center justify-between">
-                        <p className="text-slate-900 font-mono text-sm break-all">
-                          {ad.ad_archive_id}
-                        </p>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleCopyToClipboard(ad.ad_archive_id, 'archive_id')}
-                          className="text-slate-500 hover:text-slate-700 ml-2"
-                        >
-                          {copiedField === 'archive_id' ? (
-                            <Check className="h-4 w-4" />
-                          ) : (
-                            <Copy className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Links */}
-            {(ad.link_url || ad.meta_ad_url) && (
-              <Card className="border-slate-200 rounded-2xl">
-                <CardContent className="p-0">
-                  <div className="bg-emerald-50 p-6 border-b border-slate-200">
-                    <div className="flex items-center">
-                      <Link className="h-5 w-5 text-emerald-600 mr-2" />
-                      <h2 className="text-xl font-semibold text-slate-900">Links</h2>
-                    </div>
-                  </div>
-                  <div className="p-6 space-y-4">
-                    {/* Meta Library quick actions for links card */}
-                    {(ad.meta_ad_url || ad.ad_archive_id || ad.page_name) && (
-                      <div className="flex items-center gap-3 mb-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            const adUrl =
-                              ad.meta_ad_url ||
-                              (ad.ad_archive_id
-                                ? `https://www.facebook.com/ads/library/?id=${encodeURIComponent(
-                                    ad.ad_archive_id
-                                  )}`
-                                : null);
-                            if (adUrl) window.open(adUrl, '_blank', 'noopener,noreferrer');
-                          }}
-                          className="text-slate-700"
-                          title="Open in Meta Ad Library"
-                        >
-                          <ExternalLink className="h-4 w-4 mr-2" />
-                          Open in Meta Ad Library
-                        </Button>
-
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            if (!ad.page_name) return;
-                            const q = encodeURIComponent(ad.page_name || '');
-                            const pageUrl = `https://www.facebook.com/ads/library/?q=${q}&active_status=all&ad_type=all&country=US`;
-                            window.open(pageUrl, '_blank', 'noopener,noreferrer');
-                          }}
-                          className="text-slate-700"
-                          title="Open Meta Library Page"
-                        >
-                          <Link className="h-4 w-4 mr-2" />
-                          Open Meta Library Page
-                        </Button>
-                      </div>
-                    )}
-                    {ad.link_url && (
-                      <div>
-                        <h3 className="text-sm font-medium text-slate-500 mb-2">Landing Page</h3>
-                        <div className="flex items-center justify-between bg-slate-50 rounded-lg p-3">
-                          <a
-                            href={ad.link_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:text-blue-700 text-sm break-all flex-1 mr-2"
-                          >
-                            {ad.link_url}
-                          </a>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleCopyToClipboard(ad.link_url!, 'link_url')}
-                            className="text-slate-500 hover:text-slate-700"
-                          >
-                            {copiedField === 'link_url' ? (
-                              <Check className="h-4 w-4" />
-                            ) : (
-                              <Copy className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
-                    {ad.meta_ad_url && (
-                      <div>
-                        <h3 className="text-sm font-medium text-slate-500 mb-2">Meta Ad Library</h3>
-                        <div className="flex items-center justify-between bg-slate-50 rounded-lg p-3">
-                          <a
-                            href={ad.meta_ad_url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-600 hover:text-blue-700 text-sm break-all flex-1 mr-2"
-                          >
-                            {ad.meta_ad_url}
-                          </a>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleCopyToClipboard(ad.meta_ad_url!, 'meta_ad_url')}
-                            className="text-slate-500 hover:text-slate-700"
-                          >
-                            {copiedField === 'meta_ad_url' ? (
-                              <Check className="h-4 w-4" />
-                            ) : (
-                              <Copy className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Prompt editor: editable JSON and final prompt */}
-            <div>
-              <PromptEditor ad={ad} />
-            </div>
+            <VisualDescriptionCard
+              ad={ad}
+              showPromptEditor={showPromptEditor}
+              onOpenPrompt={handleOpenPrompt}
+              onClosePrompt={handleClosePrompt}
+            />
           </div>
         </div>
 
-        {/* Share Modal */}
-        {showShareModal && <ShareModal ad={ad} onClose={() => setShowShareModal(false)} />}
+        {/* Modals */}
+        {showShareModal && <ShareModal ad={ad} onClose={handleCloseShare} />}
+
         {showCollectionsModal && (
           <CollectionModal
             isOpen={showCollectionsModal}
-            onClose={() => setShowCollectionsModal(false)}
+            onClose={handleCloseCollections}
             creativeId={creativeId}
           />
         )}
-        {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
+
+        {showLogin && <LoginModal onClose={handleCloseLogin} />}
       </div>
     </div>
   );
-});
+};
+
+// Wrap ViewDetails in React.memo to avoid re-renders
+// when the same ad object (by id) is passed again.
+const ViewDetails = memo(
+  ViewDetailsInner,
+  (prevProps, nextProps) =>
+    prevProps.ad.id === nextProps.ad.id && prevProps.ad.ad_archive_id === nextProps.ad.ad_archive_id
+);
 
 export { ViewDetails };

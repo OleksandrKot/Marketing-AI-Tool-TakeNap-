@@ -59,3 +59,73 @@ export interface AdaptationScenario {
     call_to_action: string;
   };
 }
+
+// Competitor Analytics Types
+export interface CompetitorAnalytics {
+  totalCreatives: number;
+  competitorBreakdown: CompetitorBreakdown[];
+  averageVariationCount: number;
+  funnelsUsed: number;
+  themesUsed: number;
+  mechanicsUsed: number;
+  themeDistribution: DistributionItem[];
+  funnelDistribution: DistributionItem[];
+  mechanicDistribution: DistributionItem[];
+  visualPatterns: VisualPattern[];
+  formatDistribution: FormatDistribution;
+  durationDistribution: DurationDistribution;
+  characterDistribution: CharacterDistribution;
+  trendsOverTime: TrendsData;
+}
+
+export interface CompetitorBreakdown {
+  competitor: string;
+  count: number;
+  percentage: number;
+}
+
+export interface DistributionItem {
+  name: string;
+  count: number;
+  percentage: number;
+}
+
+export interface VisualPattern {
+  id: string;
+  name: string;
+  description: string;
+  count: number;
+  examples: string[];
+}
+
+export interface FormatDistribution {
+  video: number;
+  static: number;
+  carousel: number;
+  other: number;
+}
+
+export interface DurationDistribution {
+  ranges: { range: string; count: number }[];
+  mostCommon: string[];
+}
+
+export interface CharacterDistribution {
+  types: { type: string; count: number }[];
+  mostCommon: string;
+}
+
+export interface TrendsData {
+  themesOverTime: TimeSeriesData[];
+  funnelsOverTime: TimeSeriesData[];
+  patternsOverTime: TimeSeriesData[];
+  insights: {
+    increasing: string[];
+    decreasing: string[];
+  };
+}
+
+export interface TimeSeriesData {
+  date: string;
+  series: { name: string; value: number }[];
+}
