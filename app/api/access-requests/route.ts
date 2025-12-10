@@ -12,6 +12,37 @@ export async function POST(req: Request) {
     }
 
     const client = createServerSupabaseClient();
+    // Prevent duplicate pending/approved requests for the same email
+    const existingResp = await client
+      .from('access_requests')
+      .select('*')
+      .eq('email', email)
+      .order('created_at', { ascending: false })
+      .limit(1);
+
+    if (existingResp.error) {
+      return NextResponse.json({ error: existingResp.error.message }, { status: 500 });
+    }
+
+    const existing =
+      Array.isArray(existingResp.data) && existingResp.data.length > 0
+        ? existingResp.data[0]
+        : null;
+    if (existing) {
+      // If already approved, return success with existing record
+      if (existing.status === 'approved') {
+        return NextResponse.json({ ok: true, message: 'Email already approved', data: existing });
+      }
+      // If already pending, don't insert duplicate — respond with 409 Conflict
+      if (existing.status === 'pending') {
+        return NextResponse.json(
+          { error: 'A request for this email is already pending', data: existing },
+          { status: 409 }
+        );
+      }
+      // For any other status (e.g., rejected), we allow inserting a new request
+    }
+
     const insertResp = await client
       .from('access_requests')
       .insert({ email, status: 'pending' })
