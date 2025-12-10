@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/core/supabase';
+import { useToast } from '@/components/ui/toast';
 
 export default function AwaitingApprovalPage() {
   const search = useSearchParams();
@@ -10,7 +11,7 @@ export default function AwaitingApprovalPage() {
   const [checking, setChecking] = useState(true);
   const [approved, setApproved] = useState<boolean | null>(null);
   const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   useEffect(() => {
     async function check() {
@@ -63,22 +64,35 @@ export default function AwaitingApprovalPage() {
     check();
   }, [email, router]);
 
+  const [reqLoading, setReqLoading] = useState(false);
+
   const handleRequestAccess = async () => {
+    const emailToSend = userEmail || email || '';
+    if (!emailToSend) {
+      showToast({ message: 'No email available to request access for.', type: 'error' });
+      return;
+    }
+
+    setReqLoading(true);
     try {
       const res = await fetch('/api/access-requests', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: emailToSend }),
       });
       const payload = await res.json();
       if (!res.ok) {
-        setMessage(payload?.error || 'Failed to send request');
+        showToast({ message: payload?.error || 'Failed to send request', type: 'error' });
       } else {
-        setMessage('Request submitted. Redirecting to status page...');
-        router.push(`/awaiting-approval?email=${encodeURIComponent(email)}`);
+        showToast({
+          message: 'Request submitted. We will contact you when approved.',
+          type: 'success',
+        });
       }
     } catch (e) {
-      setMessage('Failed to send request');
+      showToast({ message: 'Failed to send request', type: 'error' });
+    } finally {
+      setReqLoading(false);
     }
   };
 
@@ -110,9 +124,12 @@ export default function AwaitingApprovalPage() {
               <button
                 type="button"
                 onClick={() => handleRequestAccess()}
-                className="px-4 py-2 bg-blue-600 text-white rounded"
+                disabled={reqLoading}
+                className={`px-4 py-2 text-white rounded ${
+                  reqLoading ? 'bg-blue-300' : 'bg-blue-600'
+                }`}
               >
-                Request access
+                {reqLoading ? 'Sending...' : 'Request access'}
               </button>
               <button
                 type="button"
@@ -129,8 +146,6 @@ export default function AwaitingApprovalPage() {
             </p>
           </>
         )}
-
-        {!checking && approved === null && <div className="text-sm text-slate-500">{message}</div>}
       </div>
     </div>
   );
