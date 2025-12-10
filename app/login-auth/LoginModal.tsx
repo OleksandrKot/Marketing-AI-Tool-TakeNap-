@@ -7,10 +7,12 @@ export default function LoginModal({
   trigger,
   onClose,
   onAuth,
+  defaultTab,
 }: {
   trigger?: React.ReactNode;
   onClose?: () => void;
   onAuth?: (user: Record<string, unknown> | null) => void;
+  defaultTab?: 'login' | 'register';
 }) {
   const [open, setOpen] = useState(() => (trigger ? false : true));
 
@@ -68,7 +70,7 @@ export default function LoginModal({
               </p>
             </header>
 
-            <AuthForm onAuth={handleAuth} />
+            <AuthForm onAuth={handleAuth} initialTab={defaultTab} />
           </div>
         </div>
       </ModalWrapper>

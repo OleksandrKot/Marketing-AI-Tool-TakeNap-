@@ -612,11 +612,12 @@ const PromptEditorModal = ({ ad, isOpen, onClose }: PromptEditorModalProps) => {
                               value={[videoSegment.start, videoSegment.end]}
                               onChange={(_, newValue) => {
                                 const [rangeStart, rangeEnd] = newValue as number[];
-                                setVideoSegment({ start: rangeStart, end: rangeEnd });
-
-                                // Seek video to the beginning of the selected segment
-                                if (videoRef.current) {
-                                  videoRef.current.currentTime = rangeStart;
+                                if (rangeEnd - rangeStart > 15) return false;
+                                else {
+                                  setVideoSegment({ start: rangeStart, end: rangeEnd });
+                                  if (videoRef.current) {
+                                    videoRef.current.currentTime = rangeStart;
+                                  }
                                 }
                               }}
                               // We use container-level mouse events to calculate tooltip position

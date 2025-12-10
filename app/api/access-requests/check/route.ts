@@ -21,7 +21,8 @@ export async function GET(req: Request) {
     }
 
     const isApproved = resp.data?.status === 'approved';
-    return NextResponse.json({ ok: true, approved: !!isApproved });
+    const isPending = resp.data?.status === 'pending';
+    return NextResponse.json({ ok: true, approved: !!isApproved, pending: !!isPending });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message || 'Unknown error' }, { status: 500 });
   }

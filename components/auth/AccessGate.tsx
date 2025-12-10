@@ -1,6 +1,7 @@
 'use client';
-import { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useAdmin } from '@/components/admin/AdminProvider';
+import { useRouter } from 'next/navigation';
 import { usePathname } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/core/supabase';
@@ -11,6 +12,10 @@ const LoginModal = dynamic(() => import('@/app/login-auth/LoginModal'), {
   loading: () => null,
 });
 
+// Memoize the dynamic modal component to avoid unnecessary parent re-renders
+type LoginModalProps = { onClose?: () => void; defaultTab?: 'login' | 'register' };
+const MemoLoginModal = React.memo(LoginModal as unknown as React.ComponentType<LoginModalProps>);
+
 export default function AccessGate() {
   const [checking, setChecking] = useState(true);
   const [allowed, setAllowed] = useState(false);
@@ -18,9 +23,11 @@ export default function AccessGate() {
   const [message, setMessage] = useState<string | null>(null);
   const [adminStatus, setAdminStatus] = useState<string | null>(null);
   const [approvedStatus, setApprovedStatus] = useState<string | null>(null);
+  const [userEmail, setUserEmail] = useState<string | null>(null);
   const adminCtx = useAdmin();
+  const router = useRouter();
+
   const doCheck = useCallback(async () => {
-    let mounted = true;
     setChecking(true);
     setMessage(null);
     setAdminStatus(null);
@@ -32,44 +39,40 @@ export default function AccessGate() {
         (sessionData as Record<string, unknown> | undefined)?.user ??
         (await supabase.auth.getUser()).data?.user ??
         null;
+
       if (!user) {
-        if (mounted) {
-          setAllowed(false);
-          setChecking(false);
-        }
+        setAllowed(false);
+        setChecking(false);
+        setUserEmail(null);
         return;
       }
-      const userEmail = ((user as Record<string, unknown>)?.['email'] as string | undefined) || '';
+
+      const emailStr = ((user as Record<string, unknown>)?.['email'] as string | undefined) || '';
+      setUserEmail(emailStr || null);
 
       // If the user is signed in, allow access to the main app immediately.
       // We still fetch admin/approval info for display, but do not block rendering.
-      if (mounted) {
-        setAllowed(true);
-        setChecking(false);
-      }
+      setAllowed(true);
+      setChecking(false);
 
       // Admin status is handled by the global AdminProvider; do not fetch here.
-
       try {
-        const req = await fetch(
-          `/api/access-requests/check?email=${encodeURIComponent(userEmail)}`
-        );
+        const req = await fetch(`/api/access-requests/check?email=${encodeURIComponent(emailStr)}`);
         const rj = await req.json();
         if (req.ok) {
-          if (mounted) setApprovedStatus(String(Boolean(rj?.approved)));
+          setApprovedStatus(String(Boolean(rj?.approved)));
+        } else {
+          setApprovedStatus('false');
         }
       } catch (e) {
-        if (mounted) setApprovedStatus('error');
+        setApprovedStatus('error');
       }
     } catch (e) {
-      if (mounted) {
-        setAllowed(false);
-        setChecking(false);
-      }
+      setAllowed(false);
+      setChecking(false);
+      setUserEmail(null);
+      setApprovedStatus('error');
     }
-    return () => {
-      mounted = false;
-    };
   }, []);
 
   useEffect(() => {
@@ -98,6 +101,15 @@ export default function AccessGate() {
     };
   }, [doCheck]);
 
+  // If not allowed after checks, automatically open the login modal on the register tab
+  useEffect(() => {
+    if (!checking && !allowed && pathname !== '/request-access') {
+      setShowLogin(true);
+    }
+    // only run when checking/allowed change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checking, allowed]);
+
   const handleRequestAccess = () => {
     // redirect to request-access page
     window.location.href = '/request-access';
@@ -118,7 +130,15 @@ export default function AccessGate() {
   // Do not block the request-access page itself so users can request access.
   if (pathname === '/request-access') return null;
 
-  if (!checking && allowed) return null;
+  // If the user is signed in but explicitly not approved, redirect to the
+  // awaiting-approval page so there's a single place that shows status.
+  useEffect(() => {
+    if (!checking && allowed && approvedStatus === 'false' && pathname !== '/awaiting-approval') {
+      const emailParam = userEmail ? `?email=${encodeURIComponent(userEmail)}` : '';
+      router.push(`/awaiting-approval${emailParam}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [checking, allowed, approvedStatus, userEmail]);
 
   const showModal = (checking || !allowed) && !showLogin;
 
@@ -206,7 +226,7 @@ export default function AccessGate() {
         )}
       </ModalWrapper>
 
-      {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
+      {showLogin && <MemoLoginModal onClose={() => setShowLogin(false)} defaultTab="register" />}
     </>
   );
 }
