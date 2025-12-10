@@ -1,7 +1,9 @@
 'use client';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 
 export default function RequestAccessPage() {
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -20,7 +22,8 @@ export default function RequestAccessPage() {
       if (!res.ok) {
         setMessage(payload?.error || 'Failed to send request');
       } else {
-        setMessage('Request submitted. We will contact you when approved.');
+        setMessage('Request submitted. Redirecting to status page...');
+        router.push(`/awaiting-approval?email=${encodeURIComponent(email)}`);
       }
     } catch (err) {
       setMessage((err as Error).message || 'Network error');

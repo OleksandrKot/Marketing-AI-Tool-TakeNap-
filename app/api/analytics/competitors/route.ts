@@ -12,6 +12,7 @@ import type {
   TimeSeriesData,
 } from '@/lib/core/types';
 import * as archiveUtils from '@/app/ad-archive-browser/utils';
+import type { Ad } from '@/lib/core/types';
 
 export const dynamic = 'force-dynamic';
 
@@ -123,28 +124,23 @@ function clusterVisualPatterns(
     .map((p, idx) => ({ ...p, id: `pattern_${idx}` }));
 }
 
-/**
- * Compute variation counts per ad (grouping-based)
- */
 function computeVariationCounts(ads: Array<Record<string, unknown>>): Record<string, number> {
-  const groupMap = new Map<string, Array<Record<string, unknown>>>();
+  const groupMap = new Map<string, Ad[]>();
   for (const ad of ads) {
-    const key = archiveUtils.getGroupingKey(ad as Record<string, unknown>);
+    const key = archiveUtils.getGroupingKey(ad as unknown as Ad);
     const arr = groupMap.get(key) ?? [];
-    arr.push(ad);
+    arr.push(ad as unknown as Ad);
     groupMap.set(key, arr);
   }
 
   const phashKeys = Array.from(groupMap.keys()).filter((k) => String(k).startsWith('phash:'));
-  const { keyToRep, repSize } = archiveUtils.buildPhashClustersFromKeys(
-    phashKeys,
-    groupMap as unknown as Map<string, Array<Record<string, unknown>>>,
-    4
-  );
+
+  // cast through unknown/any to satisfy the helper's expected Ad[] map without strict structural checks
+  const { keyToRep, repSize } = archiveUtils.buildPhashClustersFromKeys(phashKeys, groupMap, 4);
 
   const counts: Record<string, number> = {};
   for (const ad of ads) {
-    const key = archiveUtils.getGroupingKey(ad as Record<string, unknown>);
+    const key = archiveUtils.getGroupingKey(ad as unknown as Ad);
     const mapped = keyToRep.get(key) ?? key;
     let effectiveSize = 0;
     if (String(mapped).startsWith('phash:')) {
@@ -152,7 +148,7 @@ function computeVariationCounts(ads: Array<Record<string, unknown>>): Record<str
     } else {
       effectiveSize = groupMap.get(key)?.length ?? 1;
     }
-    counts[String(ad.id)] = Math.max(0, effectiveSize - 1);
+    counts[String((ad as unknown as Ad).id)] = Math.max(0, effectiveSize - 1);
   }
   return counts;
 }

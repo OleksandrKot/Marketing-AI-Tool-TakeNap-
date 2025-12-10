@@ -10,19 +10,10 @@ import type {
   DurationDistribution,
   CharacterDistribution,
   Ad,
+  TrendsData,
 } from '@/lib/core/types';
 
 export const dynamic = 'force-dynamic';
-
-export type TrendsData = {
-  themesOverTime: TimeSeriesData[];
-  funnelsOverTime: TimeSeriesData[];
-  patternsOverTime: VisualPattern[];
-  insights: {
-    increasing: string[];
-    decreasing: string[];
-  };
-};
 
 export async function GET(request: NextRequest) {
   try {
@@ -201,7 +192,7 @@ function calculateAnalytics(ads: Ad[], selectedCompetitors: string[]): Competito
   };
 
   // Trends over time
-  const trendsOverTime = calculateTrends(ads, themeCounts, funnelCounts);
+  const trendsOverTime = calculateTrends(ads);
 
   return {
     totalCreatives,

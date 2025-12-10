@@ -1,5 +1,6 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/core/supabase';
 import { Button } from '@/components/ui/button';
 
@@ -15,14 +16,21 @@ function getDisplayNameFromUser(u: unknown): string | undefined {
   return undefined;
 }
 
-export default function AuthForm({ onAuth }: { onAuth?: (user: UserLike) => void }) {
-  const [tab, setTab] = useState<'login' | 'register'>('login');
+export default function AuthForm({
+  onAuth,
+  initialTab,
+}: {
+  onAuth?: (user: UserLike) => void;
+  initialTab?: 'login' | 'register';
+}) {
+  const router = useRouter();
+  const [tab, setTab] = useState<'login' | 'register'>(initialTab ?? 'login');
   const [email, setEmail] = useState('');
   const emailRef = useRef<HTMLInputElement | null>(null);
   const [password, setPassword] = useState('');
   const [nickname, setNickname] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [error, setError] = useState<ReactNode | null>(null);
   const [success, setSuccess] = useState('');
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
   const [registeredEmail, setRegisteredEmail] = useState('');
@@ -40,7 +48,7 @@ export default function AuthForm({ onAuth }: { onAuth?: (user: UserLike) => void
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-    setError('');
+    setError(null);
     setSuccess('');
     if (tab === 'login') {
       const { data, error } = await supabase.auth.signInWithPassword({ email, password });
@@ -53,15 +61,12 @@ export default function AuthForm({ onAuth }: { onAuth?: (user: UserLike) => void
           );
           const payload = await check.json();
           if (!check.ok || !payload?.approved) {
-            // Not approved: inform user but DO NOT sign them out so the client session
-            // persists and the gate can show a clear "awaiting approval" state.
-            setError(
-              'Your access has not been approved yet. Please request access at /request-access.'
-            );
-            setSuccess('Signed in but awaiting approval.');
-            // call onAuth with the signed-in user so parent components know there's a session
+            // Not approved: keep the client session and redirect to the status page.
+            setError('Signed in but awaiting approval.');
+            setSuccess('Signed in — redirecting to approval status.');
             const user = (data as unknown as Record<string, unknown>)['user'] as unknown;
             onAuth?.({ ...(user as Record<string, unknown>), nickname: undefined } as UserLike);
+            router.push(`/awaiting-approval?email=${encodeURIComponent(email)}`);
             setLoading(false);
             return;
           }
@@ -97,34 +102,59 @@ export default function AuthForm({ onAuth }: { onAuth?: (user: UserLike) => void
 
         onAuth?.({ ...(user as Record<string, unknown>), nickname: profile?.nickname } as UserLike);
         if (profile?.nickname) localStorage.setItem('nickname', profile.nickname);
+
+        // After successful login, redirect based on approval status.
+        try {
+          const check = await fetch(
+            `/api/access-requests/check?email=${encodeURIComponent(email)}`
+          );
+          const payload = await check.json();
+          if (check.ok && payload?.approved) {
+            router.push('/');
+          } else {
+            router.push(`/awaiting-approval?email=${encodeURIComponent(email)}`);
+          }
+        } catch (e) {
+          // If check failed, still navigate to root so AccessGate can handle it.
+          router.push('/');
+        }
       }
     } else {
-      // Before registering, ensure email is allowed (admin approved a request)
-      try {
-        const check = await fetch(`/api/access-requests/check?email=${encodeURIComponent(email)}`);
-        const payload = await check.json();
-        if (!check.ok || !payload?.approved) {
-          setError('This email is not approved yet. Please request access first.');
-          setLoading(false);
-          return;
-        }
-      } catch (err) {
-        // If check fails, block registration by default to be safe
-        setError('Could not verify access approval. Please try again later.');
-        setLoading(false);
-        return;
-      }
+      // Allow registration for all emails. The awaiting-approval flow will
+      // inform the user of their approval status after sign-up.
 
       // Register user - include display_name in auth user metadata
       const { error } = await supabase.auth.signUp({ email, password });
-      if (error) setError(error.message);
-      else {
-        // Don't auto-sign-in. Show explicit confirmation notice and keep modal open
+      if (error) {
+        setError(error.message);
+      } else {
+        // Store nickname locally so we can persist it after confirmation if needed
+        if (nickname) localStorage.setItem('nickname', nickname);
+
+        // If registration succeeded but confirmation is required, we still navigate
+        // to the awaiting approval page which will show status and next steps.
         setSuccess('Registration successful — check your email to confirm your account.');
         setNeedsConfirmation(true);
         setRegisteredEmail(email);
-        // Store nickname locally so we can persist it after confirmation if needed
-        if (nickname) localStorage.setItem('nickname', nickname);
+
+        // Redirect the user to the awaiting-approval page (the page will show
+        // whether the email is pending approval or already approved).
+        try {
+          // If the signUp returned a session (no email confirmation required),
+          // check approval and redirect appropriately. Otherwise go to status page.
+          const emailToCheck = email;
+          const check = await fetch(
+            `/api/access-requests/check?email=${encodeURIComponent(emailToCheck)}`
+          );
+          const payload = await check.json();
+          if (check.ok && payload?.approved) {
+            router.push('/');
+          } else {
+            router.push(`/awaiting-approval?email=${encodeURIComponent(emailToCheck)}`);
+          }
+        } catch (e) {
+          router.push(`/awaiting-approval?email=${encodeURIComponent(email)}`);
+        }
       }
     }
     setLoading(false);
