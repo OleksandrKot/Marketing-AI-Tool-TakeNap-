@@ -309,12 +309,62 @@ export function useAdArchive(
   }, [ads, selectedCreativeType]);
 
   const groupedAll = useMemo(() => {
+    // Build groups only from DB-provided duplicate links. All other ads remain
+    // as singletons (no global grouping by phash/image/text).
+    const n = filteredAdsByType.length;
+    const idToIndex = new Map<number, number>();
+    const archiveIdToIndex = new Map<string, number>();
+    for (let i = 0; i < n; i++) {
+      const a = filteredAdsByType[i];
+      idToIndex.set(Number(a.id), i);
+      if (a.ad_archive_id) archiveIdToIndex.set(String(a.ad_archive_id), i);
+    }
+
+    const parent = new Array<number>(n).fill(0).map((_, i) => i);
+    const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+    const union = (a: number, b: number) => {
+      const ra = find(a);
+      const rb = find(b);
+      if (ra === rb) return;
+      parent[rb] = ra;
+    };
+
+    const tryResolveTokenToIndex = (token: string): number | null => {
+      const t = String(token).trim();
+      if (t.length === 0) return null;
+      // numeric id match
+      const asNum = Number(t);
+      if (Number.isFinite(asNum) && idToIndex.has(asNum)) return idToIndex.get(asNum) ?? null;
+      // ad_archive_id match
+      if (archiveIdToIndex.has(t)) return archiveIdToIndex.get(t) ?? null;
+      // ad_archive_id substring match (common when token is a URL)
+      for (const [aid, idx] of archiveIdToIndex.entries()) {
+        if (t.includes(aid)) return idx;
+      }
+      return null;
+    };
+
+    for (let i = 0; i < n; i++) {
+      const a = filteredAdsByType[i];
+      const raw = a.duplicates_links ?? '';
+      if (!raw || typeof raw !== 'string') continue;
+      const parts = raw
+        .split(/[,\n\s]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      for (const p of parts) {
+        const otherIdx = tryResolveTokenToIndex(p);
+        if (otherIdx !== null && otherIdx !== undefined) union(i, otherIdx);
+      }
+    }
+
     const map = new Map<string, Ad[]>();
-    for (const ad of filteredAdsByType) {
-      const key = utils.getGroupingKey(ad);
-      const arr = map.get(key);
-      if (arr) arr.push(ad);
-      else map.set(key, [ad]);
+    for (let i = 0; i < n; i++) {
+      const r = find(i);
+      const key = String(filteredAdsByType[r].id ?? r);
+      const arr = map.get(key) ?? [];
+      arr.push(filteredAdsByType[i]);
+      map.set(key, arr);
     }
     return map;
   }, [filteredAdsByType]);
@@ -329,54 +379,57 @@ export function useAdArchive(
   const dedupedAds = useMemo(() => {
     if (!filteredAdsByType || filteredAdsByType.length === 0) return [] as Ad[];
 
-    const groupMap = new Map<string, Ad[]>();
-    for (const ad of filteredAdsByType) {
-      const key = utils.getGroupingKey(ad);
-      const arr = groupMap.get(key) ?? [];
-      arr.push(ad);
-      groupMap.set(key, arr);
-    }
+    // Use duplicate-based groups computed above
+    const adIdToGroupLocal = new Map<string, Ad[]>();
+    groupedAll.forEach((g) => {
+      for (const a of g) adIdToGroupLocal.set(String(a.id), g);
+    });
 
-    const phashKeys = Array.from(groupMap.keys()).filter((k) => k.startsWith('phash:'));
+    // const phashKeys = Array.from(groupMap.keys()).filter((k) => k.startsWith('phash:'));
 
-    try {
-      console.debug(
-        '[useAdArchive] PHASH_HAMMING_THRESHOLD=',
-        PHASH_HAMMING_THRESHOLD,
-        'PHASH_GROUP_COLLAPSE_THRESHOLD=',
-        PHASH_GROUP_COLLAPSE_THRESHOLD,
-        'phashKeysCount=',
-        phashKeys.length
-      );
-    } catch (e) {
-      /* noop */
-    }
+    // pHash-based clustering/sorting temporarily disabled — keep code for reference
+    // try {
+    //   console.debug(
+    //     '[useAdArchive] PHASH_HAMMING_THRESHOLD=',
+    //     PHASH_HAMMING_THRESHOLD,
+    //     'PHASH_GROUP_COLLAPSE_THRESHOLD=',
+    //     PHASH_GROUP_COLLAPSE_THRESHOLD,
+    //     'phashKeysCount=',
+    //     phashKeys.length
+    //   );
+    // } catch (e) {
+    //   /* noop */
+    // }
 
-    const { phashClusters, keyToRep } = utils.buildPhashClustersFromKeys(
-      phashKeys,
-      groupMap,
-      PHASH_HAMMING_THRESHOLD
-    );
+    // const { phashClusters, keyToRep } = utils.buildPhashClustersFromKeys(
+    //   phashKeys,
+    //   groupMap,
+    //   PHASH_HAMMING_THRESHOLD
+    // );
+
+    // Use empty stubs so downstream logic treats items as non-phash clustered
+    // const phashClusters = new Map<string, string[]>();
+    // const keyToRep = new Map<string, string>();
 
     const seenGroup = new Set<string>();
     const out: Ad[] = [];
     for (const ad of filteredAdsByType) {
-      const key = utils.getGroupingKey(ad);
-      const mapped = keyToRep.get(key) ?? key;
+      const group = adIdToGroupLocal.get(String(ad.id)) ?? [ad];
+      const mapped = String(group[0]?.id ?? ad.id);
       if (seenGroup.has(mapped)) continue;
-      const group = groupMap.get(key) ?? [ad];
+      // let effectiveSize = group.length; // kept for reference
+      // pHash clustering is disabled — keep original logic commented for reference
+      // if (mapped !== key) {
+      //   const keysInCluster = phashClusters.get(mapped) ?? [];
+      //   effectiveSize = keysInCluster.reduce((sum, kk) => sum + (groupMap.get(kk)?.length ?? 0), 0);
+      // }
 
-      let effectiveSize = group.length;
-      if (mapped !== key) {
-        const keysInCluster = phashClusters.get(mapped) ?? [];
-        effectiveSize = keysInCluster.reduce((sum, kk) => sum + (groupMap.get(kk)?.length ?? 0), 0);
-      }
-
-      const isPhashBased = mapped.startsWith('phash:');
-      const shouldCollapse = isPhashBased
-        ? effectiveSize >= PHASH_GROUP_COLLAPSE_THRESHOLD &&
-          effectiveSize <= PHASH_GROUP_MAX_COLLAPSE
-        : group.length > 1;
+      // const isPhashBased = mapped.startsWith('phash:');
+      // const shouldCollapse = isPhashBased
+      //   ? effectiveSize >= PHASH_GROUP_COLLAPSE_THRESHOLD &&
+      //     effectiveSize <= PHASH_GROUP_MAX_COLLAPSE
+      //   : group.length > 1;
+      const shouldCollapse = group.length > 1;
 
       if (shouldCollapse) {
         const rep = group.slice().sort((a, b) => {
@@ -403,32 +456,15 @@ export function useAdArchive(
     const out: Record<string, number> = {};
     if (!filteredAdsByType || filteredAdsByType.length === 0) return out;
 
-    const groupMap = new Map<string, Ad[]>();
-    for (const ad of filteredAdsByType) {
-      const key = utils.getGroupingKey(ad);
-      const arr = groupMap.get(key) ?? [];
-      arr.push(ad);
-      groupMap.set(key, arr);
-    }
-
-    const phashKeys = Array.from(groupMap.keys()).filter((k) => k.startsWith('phash:'));
-
-    const { keyToRep, repSize } = utils.buildPhashClustersFromKeys(
-      phashKeys,
-      groupMap,
-      PHASH_HAMMING_THRESHOLD
-    );
+    // Compute related counts from duplicate-based groups
+    const adIdToGroupLocal = new Map<string, Ad[]>();
+    groupedAll.forEach((g) => {
+      for (const a of g) adIdToGroupLocal.set(String(a.id), g);
+    });
 
     for (const ad of filteredAdsByType) {
-      const key = utils.getGroupingKey(ad);
-      const mapped = keyToRep.get(key) ?? key;
-      let effectiveSize = 0;
-      if (mapped.startsWith('phash:')) {
-        effectiveSize = repSize.get(mapped) ?? groupMap.get(mapped)?.length ?? 1;
-      } else {
-        effectiveSize = groupMap.get(key)?.length ?? 1;
-      }
-      out[ad.id] = Math.max(0, effectiveSize - 1);
+      const group = adIdToGroupLocal.get(String(ad.id)) ?? [ad];
+      out[ad.id] = Math.max(0, group.length - 1);
     }
 
     return out;
@@ -456,8 +492,6 @@ export function useAdArchive(
         });
         try {
           if (typeof window !== 'undefined') {
-            // Log mode and top items to help debug sorting issues in browser
-            // eslint-disable-next-line no-console
             console.debug(
               '[useAdArchive] sort=most_variations top=',
               sorted

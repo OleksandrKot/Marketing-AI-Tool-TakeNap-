@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { extractDataArray } from '@/lib/core/utils';
 import { useToast } from '@/components/ui/toast';
-import * as archiveUtils from '@/app/ad-archive-browser/utils';
+// import * as archiveUtils from '@/app/ad-archive-browser/utils';
 import ResultsGrid from '@/app/ad-archive-browser/components/ResultsGrid';
 import type { ViewMode } from '@/lib/core/types';
 import FilterPanel from '@/app/filter-bar/components/FilterPanel';
@@ -426,36 +426,67 @@ export default function FilteredContainer({
         // Special handling for variation-count buckets
         if ((key as string) === 'variationCount') {
           try {
-            // Build grouping (same logic as archive grouping)
-            const groupMap = new Map<string, Ad[]>();
-            for (const ad of subset) {
-              const k = archiveUtils.getGroupingKey(ad);
-              const arr = groupMap.get(k) ?? [];
-              arr.push(ad);
-              groupMap.set(k, arr);
+            // Build duplicate-only grouping from subset using duplicates_links
+            const n = subset.length;
+            const idToIndex = new Map<number, number>();
+            const archiveIdToIndex = new Map<string, number>();
+            for (let i = 0; i < n; i++) {
+              const a = subset[i];
+              idToIndex.set(Number(a.id), i);
+              if (a.ad_archive_id) archiveIdToIndex.set(String(a.ad_archive_id), i);
             }
 
-            const phashKeys = Array.from(groupMap.keys()).filter((k) =>
-              String(k).startsWith('phash:')
-            );
-            const { keyToRep, repSize } = archiveUtils.buildPhashClustersFromKeys(
-              phashKeys,
-              groupMap,
-              4
-            );
+            const parent = new Array<number>(n).fill(0).map((_, i) => i);
+            const find = (i: number) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+            const union = (a: number, b: number) => {
+              const ra = find(a);
+              const rb = find(b);
+              if (ra === rb) return;
+              parent[rb] = ra;
+            };
+
+            const tryResolveTokenToIndex = (token: string): number | null => {
+              const t = String(token).trim();
+              if (t.length === 0) return null;
+              const asNum = Number(t);
+              if (Number.isFinite(asNum) && idToIndex.has(asNum))
+                return idToIndex.get(asNum) ?? null;
+              if (archiveIdToIndex.has(t)) return archiveIdToIndex.get(t) ?? null;
+              for (const [aid, idx] of archiveIdToIndex.entries()) {
+                if (t.includes(aid)) return idx;
+              }
+              return null;
+            };
+
+            for (let i = 0; i < n; i++) {
+              const a = subset[i];
+              const raw = a.duplicates_links ?? '';
+              if (!raw || typeof raw !== 'string') continue;
+              const parts = raw
+                .split(/[,\n\s]+/)
+                .map((s) => s.trim())
+                .filter(Boolean);
+              for (const p of parts) {
+                const otherIdx = tryResolveTokenToIndex(p);
+                if (otherIdx !== null && otherIdx !== undefined) union(i, otherIdx);
+              }
+            }
+
+            const groups: Ad[][] = [];
+            const repMap = new Map<number, number>();
+            for (let i = 0; i < n; i++) {
+              const r = find(i);
+              const ridx = repMap.get(r) ?? groups.length;
+              if (!repMap.has(r)) repMap.set(r, ridx);
+              const arr = groups[ridx] ?? [];
+              arr.push(subset[i]);
+              groups[ridx] = arr;
+            }
 
             let matchCount = 0;
-            for (const ad of subset) {
-              const k = archiveUtils.getGroupingKey(ad);
-              const mapped = keyToRep.get(k) ?? k;
-              let effectiveSize = 0;
-              if (String(mapped).startsWith('phash:')) {
-                effectiveSize = repSize.get(mapped) ?? groupMap.get(mapped)?.length ?? 1;
-              } else {
-                effectiveSize = groupMap.get(k)?.length ?? 1;
-              }
+            for (const g of groups) {
+              const effectiveSize = g.length;
               const related = Math.max(0, effectiveSize - 1);
-
               const bucket = String(v);
               let matched = false;
               switch (bucket) {
@@ -474,7 +505,7 @@ export default function FilteredContainer({
                 default:
                   matched = false;
               }
-              if (matched) matchCount++;
+              if (matched) matchCount += g.length;
             }
             out[v] = matchCount;
           } catch (e) {
@@ -630,51 +661,92 @@ export default function FilteredContainer({
       });
     }
 
-    // Variation-count bucket filter (grouping-based)
+    // Variation-count bucket filter (grouping-based using DB duplicates only)
     if (filters.variationCount) {
       try {
-        const groupMap = new Map<string, Ad[]>();
-        for (const ad of filtered) {
-          const k = archiveUtils.getGroupingKey(ad);
-          const arr = groupMap.get(k) ?? [];
-          arr.push(ad);
-          groupMap.set(k, arr);
+        const subset = filtered;
+        const n = subset.length;
+        const idToIndex = new Map<number, number>();
+        const archiveIdToIndex = new Map<string, number>();
+        for (let i = 0; i < n; i++) {
+          const a = subset[i];
+          idToIndex.set(Number(a.id), i);
+          if (a.ad_archive_id) archiveIdToIndex.set(String(a.ad_archive_id), i);
         }
 
-        const phashKeys = Array.from(groupMap.keys()).filter((k) => String(k).startsWith('phash:'));
-        const { keyToRep, repSize } = archiveUtils.buildPhashClustersFromKeys(
-          phashKeys,
-          groupMap as Map<string, Ad[]>,
-          4
-        );
+        const parent = new Array<number>(n).fill(0).map((_, i) => i);
+        const find = (i: number) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+        const union = (a: number, b: number) => {
+          const ra = find(a);
+          const rb = find(b);
+          if (ra === rb) return;
+          parent[rb] = ra;
+        };
+
+        const tryResolveTokenToIndex = (token: string): number | null => {
+          const t = String(token).trim();
+          if (t.length === 0) return null;
+          const asNum = Number(t);
+          if (Number.isFinite(asNum) && idToIndex.has(asNum)) return idToIndex.get(asNum) ?? null;
+          if (archiveIdToIndex.has(t)) return archiveIdToIndex.get(t) ?? null;
+          for (const [aid, idx] of archiveIdToIndex.entries()) {
+            if (t.includes(aid)) return idx;
+          }
+          return null;
+        };
+
+        for (let i = 0; i < n; i++) {
+          const a = subset[i];
+          const raw = a.duplicates_links ?? '';
+          if (!raw || typeof raw !== 'string') continue;
+          const parts = raw
+            .split(/[,\n\s]+/)
+            .map((s) => s.trim())
+            .filter(Boolean);
+          for (const p of parts) {
+            const otherIdx = tryResolveTokenToIndex(p);
+            if (otherIdx !== null && otherIdx !== undefined) union(i, otherIdx);
+          }
+        }
+
+        const groups: Ad[][] = [];
+        const repMap = new Map<number, number>();
+        for (let i = 0; i < n; i++) {
+          const r = find(i);
+          const ridx = repMap.get(r) ?? groups.length;
+          if (!repMap.has(r)) repMap.set(r, ridx);
+          const arr = groups[ridx] ?? [];
+          arr.push(subset[i]);
+          groups[ridx] = arr;
+        }
 
         const bucket = String(filters.variationCount);
-        filtered = filtered.filter((ad) => {
-          const k = archiveUtils.getGroupingKey(ad);
-          const mapped = keyToRep.get(k) ?? k;
-          let effectiveSize = 0;
-          if (String(mapped).startsWith('phash:')) {
-            effectiveSize = repSize.get(mapped) ?? groupMap.get(mapped)?.length ?? 1;
-          } else {
-            effectiveSize = groupMap.get(k)?.length ?? 1;
-          }
+        const keepIds = new Set<number>();
+        for (const g of groups) {
+          const effectiveSize = g.length;
           const related = Math.max(0, effectiveSize - 1);
-
+          let matched = false;
           switch (bucket) {
             case 'more_than_10':
-              return related >= 11;
+              matched = related >= 11;
+              break;
             case '5_10':
-              return related >= 5 && related <= 10;
+              matched = related >= 5 && related <= 10;
+              break;
             case '3_5':
-              return related >= 3 && related <= 5;
+              matched = related >= 3 && related <= 5;
+              break;
             case 'less_than_3':
-              return related === 1 || related === 2;
+              matched = related === 1 || related === 2;
+              break;
             default:
-              return true;
+              matched = false;
           }
-        });
+          if (matched) for (const a of g) keepIds.add(Number(a.id));
+        }
+
+        filtered = filtered.filter((ad) => keepIds.has(Number(ad.id)));
       } catch (e) {
-        // if anything fails, keep the current filtered set (fail-open)
         console.debug('variationCount filter failed', e);
       }
     }
@@ -714,45 +786,91 @@ export default function FilteredContainer({
   } = useMemo(() => {
     const filteredAdsByType = filteredAds;
 
+    // Build grouping only from DB duplicates (duplicates_links). All other
+    // ads remain as singletons.
+    const n = filteredAdsByType.length;
+    const idToIndex = new Map<number, number>();
+    const archiveIdToIndex = new Map<string, number>();
+    for (let i = 0; i < n; i++) {
+      const a = filteredAdsByType[i];
+      idToIndex.set(Number(a.id), i);
+      if (a.ad_archive_id) archiveIdToIndex.set(String(a.ad_archive_id), i);
+    }
+
+    const parent = new Array<number>(n).fill(0).map((_, i) => i);
+    const find = (i: number) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+    const union = (a: number, b: number) => {
+      const ra = find(a);
+      const rb = find(b);
+      if (ra === rb) return;
+      parent[rb] = ra;
+    };
+
+    const tryResolveTokenToIndex = (token: string): number | null => {
+      const t = String(token).trim();
+      if (t.length === 0) return null;
+      const asNum = Number(t);
+      if (Number.isFinite(asNum) && idToIndex.has(asNum)) return idToIndex.get(asNum) ?? null;
+      if (archiveIdToIndex.has(t)) return archiveIdToIndex.get(t) ?? null;
+      for (const [aid, idx] of archiveIdToIndex.entries()) {
+        if (t.includes(aid)) return idx;
+      }
+      return null;
+    };
+
+    for (let i = 0; i < n; i++) {
+      const a = filteredAdsByType[i];
+      const raw = a.duplicates_links ?? '';
+      if (!raw || typeof raw !== 'string') continue;
+      const parts = raw
+        .split(/[,\n\s]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+      for (const p of parts) {
+        const otherIdx = tryResolveTokenToIndex(p);
+        if (otherIdx !== null && otherIdx !== undefined) union(i, otherIdx);
+      }
+    }
+
     const groupMap = new Map<string, typeof filteredAdsByType>();
-    for (const ad of filteredAdsByType) {
-      const key = archiveUtils.getGroupingKey(ad);
+    for (let i = 0; i < n; i++) {
+      const r = find(i);
+      const key = String(filteredAdsByType[r].id ?? r);
       const arr = groupMap.get(key) ?? [];
-      arr.push(ad);
+      arr.push(filteredAdsByType[i]);
       groupMap.set(key, arr);
     }
 
-    const phashKeys = Array.from(groupMap.keys()).filter((k) => String(k).startsWith('phash:'));
+    // const phashKeys = Array.from(groupMap.keys()).filter((k) => String(k).startsWith('phash:'));
 
-    const PHASH_GROUP_COLLAPSE_THRESHOLD_LOCAL = currentFilters ? 3 : 2;
-    const PHASH_GROUP_MAX_COLLAPSE_LOCAL = 15;
-    const PHASH_HAMMING_THRESHOLD_LOCAL = 4;
+    // PHASH_GROUP_COLLAPSE_THRESHOLD_LOCAL = currentFilters ? 3 : 2;
+    // const PHASH_GROUP_COLLAPSE_THRESHOLD_LOCAL = currentFilters ? 3 : 2;
+    // const PHASH_GROUP_MAX_COLLAPSE_LOCAL = 15;
+    // const PHASH_HAMMING_THRESHOLD_LOCAL = 4;
 
-    const { phashClusters, keyToRep } = archiveUtils.buildPhashClustersFromKeys(
-      phashKeys,
-      groupMap as Map<string, Ad[]>,
-      PHASH_HAMMING_THRESHOLD_LOCAL
-    );
+    // pHash clustering currently disabled for Advanced Filter grouping — kept for reference
+    // const { phashClusters, keyToRep } = archiveUtils.buildPhashClustersFromKeys(
+    //   phashKeys,
+    //   groupMap as Map<string, Ad[]>,
+    //   PHASH_HAMMING_THRESHOLD_LOCAL
+    // );
+    // const phashClusters = new Map<string, string[]>();
+    // const keyToRep = new Map<string, string>();
+
+    const adIdToGroupLocal = new Map<string, typeof filteredAdsByType>();
+    groupMap.forEach((grp) => {
+      for (const a of grp) adIdToGroupLocal.set(String(a.id), grp);
+    });
 
     const seenGroup = new Set<string>();
     const out: typeof filteredAdsByType = [];
     for (const ad of filteredAdsByType) {
-      const key = archiveUtils.getGroupingKey(ad);
-      const mapped = keyToRep.get(key) ?? key;
+      const group = adIdToGroupLocal.get(String(ad.id)) ?? [ad];
+      const mapped = String(group[0]?.id ?? ad.id);
       if (seenGroup.has(mapped)) continue;
-      const group = groupMap.get(key) ?? [ad];
 
-      let effectiveSize = group.length;
-      if (mapped !== key) {
-        const keysInCluster = phashClusters.get(mapped) ?? [];
-        effectiveSize = keysInCluster.reduce((sum, kk) => sum + (groupMap.get(kk)?.length ?? 0), 0);
-      }
-
-      const isPhashBased = String(mapped).startsWith('phash:');
-      const shouldCollapse = isPhashBased
-        ? effectiveSize >= PHASH_GROUP_COLLAPSE_THRESHOLD_LOCAL &&
-          effectiveSize <= PHASH_GROUP_MAX_COLLAPSE_LOCAL
-        : group.length > 1;
+      // const effectiveSize = group.length; // kept for reference
+      const shouldCollapse = group.length > 1;
 
       if (shouldCollapse) {
         const rep = group.slice().sort((a, b) => {
@@ -772,22 +890,10 @@ export default function FilteredContainer({
       for (const a of grp) adIdToGroupMapOut[a.id] = grp;
     });
 
-    // compute related counts
-    const { keyToRep: keyToRep2, repSize } = archiveUtils.buildPhashClustersFromKeys(
-      phashKeys,
-      groupMap as Map<string, Ad[]>,
-      PHASH_HAMMING_THRESHOLD_LOCAL
-    );
+    // compute related counts from duplicate-based groups
     const adIdToRelatedCountOut: Record<string, number> = {};
     for (const ad of filteredAdsByType) {
-      const key = archiveUtils.getGroupingKey(ad);
-      const mapped = keyToRep2.get(key) ?? key;
-      let effectiveSize = 0;
-      if (String(mapped).startsWith('phash:')) {
-        effectiveSize = repSize.get(mapped) ?? groupMap.get(mapped)?.length ?? 1;
-      } else {
-        effectiveSize = groupMap.get(key)?.length ?? 1;
-      }
+      const effectiveSize = adIdToGroupMapOut[String(ad.id)]?.length ?? 1;
       adIdToRelatedCountOut[ad.id] = Math.max(0, effectiveSize - 1);
     }
 
