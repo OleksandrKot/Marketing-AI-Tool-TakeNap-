@@ -46,6 +46,9 @@ export async function getAds(
       meta_ad_url,
       image_url,
       image_description,
+      duplicates_links,
+      duplicates_ad_text,
+      duplicates_preview_image,
       new_scenario,
       tags,
       concept,
@@ -206,6 +209,19 @@ export async function getAds(
       });
 
       const withSigned = await Promise.all(signedPromises);
+      try {
+        // Log a small sample (first 3) so devs can inspect returned shape.
+        // This is a temporary debug log and can be removed later.
+        // eslint-disable-next-line no-console
+        console.debug(
+          '[getAds] sample returned ads count=',
+          (withSigned || []).length,
+          'sample=',
+          JSON.stringify((withSigned || []).slice(0, 3))
+        );
+      } catch (e) {
+        /* noop */
+      }
       return withSigned as Ad[];
     } catch (e) {
       console.error('Error generating signed URLs:', e);

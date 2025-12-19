@@ -1,11 +1,11 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { FileText, Info, Zap } from 'lucide-react';
+import { FileText, Info } from 'lucide-react';
 
 interface CreativeTabsProps {
-  activeTab: 'content' | 'info' | 'adaptations';
-  onTabChange: (tab: 'content' | 'info' | 'adaptations') => void;
+  activeTab: 'content' | 'info';
+  onTabChange: (tab: 'content' | 'info') => void;
 }
 
 export function CreativeTabs({ activeTab, onTabChange }: CreativeTabsProps) {
@@ -34,18 +34,6 @@ export function CreativeTabs({ activeTab, onTabChange }: CreativeTabsProps) {
       >
         <Info className="h-4 w-4 mr-2" />
         Info
-      </Button>
-      <Button
-        variant="ghost"
-        className={`h-12 px-6 rounded-none font-medium transition-all duration-200 ${
-          activeTab === 'adaptations'
-            ? 'bg-blue-600 text-white'
-            : 'bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-700'
-        }`}
-        onClick={() => onTabChange('adaptations')}
-      >
-        <Zap className="h-4 w-4 mr-2" />
-        Adaptations
       </Button>
     </div>
   );

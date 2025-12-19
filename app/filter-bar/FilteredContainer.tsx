@@ -3,7 +3,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { extractDataArray } from '@/lib/core/utils';
 import { useToast } from '@/components/ui/toast';
-// import * as archiveUtils from '@/app/ad-archive-browser/utils';
 import ResultsGrid from '@/app/ad-archive-browser/components/ResultsGrid';
 import type { ViewMode } from '@/lib/core/types';
 import FilterPanel from '@/app/filter-bar/components/FilterPanel';
@@ -23,7 +22,7 @@ interface FilterOptions {
   hookFormat: string;
   characterFormat: string;
   variationCount?: string;
-  funnels?: string[]; // selected funnels (multi)
+  funnels?: string[]; // multi-select
 }
 
 interface FilteredContainerProps {
@@ -32,6 +31,249 @@ interface FilteredContainerProps {
 }
 
 type SortMode = 'auto' | 'most_variations' | 'least_variations' | 'newest';
+type FunnelsMap = Record<string, string[]>;
+
+/** -----------------------------
+ *  Helpers (pure functions)
+ *  ---------------------------- */
+
+function normalizePlatforms(raw?: string | null) {
+  return (raw || '')
+    .split(',')
+    .map((p) => p.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function applyDateRangeFilter(ads: Ad[], dateRange: string) {
+  if (!dateRange) return ads;
+
+  const now = new Date();
+  let startDate: Date;
+
+  switch (dateRange) {
+    case 'today':
+      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      break;
+    case 'week':
+      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      break;
+    case 'month':
+      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      break;
+    case 'quarter':
+      startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+      break;
+    default:
+      startDate = new Date(0);
+  }
+
+  return ads.filter((ad) => new Date(ad.created_at) >= startDate);
+}
+
+/**
+ * Apply all non-variation filters.
+ * IMPORTANT: funnels filter applies only when funnels.length > 0 (fix for "all zeros").
+ */
+function applyFilters(sourceAds: Ad[], filters: FilterOptions, adIdToFunnels: FunnelsMap): Ad[] {
+  let out = sourceAds;
+
+  // Search
+  if (filters.searchQuery) {
+    const q = filters.searchQuery.toLowerCase();
+    out = out.filter(
+      (ad) =>
+        ad.title?.toLowerCase().includes(q) ||
+        ad.text?.toLowerCase().includes(q) ||
+        ad.page_name?.toLowerCase().includes(q)
+    );
+  }
+
+  // Page name
+  if (filters.pageName) {
+    out = out.filter((ad) => ad.page_name === filters.pageName);
+  }
+
+  // Publisher platform
+  if (filters.publisherPlatform) {
+    const wanted = filters.publisherPlatform.toLowerCase();
+    out = out.filter((ad) => normalizePlatforms(ad.publisher_platform).includes(wanted));
+  }
+
+  // Simple equals filters
+  if (filters.ctaType) out = out.filter((ad) => ad.cta_type === filters.ctaType);
+  if (filters.displayFormat) out = out.filter((ad) => ad.display_format === filters.displayFormat);
+  if (filters.conceptFormat) out = out.filter((ad) => ad.concept === filters.conceptFormat);
+  if (filters.realizationFormat)
+    out = out.filter((ad) => ad.realisation === filters.realizationFormat);
+  if (filters.topicFormat) out = out.filter((ad) => ad.topic === filters.topicFormat);
+  if (filters.hookFormat) out = out.filter((ad) => ad.hook === filters.hookFormat);
+  if (filters.characterFormat) out = out.filter((ad) => ad.character === filters.characterFormat);
+
+  // Date range
+  if (filters.dateRange) {
+    out = applyDateRangeFilter(out, filters.dateRange);
+  }
+
+  // Funnels (OR multi-select) — FIX: only when length > 0
+  if (filters.funnels && Array.isArray(filters.funnels) && filters.funnels.length > 0) {
+    const sels = filters.funnels.map((s) => String(s).toLowerCase());
+    out = out.filter((ad) => {
+      const adFunnels = adIdToFunnels[String(ad.id)] || [];
+      return sels.some((sv) =>
+        adFunnels.some(
+          (af) => String(af).toLowerCase().includes(sv) || sv.includes(String(af).toLowerCase())
+        )
+      );
+    });
+  }
+
+  return out;
+}
+
+/**
+ * Build DSU duplicate groups from subset using duplicates_links + id/ad_archive_id resolution.
+ * Returns groups of ads.
+ */
+function buildDuplicateGroups(subset: Ad[]): Ad[][] {
+  const n = subset.length;
+  if (n === 0) return [];
+
+  const idToIndex = new Map<number, number>();
+  const archiveIdToIndex = new Map<string, number>();
+
+  for (let i = 0; i < n; i++) {
+    const a = subset[i];
+    idToIndex.set(Number(a.id), i);
+    if (a.ad_archive_id) archiveIdToIndex.set(String(a.ad_archive_id), i);
+  }
+
+  const parent = new Array<number>(n).fill(0).map((_, i) => i);
+  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+  const union = (a: number, b: number) => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent[rb] = ra;
+  };
+
+  const tryResolveTokenToIndex = (token: string): number | null => {
+    const t = String(token).trim();
+    if (!t) return null;
+
+    const asNum = Number(t);
+    if (Number.isFinite(asNum) && idToIndex.has(asNum)) return idToIndex.get(asNum) ?? null;
+
+    if (archiveIdToIndex.has(t)) return archiveIdToIndex.get(t) ?? null;
+
+    // fallback: token contains archiveId
+    for (const [aid, idx] of archiveIdToIndex.entries()) {
+      if (t.includes(aid)) return idx;
+    }
+    return null;
+  };
+
+  for (let i = 0; i < n; i++) {
+    const a = subset[i];
+    const raw = a.duplicates_links ?? '';
+    if (!raw || typeof raw !== 'string') continue;
+
+    const parts = raw
+      .split(/[,\n\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    for (const p of parts) {
+      const otherIdx = tryResolveTokenToIndex(p);
+      if (otherIdx !== null && otherIdx !== undefined) union(i, otherIdx);
+    }
+  }
+
+  const repToGroupIndex = new Map<number, number>();
+  const groups: Ad[][] = [];
+
+  for (let i = 0; i < n; i++) {
+    const r = find(i);
+    const gi = repToGroupIndex.get(r) ?? groups.length;
+    if (!repToGroupIndex.has(r)) repToGroupIndex.set(r, gi);
+    const arr = groups[gi] ?? [];
+    arr.push(subset[i]);
+    groups[gi] = arr;
+  }
+
+  return groups;
+}
+
+function matchesVariationBucket(groupSize: number, bucket: string) {
+  const related = Math.max(0, groupSize - 1);
+  switch (bucket) {
+    case 'more_than_10':
+      return related >= 11;
+    case '5_10':
+      return related >= 5 && related <= 10;
+    case '3_5':
+      return related >= 3 && related <= 5;
+    case 'less_than_3':
+      return related === 1 || related === 2;
+    default:
+      return false;
+  }
+}
+
+function filterByVariationBucket(subset: Ad[], bucket: string): Ad[] {
+  if (!bucket) return subset;
+  const groups = buildDuplicateGroups(subset);
+  const keepIds = new Set<number>();
+
+  for (const g of groups) {
+    if (matchesVariationBucket(g.length, bucket)) {
+      for (const a of g) keepIds.add(Number(a.id));
+    }
+  }
+
+  return subset.filter((ad) => keepIds.has(Number(ad.id)));
+}
+
+/**
+ * Funnels extraction (from multiple ad fields)
+ */
+function extractFunnelsFromAd(ad: Ad): string[] {
+  const set: Set<string> = new Set();
+
+  const addUrl = (raw?: string | null) => {
+    if (!raw) return;
+    const str = String(raw);
+
+    try {
+      const urlRe = /https?:\/\/[\w\-._~:\/?#\[\]@!$&'()*+,;=%]+/gi;
+      const matches = str.match(urlRe) || (str.includes('/') ? [str] : []);
+
+      for (const m of matches) {
+        try {
+          const u = new URL(m);
+          const hostAndPath = (u.host + u.pathname).replace(/\/+$/, '').toLowerCase();
+          set.add(hostAndPath);
+          if (u.pathname && u.pathname !== '/') set.add(u.pathname.toLowerCase());
+        } catch {
+          const cleaned = String(m).replace(/^\/+/, '').replace(/\/+$/, '').toLowerCase();
+          if (cleaned) set.add('/' + cleaned);
+        }
+      }
+    } catch {
+      // noop
+    }
+  };
+
+  addUrl(ad.link_url);
+  addUrl(ad.meta_ad_url as string | undefined);
+  const dupLinks = (ad as unknown as { duplicates_links?: string }).duplicates_links;
+  if (dupLinks) addUrl(dupLinks);
+  if (ad.text) addUrl(ad.text);
+
+  return Array.from(set);
+}
+
+/** -----------------------------
+ *  Component
+ *  ---------------------------- */
 
 export default function FilteredContainer({
   initialPageName = '',
@@ -40,6 +282,7 @@ export default function FilteredContainer({
   const [ads, setAds] = useState<Ad[]>([]);
   const [filteredAds, setFilteredAds] = useState<Ad[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
   const [availableOptions, setAvailableOptions] = useState({
     pageNames: [] as string[],
     publisherPlatforms: [] as string[],
@@ -67,13 +310,13 @@ export default function FilteredContainer({
     variationCounts: {} as Record<string, number>,
     funnels: {} as Record<string, number>,
   }));
-  const [adIdToFunnels, setAdIdToFunnels] = useState<Record<string, string[]>>({});
+
+  const [adIdToFunnels, setAdIdToFunnels] = useState<FunnelsMap>({});
   const [currentFilters, setCurrentFilters] = useState<FilterOptions | null>(null);
-  // Auto-sort mode: default to 'most_variations' so filtered results are
-  // automatically ordered from most -> least variations per AC1.
-  const [userSortMode, setUserSortMode] = useState<
-    'auto' | 'most_variations' | 'least_variations' | 'newest'
-  >('most_variations');
+
+  // Default sort: most_variations
+  const [userSortMode, setUserSortMode] = useState<SortMode>('most_variations');
+
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
   const [resetFlash, setResetFlash] = useState(false);
@@ -86,42 +329,6 @@ export default function FilteredContainer({
       else next[id] = true;
       return next;
     });
-    // manual toggle cancels universal select-all state
-  };
-
-  // helper removed: unused and triggered lint "no-unused-vars"
-
-  const extractFunnelsFromAd = (ad: Ad) => {
-    const set: Set<string> = new Set();
-    const addUrl = (raw?: string | null) => {
-      if (!raw) return;
-      const str = String(raw);
-      // find urls
-      try {
-        const urlRe = /https?:\/\/[\w\-._~:\/?#\[\]@!$&'()*+,;=%]+/gi;
-        const matches = str.match(urlRe) || (str.includes('/') ? [str] : []);
-        for (const m of matches) {
-          try {
-            const u = new URL(m);
-            const hostAndPath = (u.host + u.pathname).replace(/\/+$/, '').toLowerCase();
-            set.add(hostAndPath);
-            if (u.pathname && u.pathname !== '/') set.add(u.pathname.toLowerCase());
-          } catch (e) {
-            const cleaned = String(m).replace(/^\/+/, '').replace(/\/+$/, '').toLowerCase();
-            if (cleaned) set.add('/' + cleaned);
-          }
-        }
-      } catch (e) {
-        // noop
-      }
-    };
-
-    addUrl(ad.link_url);
-    addUrl(ad.meta_ad_url as string | undefined);
-    const dupLinks = (ad as unknown as { duplicates_links?: string }).duplicates_links;
-    if (dupLinks) addUrl(dupLinks);
-    if (ad.text) addUrl(ad.text);
-    return Array.from(set);
   };
 
   const downloadSelected = () => {
@@ -129,13 +336,12 @@ export default function FilteredContainer({
     if (!ids.length) {
       try {
         showToast({ message: 'Please select at least one creative to export.', type: 'error' });
-      } catch (e) {}
+      } catch {}
       return;
     }
 
     (async () => {
       try {
-        console.log('[FilteredContainer] downloadSelected ids=', ids);
         const res = await fetch('/api/ads/export-csv', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -147,23 +353,24 @@ export default function FilteredContainer({
           try {
             const j = await res.json();
             if (j?.error) errMsg = String(j.error);
-          } catch (e) {
-            // noop
-          }
+          } catch {}
           try {
             showToast({ message: errMsg, type: 'error' });
-          } catch (e) {}
+          } catch {}
           return;
         }
 
         const blob = await res.blob();
-
-        // Build filename locally depending on whether filters are applied
         const date = new Date().toISOString().slice(0, 10);
+
         const filters = currentFilters;
         const filtersEmpty =
           !filters ||
-          Object.values(filters).every((v) => v === '' || v === undefined || v === null);
+          Object.entries(filters).every(([k, v]) => {
+            if (k === 'funnels') return !v || (Array.isArray(v) && v.length === 0);
+            return v === '' || v === undefined || v === null;
+          });
+
         const filename = filtersEmpty
           ? `creo_data_export_${date}.csv`
           : `creo_data_filtered_${date}.csv`;
@@ -179,16 +386,70 @@ export default function FilteredContainer({
 
         try {
           showToast({ message: 'Selected creatives exported', type: 'success' });
-        } catch (e) {}
+        } catch {}
 
         setSelectionMode(false);
         setSelectedIds({});
-      } catch (e) {
+      } catch {
         try {
           showToast({ message: 'Export failed', type: 'error' });
-        } catch (err) {}
+        } catch {}
       }
     })();
+  };
+
+  // Compute counts for UI options (single source of truth)
+  const computeCountsForOptions = (
+    opts: typeof availableOptions,
+    filters: FilterOptions,
+    sourceAds: Ad[],
+    funnelsMap: FunnelsMap
+  ) => {
+    const countFor = (values: string[], key: keyof FilterOptions | 'variationCount') => {
+      const out: Record<string, number> = {};
+
+      for (const v of values) {
+        const candidate: FilterOptions = { ...filters };
+
+        if (key === 'funnels') {
+          // count as if user selected ONLY this funnel (keeping other filters)
+          candidate.funnels = [v];
+        } else if (key === 'variationCount') {
+          candidate.variationCount = v;
+        } else {
+          (candidate as unknown as Record<string, unknown>)[key as string] = v;
+        }
+
+        // 1) Apply all filters except variationCount
+        const base = applyFilters(sourceAds, candidate, funnelsMap);
+
+        // 2) Apply variation bucket if needed
+        const final =
+          candidate.variationCount && key !== 'variationCount'
+            ? filterByVariationBucket(base, String(candidate.variationCount))
+            : key === 'variationCount'
+            ? filterByVariationBucket(base, String(v))
+            : base;
+
+        out[v] = final.length;
+      }
+
+      return out;
+    };
+
+    return {
+      pageNames: countFor(opts.pageNames, 'pageName'),
+      publisherPlatforms: countFor(opts.publisherPlatforms, 'publisherPlatform'),
+      ctaTypes: countFor(opts.ctaTypes, 'ctaType'),
+      displayFormats: countFor(opts.displayFormats, 'displayFormat'),
+      conceptFormats: countFor(opts.conceptFormats, 'conceptFormat'),
+      realizationFormats: countFor(opts.realizationFormats, 'realizationFormat'),
+      topicFormats: countFor(opts.topicFormats, 'topicFormat'),
+      hookFormats: countFor(opts.hookFormats, 'hookFormat'),
+      characterFormats: countFor(opts.characterFormats, 'characterFormat'),
+      variationCounts: countFor(opts.variationBuckets as string[], 'variationCount'),
+      funnels: countFor(opts.funnels as string[], 'funnels'),
+    };
   };
 
   useEffect(() => {
@@ -196,60 +457,81 @@ export default function FilteredContainer({
       try {
         const raw = await getAds();
         const allAds: Ad[] = extractDataArray<Ad>(raw);
+
         setAds(allAds);
 
+        // Build options
         const pageNames = Array.from(
           new Set(allAds.map((ad) => ad.page_name).filter(Boolean))
         ).sort();
+
         const publisherPlatforms = Array.from(
-          new Set(
-            allAds
-              .map((ad) => ad.publisher_platform || '')
-              .flatMap((str) =>
-                str
-                  .split(',')
-                  .map((s) => s.trim())
-                  .filter(Boolean)
-              )
-              .map((s) => s.toLowerCase())
-          )
+          new Set(allAds.flatMap((ad) => normalizePlatforms(ad.publisher_platform)))
         ).sort();
+
         const ctaTypes = Array.from(
           new Set(allAds.map((ad) => ad.cta_type).filter(Boolean))
         ).sort();
         const displayFormats = Array.from(
           new Set(allAds.map((ad) => ad.display_format).filter(Boolean))
         ).sort();
+
         const conceptFormats = Array.from(
-          new Set(allAds.map((ad) => ad.concept).filter((item): item is string => item !== null))
-        ).sort();
-        const realizationFormats = Array.from(
           new Set(
-            allAds.map((ad) => ad.realisation).filter((item): item is string => item !== null)
+            allAds
+              .map((ad) => ad.concept)
+              .filter((x): x is string => x !== null && x !== undefined && x !== '')
           )
         ).sort();
+
+        const realizationFormats = Array.from(
+          new Set(
+            allAds
+              .map((ad) => ad.realisation)
+              .filter((x): x is string => x !== null && x !== undefined && x !== '')
+          )
+        ).sort();
+
         const topicFormats = Array.from(
-          new Set(allAds.map((ad) => ad.topic).filter((item): item is string => item !== null))
+          new Set(
+            allAds
+              .map((ad) => ad.topic)
+              .filter((x): x is string => x !== null && x !== undefined && x !== '')
+          )
         ).sort();
+
         const hookFormats = Array.from(
-          new Set(allAds.map((ad) => ad.hook).filter((item): item is string => item !== null))
+          new Set(
+            allAds
+              .map((ad) => ad.hook)
+              .filter((x): x is string => x !== null && x !== undefined && x !== '')
+          )
         ).sort();
+
         const characterFormats = Array.from(
-          new Set(allAds.map((ad) => ad.character).filter((item): item is string => item !== null))
+          new Set(
+            allAds
+              .map((ad) => ad.character)
+              .filter((x): x is string => x !== null && x !== undefined && x !== '')
+          )
         ).sort();
-        // Extract funnels from ads
+
+        const variationBuckets = ['more_than_10', '5_10', '3_5', 'less_than_3'];
+
+        // Funnels: extract per ad
         const funnelsSet = new Set<string>();
-        const adIdToFunnelsMap: Record<string, string[]> = {};
+        const adIdToFunnelsMap: FunnelsMap = {};
         for (const ad of allAds) {
           try {
             const fls = extractFunnelsFromAd(ad);
             adIdToFunnelsMap[String(ad.id)] = fls;
             for (const f of fls) funnelsSet.add(f);
-          } catch (e) {
+          } catch {
             adIdToFunnelsMap[String(ad.id)] = [];
           }
         }
         const funnels = Array.from(funnelsSet).sort();
+
         const opts = {
           pageNames,
           publisherPlatforms,
@@ -260,68 +542,46 @@ export default function FilteredContainer({
           topicFormats,
           hookFormats,
           characterFormats,
-          variationBuckets: ['more_than_10', '5_10', '3_5', 'less_than_3'],
+          variationBuckets,
           funnels,
         };
+
         setAvailableOptions(opts);
         setAdIdToFunnels(adIdToFunnelsMap);
-        // Apply initial page filter if present
-        if (initialPageName) {
-          const filteredByPage = allAds.filter((ad) => ad.page_name === initialPageName);
-          setFilteredAds(filteredByPage);
-        } else {
-          setFilteredAds(allAds);
-        }
 
-        // Initialize counts based on the full dataset (no filters)
-        try {
-          const emptyFilters: FilterOptions = {
-            pageName: '',
-            publisherPlatform: '',
-            ctaType: '',
-            displayFormat: '',
-            dateRange: '',
-            searchQuery: '',
-            conceptFormat: '',
-            realizationFormat: '',
-            topicFormat: '',
-            hookFormat: '',
-            characterFormat: '',
-            funnels: [],
+        // Initial filtered ads
+        const baseFiltered = initialPageName
+          ? allAds.filter((ad) => ad.page_name === initialPageName)
+          : allAds;
+
+        setFilteredAds(baseFiltered);
+
+        // Initial counts (IMPORTANT: funnels: [] must NOT filter everything)
+        const emptyFilters: FilterOptions = {
+          pageName: '',
+          publisherPlatform: '',
+          ctaType: '',
+          displayFormat: '',
+          dateRange: '',
+          searchQuery: '',
+          conceptFormat: '',
+          realizationFormat: '',
+          topicFormat: '',
+          hookFormat: '',
+          characterFormat: '',
+          funnels: [], // safe now
+        };
+
+        const initialCounts = computeCountsForOptions(opts, emptyFilters, allAds, adIdToFunnelsMap);
+        setAvailableCounts(initialCounts);
+
+        // Apply initialFunnels if provided
+        if (Array.isArray(initialFunnels) && initialFunnels.length > 0) {
+          const preset: FilterOptions = {
+            ...emptyFilters,
+            funnels: initialFunnels,
           };
-          const initialCounts = computeCountsForOptions(
-            opts,
-            emptyFilters,
-            allAds,
-            adIdToFunnelsMap
-          );
-          setAvailableCounts(initialCounts);
-          // If the page was opened with an initial funnels param, apply it now
-          try {
-            const rawFunnels = (initialFunnels ?? []) as string[];
-            if (Array.isArray(rawFunnels) && rawFunnels.length > 0) {
-              const presetFilters: FilterOptions = {
-                pageName: '',
-                publisherPlatform: '',
-                ctaType: '',
-                displayFormat: '',
-                dateRange: '',
-                searchQuery: '',
-                conceptFormat: '',
-                realizationFormat: '',
-                topicFormat: '',
-                hookFormat: '',
-                characterFormat: '',
-                funnels: rawFunnels,
-              };
-              // apply filters as if user selected funnels in the UI
-              handleFiltersChange(presetFilters);
-            }
-          } catch (e) {
-            /* noop */
-          }
-        } catch (e) {
-          console.debug('Failed to initialize availableCounts', e);
+          handleFiltersChange(preset, allAds, opts, adIdToFunnelsMap);
         }
       } catch (error) {
         console.error('Error loading ads:', error);
@@ -331,641 +591,122 @@ export default function FilteredContainer({
     };
 
     loadAds();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Reusable counts computation function that operates on given option lists and a filters object.
-  const computeCountsForOptions = (
-    opts: typeof availableOptions,
+  /**
+   * handleFiltersChange now uses the same applyFilters pipeline.
+   * Optional params let us call it during initial load before state settles.
+   */
+  const handleFiltersChange = (
     filters: FilterOptions,
-    sourceAds: Ad[] = ads,
-    // allow passing a precomputed adId->funnels map so initial counts
-    // can be computed synchronously before state updates propagate
-    adIdToFunnelsArg?: Record<string, string[]>
+    adsArg: Ad[] = ads,
+    optsArg: typeof availableOptions = availableOptions,
+    funnelsMapArg: FunnelsMap = adIdToFunnels
   ) => {
-    const compute = (values: string[], key: keyof FilterOptions | 'variationCount') => {
-      const out: Record<string, number> = {};
-      for (const v of values) {
-        let candidate: FilterOptions;
-        if (key === 'funnels') {
-          candidate = { ...filters, funnels: [v] } as FilterOptions;
-        } else {
-          candidate = { ...filters, [key]: v } as FilterOptions;
-        }
-        let subset = [...sourceAds];
-
-        if (candidate.searchQuery) {
-          const q = candidate.searchQuery.toLowerCase();
-          subset = subset.filter(
-            (ad) =>
-              ad.title?.toLowerCase().includes(q) ||
-              ad.text?.toLowerCase().includes(q) ||
-              ad.page_name?.toLowerCase().includes(q)
-          );
-        }
-
-        if (candidate.pageName) subset = subset.filter((ad) => ad.page_name === candidate.pageName);
-
-        if (candidate.publisherPlatform) {
-          const wanted = candidate.publisherPlatform.toLowerCase();
-          subset = subset.filter((ad) => {
-            const platforms = (ad.publisher_platform || '')
-              .split(',')
-              .map((p) => p.trim().toLowerCase())
-              .filter(Boolean);
-            return platforms.includes(wanted);
-          });
-        }
-
-        if (candidate.ctaType) subset = subset.filter((ad) => ad.cta_type === candidate.ctaType);
-        if (candidate.displayFormat)
-          subset = subset.filter((ad) => ad.display_format === candidate.displayFormat);
-        if (candidate.conceptFormat)
-          subset = subset.filter((ad) => ad.concept === candidate.conceptFormat);
-        if (candidate.realizationFormat)
-          subset = subset.filter((ad) => ad.realisation === candidate.realizationFormat);
-        if (candidate.topicFormat)
-          subset = subset.filter((ad) => ad.topic === candidate.topicFormat);
-        if (candidate.hookFormat) subset = subset.filter((ad) => ad.hook === candidate.hookFormat);
-        if (candidate.characterFormat)
-          subset = subset.filter((ad) => ad.character === candidate.characterFormat);
-
-        // Funnels: candidate.funnels is array of selected funnel strings
-        if (candidate.funnels && Array.isArray(candidate.funnels)) {
-          const sel: string[] = candidate.funnels.map((s: string) => String(s).toLowerCase());
-          const funnelsMap = adIdToFunnelsArg ?? adIdToFunnels;
-          subset = subset.filter((ad) => {
-            const adFunnels = funnelsMap[String(ad.id)] || [];
-            return sel.some((sv) =>
-              adFunnels.some((af) => String(af).includes(sv) || sv.includes(String(af)))
-            );
-          });
-        }
-
-        if (candidate.dateRange) {
-          const now = new Date();
-          let startDate: Date;
-          switch (candidate.dateRange) {
-            case 'today':
-              startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-              break;
-            case 'week':
-              startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-              break;
-            case 'month':
-              startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-              break;
-            case 'quarter':
-              startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-              break;
-            default:
-              startDate = new Date(0);
-          }
-          subset = subset.filter((ad) => new Date(ad.created_at) >= startDate);
-        }
-
-        // Special handling for variation-count buckets
-        if ((key as string) === 'variationCount') {
-          try {
-            // Build duplicate-only grouping from subset using duplicates_links
-            const n = subset.length;
-            const idToIndex = new Map<number, number>();
-            const archiveIdToIndex = new Map<string, number>();
-            for (let i = 0; i < n; i++) {
-              const a = subset[i];
-              idToIndex.set(Number(a.id), i);
-              if (a.ad_archive_id) archiveIdToIndex.set(String(a.ad_archive_id), i);
-            }
-
-            const parent = new Array<number>(n).fill(0).map((_, i) => i);
-            const find = (i: number) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
-            const union = (a: number, b: number) => {
-              const ra = find(a);
-              const rb = find(b);
-              if (ra === rb) return;
-              parent[rb] = ra;
-            };
-
-            const tryResolveTokenToIndex = (token: string): number | null => {
-              const t = String(token).trim();
-              if (t.length === 0) return null;
-              const asNum = Number(t);
-              if (Number.isFinite(asNum) && idToIndex.has(asNum))
-                return idToIndex.get(asNum) ?? null;
-              if (archiveIdToIndex.has(t)) return archiveIdToIndex.get(t) ?? null;
-              for (const [aid, idx] of archiveIdToIndex.entries()) {
-                if (t.includes(aid)) return idx;
-              }
-              return null;
-            };
-
-            for (let i = 0; i < n; i++) {
-              const a = subset[i];
-              const raw = a.duplicates_links ?? '';
-              if (!raw || typeof raw !== 'string') continue;
-              const parts = raw
-                .split(/[,\n\s]+/)
-                .map((s) => s.trim())
-                .filter(Boolean);
-              for (const p of parts) {
-                const otherIdx = tryResolveTokenToIndex(p);
-                if (otherIdx !== null && otherIdx !== undefined) union(i, otherIdx);
-              }
-            }
-
-            const groups: Ad[][] = [];
-            const repMap = new Map<number, number>();
-            for (let i = 0; i < n; i++) {
-              const r = find(i);
-              const ridx = repMap.get(r) ?? groups.length;
-              if (!repMap.has(r)) repMap.set(r, ridx);
-              const arr = groups[ridx] ?? [];
-              arr.push(subset[i]);
-              groups[ridx] = arr;
-            }
-
-            let matchCount = 0;
-            for (const g of groups) {
-              const effectiveSize = g.length;
-              const related = Math.max(0, effectiveSize - 1);
-              const bucket = String(v);
-              let matched = false;
-              switch (bucket) {
-                case 'more_than_10':
-                  matched = related >= 11;
-                  break;
-                case '5_10':
-                  matched = related >= 5 && related <= 10;
-                  break;
-                case '3_5':
-                  matched = related >= 3 && related <= 5;
-                  break;
-                case 'less_than_3':
-                  matched = related === 1 || related === 2;
-                  break;
-                default:
-                  matched = false;
-              }
-              if (matched) matchCount += g.length;
-            }
-            out[v] = matchCount;
-          } catch (e) {
-            out[v] = 0;
-          }
-        } else {
-          out[v] = subset.length;
-        }
-      }
-      return out;
-    };
-
-    return {
-      pageNames: compute(opts.pageNames, 'pageName'),
-      publisherPlatforms: compute(opts.publisherPlatforms, 'publisherPlatform'),
-      ctaTypes: compute(opts.ctaTypes, 'ctaType'),
-      displayFormats: compute(opts.displayFormats, 'displayFormat'),
-      conceptFormats: compute(opts.conceptFormats, 'conceptFormat'),
-      realizationFormats: compute(opts.realizationFormats, 'realizationFormat'),
-      topicFormats: compute(opts.topicFormats, 'topicFormat'),
-      hookFormats: compute(opts.hookFormats, 'hookFormat'),
-      characterFormats: compute(opts.characterFormats, 'characterFormat'),
-      variationCounts: compute(opts.variationBuckets as string[], 'variationCount'),
-      funnels: compute(opts.funnels as string[], 'funnels'),
-    };
-  };
-
-  const handleFiltersChange = (filters: FilterOptions) => {
     setCurrentFilters(filters);
-    try {
-      if (typeof window !== 'undefined') {
-        // eslint-disable-next-line no-console
-        console.debug('[FilteredContainer] handleFiltersChange incomingFilters=', filters);
-      }
-    } catch (e) {}
-    // store current filters so counts can be computed
 
-    // compute counts for every option based on current filters
+    // counts for dropdowns
     try {
-      const countsObj = computeCountsForOptions(availableOptions, filters, ads);
+      const countsObj = computeCountsForOptions(optsArg, filters, adsArg, funnelsMapArg);
       setAvailableCounts(countsObj);
-      try {
-        if (typeof window !== 'undefined') {
-          // eslint-disable-next-line no-console
-          console.debug('[FilteredContainer] computed availableCounts summary=', {
-            pageNames: Object.keys(countsObj.pageNames).length,
-            variationCountsSample: countsObj.variationCounts,
-          });
-        }
-      } catch (e) {
-        /* noop */
-      }
     } catch (e) {
       console.debug('Failed to compute availableCounts', e);
     }
 
-    let filtered = [...ads];
+    // apply filters
+    let next = applyFilters(adsArg, filters, funnelsMapArg);
 
-    // Фільтр пошуку
-    if (filters.searchQuery) {
-      const query = filters.searchQuery.toLowerCase();
-      filtered = filtered.filter(
-        (ad) =>
-          ad.title?.toLowerCase().includes(query) ||
-          ad.text?.toLowerCase().includes(query) ||
-          ad.page_name?.toLowerCase().includes(query)
-      );
-    }
-
-    // Фільтр назви сторінки
-    if (filters.pageName) {
-      filtered = filtered.filter((ad) => ad.page_name === filters.pageName);
-    }
-
-    // Фільтр платформи: ad.publisher_platform may be a comma-separated string, so split and match
-    if (filters.publisherPlatform) {
-      const wanted = filters.publisherPlatform.toLowerCase();
-      filtered = filtered.filter((ad) => {
-        const platforms = (ad.publisher_platform || '')
-          .split(',')
-          .map((p) => p.trim().toLowerCase())
-          .filter(Boolean);
-        return platforms.includes(wanted);
-      });
-    }
-    // Фільтр типу CTA
-    if (filters.ctaType) {
-      filtered = filtered.filter((ad) => ad.cta_type === filters.ctaType);
-    }
-
-    // Фільтр формату відображення
-    if (filters.displayFormat) {
-      filtered = filtered.filter((ad) => ad.display_format === filters.displayFormat);
-    }
-
-    // Фільтр концепції
-    if (filters.conceptFormat) {
-      filtered = filtered.filter((ad) => ad.concept === filters.conceptFormat);
-    }
-    // Фільтр реалізації
-    if (filters.realizationFormat) {
-      filtered = filtered.filter((ad) => ad.realisation === filters.realizationFormat);
-    }
-    // Фільтр теми
-    if (filters.topicFormat) {
-      filtered = filtered.filter((ad) => ad.topic === filters.topicFormat);
-    }
-    // Фільтр хука
-    if (filters.hookFormat) {
-      filtered = filtered.filter((ad) => ad.hook === filters.hookFormat);
-    }
-    // Фільтр персонажа
-    if (filters.characterFormat) {
-      filtered = filtered.filter((ad) => ad.character === filters.characterFormat);
-    }
-
-    // Фільтр дати
-    if (filters.dateRange) {
-      const now = new Date();
-      let startDate: Date;
-
-      switch (filters.dateRange) {
-        case 'today':
-          startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-          break;
-        case 'week':
-          startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-          break;
-        case 'month':
-          startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-          break;
-        case 'quarter':
-          startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-          break;
-        default:
-          startDate = new Date(0);
-      }
-
-      filtered = filtered.filter((ad) => {
-        const adDate = new Date(ad.created_at);
-        return adDate >= startDate;
-      });
-    }
-
-    // Funnels filter (multi-select OR)
-    if (filters.funnels && Array.isArray(filters.funnels) && filters.funnels.length > 0) {
-      const sels = filters.funnels.map((s) => String(s).toLowerCase());
-      filtered = filtered.filter((ad) => {
-        const adFunnels = adIdToFunnels[String(ad.id)] || [];
-        return sels.some((sv) =>
-          adFunnels.some((af) => String(af).includes(sv) || sv.includes(String(af)))
-        );
-      });
-    }
-
-    // Variation-count bucket filter (grouping-based using DB duplicates only)
+    // variation bucket filter
     if (filters.variationCount) {
-      try {
-        const subset = filtered;
-        const n = subset.length;
-        const idToIndex = new Map<number, number>();
-        const archiveIdToIndex = new Map<string, number>();
-        for (let i = 0; i < n; i++) {
-          const a = subset[i];
-          idToIndex.set(Number(a.id), i);
-          if (a.ad_archive_id) archiveIdToIndex.set(String(a.ad_archive_id), i);
-        }
-
-        const parent = new Array<number>(n).fill(0).map((_, i) => i);
-        const find = (i: number) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
-        const union = (a: number, b: number) => {
-          const ra = find(a);
-          const rb = find(b);
-          if (ra === rb) return;
-          parent[rb] = ra;
-        };
-
-        const tryResolveTokenToIndex = (token: string): number | null => {
-          const t = String(token).trim();
-          if (t.length === 0) return null;
-          const asNum = Number(t);
-          if (Number.isFinite(asNum) && idToIndex.has(asNum)) return idToIndex.get(asNum) ?? null;
-          if (archiveIdToIndex.has(t)) return archiveIdToIndex.get(t) ?? null;
-          for (const [aid, idx] of archiveIdToIndex.entries()) {
-            if (t.includes(aid)) return idx;
-          }
-          return null;
-        };
-
-        for (let i = 0; i < n; i++) {
-          const a = subset[i];
-          const raw = a.duplicates_links ?? '';
-          if (!raw || typeof raw !== 'string') continue;
-          const parts = raw
-            .split(/[,\n\s]+/)
-            .map((s) => s.trim())
-            .filter(Boolean);
-          for (const p of parts) {
-            const otherIdx = tryResolveTokenToIndex(p);
-            if (otherIdx !== null && otherIdx !== undefined) union(i, otherIdx);
-          }
-        }
-
-        const groups: Ad[][] = [];
-        const repMap = new Map<number, number>();
-        for (let i = 0; i < n; i++) {
-          const r = find(i);
-          const ridx = repMap.get(r) ?? groups.length;
-          if (!repMap.has(r)) repMap.set(r, ridx);
-          const arr = groups[ridx] ?? [];
-          arr.push(subset[i]);
-          groups[ridx] = arr;
-        }
-
-        const bucket = String(filters.variationCount);
-        const keepIds = new Set<number>();
-        for (const g of groups) {
-          const effectiveSize = g.length;
-          const related = Math.max(0, effectiveSize - 1);
-          let matched = false;
-          switch (bucket) {
-            case 'more_than_10':
-              matched = related >= 11;
-              break;
-            case '5_10':
-              matched = related >= 5 && related <= 10;
-              break;
-            case '3_5':
-              matched = related >= 3 && related <= 5;
-              break;
-            case 'less_than_3':
-              matched = related === 1 || related === 2;
-              break;
-            default:
-              matched = false;
-          }
-          if (matched) for (const a of g) keepIds.add(Number(a.id));
-        }
-
-        filtered = filtered.filter((ad) => keepIds.has(Number(ad.id)));
-      } catch (e) {
-        console.debug('variationCount filter failed', e);
-      }
+      next = filterByVariationBucket(next, String(filters.variationCount));
     }
 
-    // Ensure automatic sorting is applied after filters change (AC1/AC2/AC3)
-    try {
-      setUserSortMode('most_variations');
-    } catch (e) {
-      /* noop */
-    }
+    // enforce auto sort
+    setUserSortMode('most_variations');
 
-    try {
-      if (typeof window !== 'undefined') {
-        // eslint-disable-next-line no-console
-        console.debug(
-          '[FilteredContainer] filtered length=',
-          filtered.length,
-          'sampleIds=',
-          filtered.slice(0, 8).map((a) => a.id)
-        );
-      }
-    } catch (e) {
-      /* noop */
-    }
-
-    setFilteredAds(filtered);
+    setFilteredAds(next);
   };
 
-  // Compute grouping/deduping similarly to main Ad Archive so Advanced Filter
-  // shows the same grouped representatives. We adjust the collapse threshold
-  // when filters are active to produce a "smarter" grouping (less aggressive
-  // collapse) so that sorting / filtered views don't hide important variants.
+  // Grouping / dedupe for Advanced Filter results (based only on duplicates_links)
   const {
     dedupedAds: groupedDedupedAds,
     adIdToGroupMap: groupedAdIdToGroupMap,
     adIdToRelatedCount: groupedAdIdToRelatedCount,
   } = useMemo(() => {
-    const filteredAdsByType = filteredAds;
+    const subset = filteredAds;
 
-    // Build grouping only from DB duplicates (duplicates_links). All other
-    // ads remain as singletons.
-    const n = filteredAdsByType.length;
-    const idToIndex = new Map<number, number>();
-    const archiveIdToIndex = new Map<string, number>();
-    for (let i = 0; i < n; i++) {
-      const a = filteredAdsByType[i];
-      idToIndex.set(Number(a.id), i);
-      if (a.ad_archive_id) archiveIdToIndex.set(String(a.ad_archive_id), i);
+    const groups = buildDuplicateGroups(subset);
+
+    // map adId -> group
+    const adIdToGroup: Record<string, Ad[]> = {};
+    for (const g of groups) {
+      for (const a of g) adIdToGroup[String(a.id)] = g;
     }
 
-    const parent = new Array<number>(n).fill(0).map((_, i) => i);
-    const find = (i: number) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
-    const union = (a: number, b: number) => {
-      const ra = find(a);
-      const rb = find(b);
-      if (ra === rb) return;
-      parent[rb] = ra;
-    };
+    // representative list: for groups >1 take newest; otherwise include itself
+    const reps: Ad[] = [];
+    const seenRep = new Set<string>();
 
-    const tryResolveTokenToIndex = (token: string): number | null => {
-      const t = String(token).trim();
-      if (t.length === 0) return null;
-      const asNum = Number(t);
-      if (Number.isFinite(asNum) && idToIndex.has(asNum)) return idToIndex.get(asNum) ?? null;
-      if (archiveIdToIndex.has(t)) return archiveIdToIndex.get(t) ?? null;
-      for (const [aid, idx] of archiveIdToIndex.entries()) {
-        if (t.includes(aid)) return idx;
-      }
-      return null;
-    };
-
-    for (let i = 0; i < n; i++) {
-      const a = filteredAdsByType[i];
-      const raw = a.duplicates_links ?? '';
-      if (!raw || typeof raw !== 'string') continue;
-      const parts = raw
-        .split(/[,\n\s]+/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-      for (const p of parts) {
-        const otherIdx = tryResolveTokenToIndex(p);
-        if (otherIdx !== null && otherIdx !== undefined) union(i, otherIdx);
-      }
-    }
-
-    const groupMap = new Map<string, typeof filteredAdsByType>();
-    for (let i = 0; i < n; i++) {
-      const r = find(i);
-      const key = String(filteredAdsByType[r].id ?? r);
-      const arr = groupMap.get(key) ?? [];
-      arr.push(filteredAdsByType[i]);
-      groupMap.set(key, arr);
-    }
-
-    // const phashKeys = Array.from(groupMap.keys()).filter((k) => String(k).startsWith('phash:'));
-
-    // PHASH_GROUP_COLLAPSE_THRESHOLD_LOCAL = currentFilters ? 3 : 2;
-    // const PHASH_GROUP_COLLAPSE_THRESHOLD_LOCAL = currentFilters ? 3 : 2;
-    // const PHASH_GROUP_MAX_COLLAPSE_LOCAL = 15;
-    // const PHASH_HAMMING_THRESHOLD_LOCAL = 4;
-
-    // pHash clustering currently disabled for Advanced Filter grouping — kept for reference
-    // const { phashClusters, keyToRep } = archiveUtils.buildPhashClustersFromKeys(
-    //   phashKeys,
-    //   groupMap as Map<string, Ad[]>,
-    //   PHASH_HAMMING_THRESHOLD_LOCAL
-    // );
-    // const phashClusters = new Map<string, string[]>();
-    // const keyToRep = new Map<string, string>();
-
-    const adIdToGroupLocal = new Map<string, typeof filteredAdsByType>();
-    groupMap.forEach((grp) => {
-      for (const a of grp) adIdToGroupLocal.set(String(a.id), grp);
-    });
-
-    const seenGroup = new Set<string>();
-    const out: typeof filteredAdsByType = [];
-    for (const ad of filteredAdsByType) {
-      const group = adIdToGroupLocal.get(String(ad.id)) ?? [ad];
-      const mapped = String(group[0]?.id ?? ad.id);
-      if (seenGroup.has(mapped)) continue;
-
-      // const effectiveSize = group.length; // kept for reference
-      const shouldCollapse = group.length > 1;
-
-      if (shouldCollapse) {
-        const rep = group.slice().sort((a, b) => {
-          const da = new Date(a.created_at).getTime();
-          const db = new Date(b.created_at).getTime();
-          return db - da;
-        })[0];
-        if (rep) out.push(rep);
+    for (const g of groups) {
+      if (g.length > 1) {
+        const rep = g
+          .slice()
+          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
+        const key = String(rep?.id ?? '');
+        if (key && !seenRep.has(key)) {
+          reps.push(rep);
+          seenRep.add(key);
+        }
       } else {
-        out.push(...group);
+        const only = g[0];
+        const key = String(only?.id ?? '');
+        if (key && !seenRep.has(key)) {
+          reps.push(only);
+          seenRep.add(key);
+        }
       }
-      seenGroup.add(mapped);
     }
 
-    const adIdToGroupMapOut: Record<string, typeof filteredAdsByType> = {};
-    groupMap.forEach((grp) => {
-      for (const a of grp) adIdToGroupMapOut[a.id] = grp;
-    });
-
-    // compute related counts from duplicate-based groups
-    const adIdToRelatedCountOut: Record<string, number> = {};
-    for (const ad of filteredAdsByType) {
-      const effectiveSize = adIdToGroupMapOut[String(ad.id)]?.length ?? 1;
-      adIdToRelatedCountOut[ad.id] = Math.max(0, effectiveSize - 1);
+    // related counts
+    const relatedCount: Record<string, number> = {};
+    for (const a of subset) {
+      const size = adIdToGroup[String(a.id)]?.length ?? 1;
+      relatedCount[String(a.id)] = Math.max(0, size - 1);
     }
 
     return {
-      dedupedAds: out,
-      adIdToGroupMap: adIdToGroupMapOut,
-      adIdToRelatedCount: adIdToRelatedCountOut,
+      dedupedAds: reps,
+      adIdToGroupMap: adIdToGroup,
+      adIdToRelatedCount: relatedCount,
     };
-  }, [filteredAds, currentFilters]);
-
-  // Local sort mode for Advanced Filter results. (state declared above)
+  }, [filteredAds]);
 
   const sortedGroupedDedupedAds = useMemo(() => {
-    try {
-      const arr = [...groupedDedupedAds];
-      const effectiveMode = (() => {
-        if (userSortMode === 'auto') return 'most_variations';
-        return userSortMode;
-      })();
+    const arr = [...groupedDedupedAds];
+    const mode = userSortMode === 'auto' ? 'most_variations' : userSortMode;
 
-      if (effectiveMode === 'most_variations') {
-        return arr.sort((a, b) => {
-          const na = groupedAdIdToRelatedCount[a.id] ?? 0;
-          const nb = groupedAdIdToRelatedCount[b.id] ?? 0;
-          if (nb !== na) return nb - na;
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-        });
-      }
-
-      if (effectiveMode === 'least_variations') {
-        return arr.sort((a, b) => {
-          const na = groupedAdIdToRelatedCount[a.id] ?? 0;
-          const nb = groupedAdIdToRelatedCount[b.id] ?? 0;
-          if (na !== nb) return na - nb;
-          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-        });
-      }
-
-      // newest
-      return arr.sort(
-        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-      );
-    } catch (e) {
-      return groupedDedupedAds;
+    if (mode === 'most_variations') {
+      return arr.sort((a, b) => {
+        const na = groupedAdIdToRelatedCount[String(a.id)] ?? 0;
+        const nb = groupedAdIdToRelatedCount[String(b.id)] ?? 0;
+        if (nb !== na) return nb - na;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
     }
+
+    if (mode === 'least_variations') {
+      return arr.sort((a, b) => {
+        const na = groupedAdIdToRelatedCount[String(a.id)] ?? 0;
+        const nb = groupedAdIdToRelatedCount[String(b.id)] ?? 0;
+        if (na !== nb) return na - nb;
+        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+      });
+    }
+
+    // newest
+    return arr.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
   }, [groupedDedupedAds, groupedAdIdToRelatedCount, userSortMode]);
-
-  // Debug: log sort mode and sample counts when relevant values change
-  useEffect(() => {
-    try {
-      if (typeof window === 'undefined') return;
-      // small sample of counts
-      const sample = Object.keys(groupedAdIdToRelatedCount)
-        .slice(0, 12)
-        .map((id) => ({ id, count: groupedAdIdToRelatedCount[id] }));
-      // top items after sort
-      const top = sortedGroupedDedupedAds
-        .slice(0, 8)
-        .map((a) => ({ id: a.id, variations: groupedAdIdToRelatedCount[a.id] ?? 0 }));
-      // eslint-disable-next-line no-console
-      console.debug(
-        '[FilteredContainer] userSortMode=',
-        userSortMode,
-        'sampleCounts=',
-        sample,
-        'top=',
-        top
-      );
-    } catch (e) {
-      /* noop */
-    }
-  }, [userSortMode, groupedAdIdToRelatedCount, sortedGroupedDedupedAds]);
 
   if (isLoading) {
     return (
@@ -987,7 +728,6 @@ export default function FilteredContainer({
         counts={availableCounts}
       />
 
-      {/* Результати (используем тот же ResultsGrid, чтобы поведение и группировка совпадали) */}
       <div className="bg-white rounded-lg shadow-md p-6">
         <div className="totalAds mb-6">
           <h3 className="text-lg font-semibold text-slate-900 mb-2">Search Results</h3>
@@ -1003,6 +743,7 @@ export default function FilteredContainer({
             </div>
           )}
         </div>
+
         <div
           className={`flex items-center justify-between mb-4 ${
             resetFlash ? 'opacity-70 transition-opacity duration-300' : ''
@@ -1023,6 +764,7 @@ export default function FilteredContainer({
               <option value="most_variations">Most variations</option>
               <option value="newest">Newest</option>
             </select>
+
             <div className="ml-3">
               <div className="flex items-center gap-2">
                 {!selectionMode ? (
@@ -1030,6 +772,7 @@ export default function FilteredContainer({
                     type="button"
                     onClick={() => setSelectionMode(true)}
                     className="px-3 py-2 text-sm rounded-md border border-slate-200"
+                    title="Enable selection mode"
                   >
                     Select to download creo data
                   </button>
@@ -1038,16 +781,14 @@ export default function FilteredContainer({
                     <button
                       type="button"
                       onClick={() => {
-                        // Download only if selections exist
-                        if (Object.keys(selectedIds).length > 0) {
-                          downloadSelected();
-                        } else {
+                        if (Object.keys(selectedIds).length > 0) downloadSelected();
+                        else {
                           try {
                             showToast({
                               message: 'Please select at least one creative to export.',
                               type: 'error',
                             });
-                          } catch (e) {}
+                          } catch {}
                         }
                       }}
                       disabled={Object.keys(selectedIds).length === 0}
@@ -1063,16 +804,14 @@ export default function FilteredContainer({
                     <button
                       type="button"
                       onClick={() => {
-                        // Reset selection but keep select mode active
                         setSelectedIds({});
                         try {
                           showToast({ message: 'Selection cleared', type: 'success' });
-                        } catch (e) {}
-                        // visual soft fade
+                        } catch {}
                         setResetFlash(true);
                         setTimeout(() => setResetFlash(false), 260);
                       }}
-                      className={`px-3 py-2 text-sm rounded-md border bg-white text-slate-700 border-slate-200`}
+                      className="px-3 py-2 text-sm rounded-md border bg-white text-slate-700 border-slate-200"
                     >
                       Reset selection
                     </button>
@@ -1080,13 +819,13 @@ export default function FilteredContainer({
                     <button
                       type="button"
                       onClick={() => {
-                        // Ensure selection mode is on
                         const filters = currentFilters;
                         const filtersEmpty =
                           !filters ||
-                          Object.values(filters).every(
-                            (v) => v === '' || v === undefined || v === null
-                          );
+                          Object.entries(filters).every(([k, v]) => {
+                            if (k === 'funnels') return !v || (Array.isArray(v) && v.length === 0);
+                            return v === '' || v === undefined || v === null;
+                          });
 
                         const targetAds = filtersEmpty ? ads : filteredAds;
                         const next: Record<string, boolean> = {};
@@ -1098,9 +837,9 @@ export default function FilteredContainer({
                             message: `Selected ${Object.keys(next).length} creatives`,
                             type: 'success',
                           });
-                        } catch (e) {}
+                        } catch {}
                       }}
-                      className={`px-3 py-2 text-sm rounded-md border bg-slate-50 hover:bg-slate-100 border-slate-200`}
+                      className="px-3 py-2 text-sm rounded-md border bg-slate-50 hover:bg-slate-100 border-slate-200"
                     >
                       Select All
                     </button>
@@ -1108,14 +847,13 @@ export default function FilteredContainer({
                     <button
                       type="button"
                       onClick={() => {
-                        // Exit selection mode and clear state
                         setSelectionMode(false);
                         setSelectedIds({});
                         try {
                           showToast({ message: 'Exited selection mode', type: 'success' });
-                        } catch (e) {}
+                        } catch {}
                       }}
-                      className={`px-3 py-2 text-sm rounded-md border bg-white text-slate-700 border-slate-200`}
+                      className="px-3 py-2 text-sm rounded-md border bg-white text-slate-700 border-slate-200"
                     >
                       Exit selection
                     </button>
