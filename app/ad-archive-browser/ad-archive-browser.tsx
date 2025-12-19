@@ -22,15 +22,12 @@ export function AdArchiveBrowser({
   initialTotalAds,
 }: AdArchiveBrowserProps) {
   type SortMode = 'auto' | 'most_variations' | 'least_variations' | 'newest';
-  // Pass explicit cleared filters to avoid relying on a client-side effect
-  // to reset filters after mount. This initializes hook state correctly
-  // so the component renders with cleared filters immediately.
   const clearedFilters = { search: '', page: null, date: null, tags: null };
   const state = useAdArchive(
     initialAds,
     initialFilters ?? clearedFilters,
     initialTotalAds,
-    30 * 1000 // poll every 30 seconds by default
+    60 * 1000 // poll every 30 seconds by default
   ) as UseAdArchiveReturn;
 
   const {
@@ -75,13 +72,15 @@ export function AdArchiveBrowser({
   // Default sort on main archive to ascending variations (least -> most)
   useEffect(() => {
     try {
-      if (userSortMode === 'auto' || !userSortMode) setUserSortMode('least_variations');
+      if (userSortMode === 'auto' || !userSortMode) setUserSortMode('most_variations');
     } catch (e) {
       /* noop */
     }
     // run once on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // No auto-advance on scroll. Use explicit Next button below.
 
   return (
     <div className="container mx-auto px-6 py-12 max-w-7xl">
@@ -168,6 +167,19 @@ export function AdArchiveBrowser({
         }}
         processingDone={state.processingDone}
       />
+
+      {/* Next page button shown at bottom when more pages are available */}
+      {currentPage < (totalPages || 0) && !isLoading && (
+        <div className="flex justify-center mt-8">
+          <button
+            type="button"
+            onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md shadow hover:bg-blue-700"
+          >
+            Next page
+          </button>
+        </div>
+      )}
     </div>
   );
 }

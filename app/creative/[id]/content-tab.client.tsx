@@ -245,68 +245,106 @@ export default function ContentTabClient({
             variant="outline"
             size="sm"
             onClick={() => {
-              const find = (t: string) =>
-                groupedSections.find(
-                  (g) => String(g.title).toLowerCase() === String(t).toLowerCase()
-                )?.text || '';
+              try {
+                const esc = (v: unknown) => {
+                  const s = v === null || v === undefined ? '' : String(v);
+                  return `"${s.replace(/"/g, '""')}"`;
+                };
 
-              const pageName = adData.page_name || '';
-              const creativeUrl = adData.meta_ad_url || adData.link_url || '';
-              const adText = find('Ad Text') || '';
-              const sound = find('Sound Transcription') || '';
-              const textOnImage = find('Text on Image') || '';
+                const header = [
+                  'id',
+                  'ad_archive_id',
+                  'page_name',
+                  'title',
+                  'text',
+                  'caption',
+                  'cta_text',
+                  'cta_type',
+                  'display_format',
+                  'link_url',
+                  'meta_ad_url',
+                  'image_url',
+                  'image_description',
+                  'new_scenario',
+                  'tags',
+                  'duplicates_ad_text',
+                  'duplicates_links',
+                  'duplicates_preview_image',
+                  'created_at',
+                  'publisher_platform',
+                  'audio_script',
+                  'video_script',
+                  'concept',
+                  'realisation',
+                  'topic',
+                  'hook',
+                  'character',
+                ];
 
-              if (!sound && !textOnImage) {
-                showToast({
-                  message: 'No sound transcription or text-on-image available to export.',
-                  type: 'error',
+                const tagsValue = Array.isArray(adData.tags)
+                  ? adData.tags.join(',')
+                  : (adData.tags as unknown as string) || '';
+
+                const newScenarioValue =
+                  adData.new_scenario && typeof adData.new_scenario === 'object'
+                    ? JSON.stringify(adData.new_scenario)
+                    : (adData.new_scenario as string) || '';
+
+                const row = [
+                  adData.id,
+                  adData.ad_archive_id ?? '',
+                  adData.page_name ?? '',
+                  adData.title ?? '',
+                  adData.text ?? '',
+                  adData.caption ?? '',
+                  adData.cta_text ?? '',
+                  adData.cta_type ?? '',
+                  adData.display_format ?? '',
+                  adData.link_url ?? '',
+                  adData.meta_ad_url ?? '',
+                  adData.image_url ?? '',
+                  adData.image_description ?? '',
+                  newScenarioValue,
+                  tagsValue,
+                  adData.duplicates_ad_text ?? '',
+                  adData.duplicates_links ?? '',
+                  adData.duplicates_preview_image ?? '',
+                  adData.created_at ?? '',
+                  adData.publisher_platform ?? '',
+                  adData.audio_script ?? '',
+                  adData.video_script ?? '',
+                  adData.concept ?? '',
+                  adData.realisation ?? '',
+                  adData.topic ?? '',
+                  adData.hook ?? '',
+                  adData.character ?? '',
+                ];
+
+                const csvLines = [] as string[];
+                csvLines.push(header.join(';'));
+                csvLines.push(row.map(esc).join(';'));
+
+                const bom = '\uFEFF';
+                const blob = new Blob([bom + csvLines.join('\n')], {
+                  type: 'text/csv;charset=utf-8;',
                 });
-                return;
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `creative-${String(adData.id)}.csv`;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                URL.revokeObjectURL(url);
+
+                showToast({ message: 'Creative CSV exported', type: 'success' });
+              } catch (e) {
+                console.error('Export failed', e);
+                showToast({ message: 'Export failed', type: 'error' });
               }
-
-              // Escape value for CSV cell (Excel-friendly)
-              const esc = (v: string) => `"${(v || '').replace(/"/g, '""')}"`;
-
-              // "DB-style" table for text/audio only
-              const headers = [
-                'id',
-                'page_name',
-                'creative_url',
-                'ad_text',
-                'sound_transcription',
-                'text_on_image',
-              ].join(';');
-
-              const values = [
-                String(adData.id ?? ''),
-                pageName,
-                creativeUrl,
-                adText,
-                sound,
-                textOnImage,
-              ]
-                .map(esc)
-                .join(';');
-
-              const csv = headers + '\n' + values;
-
-              const bom = '\uFEFF';
-              const blob = new Blob([bom + csv], {
-                type: 'text/csv;charset=utf-8;',
-              });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `creative-${adData.id}-text-audio.csv`;
-              document.body.appendChild(a);
-              a.click();
-              a.remove();
-              URL.revokeObjectURL(url);
-
-              showToast({ message: 'CSV exported', type: 'success' });
             }}
           >
-            Export Text & Audio (CSV)
+            Export Creative (CSV)
           </Button>
         </div>
 

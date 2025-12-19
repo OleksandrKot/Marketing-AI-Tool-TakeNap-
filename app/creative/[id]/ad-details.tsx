@@ -20,9 +20,8 @@ import { ProfileDropdown } from '@/app/login-auth/components/profile-dropdown';
 import { CreativeTabs } from '@/components/creative/tabs/CreativeTabs';
 import ContentTab from './content-tab.client';
 import { InfoTab } from './info-tab';
-import { AdaptationsTab } from './adaptations-tab';
 // tag manager removed from header for simplified detail view
-import type { Ad, AdaptationScenario } from '@/lib/core/types';
+import type { Ad } from '@/lib/core/types';
 
 // Динамічне завантаження компонентів, які не потрібні одразу
 const ShareModal = dynamic(() => import('./share-modal'), {
@@ -38,7 +37,7 @@ interface AdDetailsProps {
   visualMainParagraphs?: string[];
   visualDerivedFromVideo?: boolean;
   metaAnalysis?: Record<string, unknown>;
-  adaptationScenarios?: AdaptationScenario[];
+  // adaptationScenarios removed with Adaptations feature
 }
 
 const AdDetails = memo(function AdDetails({
@@ -52,7 +51,7 @@ const AdDetails = memo(function AdDetails({
   const creativeId = String(ad.ad_archive_id ?? ad.id);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showCollectionsModal, setShowCollectionsModal] = useState(false);
-  const [activeTab, setActiveTab] = useState<'content' | 'info' | 'adaptations'>('content');
+  const [activeTab, setActiveTab] = useState<'content' | 'info'>('content');
   // copiedAdId state removed because not used in UI
 
   const searchParams = useSearchParams();
@@ -157,82 +156,7 @@ const AdDetails = memo(function AdDetails({
         {/* Tab Navigation */}
         <CreativeTabs activeTab={activeTab} onTabChange={setActiveTab} />
 
-        {/* Adaptation actions (show when adaptations tab active) */}
-        {activeTab === 'adaptations' && (
-          <div className="my-6 flex justify-end">
-            <Button
-              onClick={() => {
-                try {
-                  // Build prefill and include Short Prompt (from groupedSections if present)
-                  const prefill: Record<string, unknown> = {
-                    imageVisualDescription: ad.image_description || ad.video_script || '',
-                    // include image fields so create page can build public reference_image_url
-                    image_url: ad.image_url || undefined,
-                    signed_image_url:
-                      (ad as Record<string, unknown>)['signed_image_url'] ||
-                      (ad as Record<string, unknown>)['signedUrl'] ||
-                      undefined,
-                    video_preview_image_url: ad.video_preview_image_url || undefined,
-                    // indicate whether creative is a video or photo
-                    display_format: ad.display_format || undefined,
-                    'гендер персонажу': '',
-                    персонаж: '',
-                    'тип фігури': '',
-                    тип: '',
-                    'особливості зовнішності': '',
-                    одяг: '',
-                    'колір волосся': '',
-                    поза: '',
-                    'розташування персонажа у кадрі': '',
-                    emotions: 'Positive emotions such as warmth, happiness, comfort',
-                    'кольорова палітра візуалу': '',
-                    локація: '',
-                    'елементи заднього фону': '',
-                    'особливості елементів заднього фону': '',
-                    scene: 'Warm indoor environment with soft ambient lighting',
-                    style: 'Clean, modern, warm and inviting color palette',
-                    adId: ad.id,
-                    adArchiveId: ad.ad_archive_id,
-                    ad_archive_id: ad.ad_archive_id,
-                    title: ad.title,
-                    page_name: ad.page_name,
-                  };
-
-                  // Try to find Short Prompt JSON in the provided `groupedSections` prop
-                  const shortSection = Array.isArray(groupedSections)
-                    ? groupedSections.find(
-                        (g) =>
-                          g.title === 'Image / Visual Description' ||
-                          g.title === 'Visual Description'
-                      )
-                    : null;
-                  if (shortSection && shortSection.text) {
-                    try {
-                      const parsed = JSON.parse(shortSection.text);
-                      prefill.shortPromptJson = parsed;
-                      prefill.shortPromptText = JSON.stringify(parsed);
-                    } catch {
-                      prefill.shortPromptText = String(shortSection.text);
-                    }
-                  }
-                  console.debug('[CreateAdaptation] prefill', prefill);
-                  const json = JSON.stringify(prefill);
-                  const encoded =
-                    typeof window !== 'undefined'
-                      ? window.btoa(unescape(encodeURIComponent(json)))
-                      : Buffer.from(json).toString('base64');
-                  const url = `/adaptations/create?data=${encodeURIComponent(encoded)}`;
-                  if (typeof window !== 'undefined') window.location.href = url;
-                } catch (e) {
-                  console.error('Failed to open create adaptation page', e);
-                }
-              }}
-              className="bg-orange-500 hover:bg-orange-600 text-white font-medium rounded-xl h-11 px-6"
-            >
-              Create Adaptation
-            </Button>
-          </div>
-        )}
+        {/* Adaptations feature removed */}
 
         {/* Tab Content */}
         {activeTab === 'content' && (
@@ -244,7 +168,6 @@ const AdDetails = memo(function AdDetails({
           />
         )}
         {activeTab === 'info' && <InfoTab ad={ad} />}
-        {activeTab === 'adaptations' && <AdaptationsTab ad={ad} />}
 
         {/* Share Modal */}
         {showShareModal && <ShareModal ad={ad} onClose={() => setShowShareModal(false)} />}
