@@ -218,6 +218,7 @@ export async function POST(request: NextRequest) {
           themesUsed: 0,
           mechanicsUsed: 0,
           themeDistribution: [],
+          hookDistribution: [],
           funnelDistribution: [],
           mechanicDistribution: [],
           visualPatterns: [],
@@ -286,6 +287,21 @@ export async function POST(request: NextRequest) {
       if (topic) themeCounts[topic] = (themeCounts[topic] || 0) + 1;
     }
     const themeDistribution: DistributionItem[] = Object.entries(themeCounts)
+      .map(([name, count]) => ({
+        name,
+        count,
+        percentage: Math.round((count / total) * 100),
+      }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 20);
+
+    // Hook distribution
+    const hookCounts: Record<string, number> = {};
+    for (const ad of adsArray) {
+      const hook = String(ad.hook || '').trim();
+      if (hook) hookCounts[hook] = (hookCounts[hook] || 0) + 1;
+    }
+    const hookDistribution: DistributionItem[] = Object.entries(hookCounts)
       .map(([name, count]) => ({
         name,
         count,
@@ -489,6 +505,7 @@ export async function POST(request: NextRequest) {
       themesUsed,
       mechanicsUsed,
       themeDistribution,
+      hookDistribution,
       funnelDistribution,
       mechanicDistribution,
       visualPatterns,

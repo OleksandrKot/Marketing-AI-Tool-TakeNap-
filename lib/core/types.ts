@@ -69,6 +69,7 @@ export interface CompetitorAnalytics {
   themesUsed: number;
   mechanicsUsed: number;
   themeDistribution: DistributionItem[];
+  hookDistribution?: DistributionItem[]; // optional hooks distribution
   funnelDistribution: DistributionItem[];
   mechanicDistribution: DistributionItem[];
   visualPatterns: VisualPattern[];

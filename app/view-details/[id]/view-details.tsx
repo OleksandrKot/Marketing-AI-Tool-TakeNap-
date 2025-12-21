@@ -334,19 +334,54 @@ const VisualDescriptionCard = memo(function VisualDescriptionCard({
   onOpenPrompt,
   onClosePrompt,
 }: VisualDescriptionCardProps) {
+  const isVideo = String(ad.display_format).toUpperCase() === 'VIDEO';
+  const imageDesc = (ad.image_description || '').trim();
+  // naive extraction of text overlay from description if present
+  const textOnImage = useMemo(() => {
+    const src = imageDesc;
+    if (!src) return '';
+    // common patterns: "Text overlay:", "Text on image:", quoted headline
+    const patterns = [
+      /text\s*(overlay|on\s*image)\s*[:：]\s*([\s\S]{1,200})/i,
+      /headline\s*[:：]\s*([\s\S]{1,200})/i,
+      /"([^"]{3,120})"/,
+      /'([^']{3,120})'/,
+    ];
+    for (const re of patterns) {
+      const m = src.match(re);
+      if (m) return (m[2] || m[1] || '').trim();
+    }
+    return '';
+  }, [imageDesc]);
+
   return (
     <Card className="border-slate-200 rounded-2xl">
       <CardContent className="p-0">
         <div className="bg-slate-50 p-6 border-b border-slate-200">
           <h2 className="text-xl font-semibold text-slate-900">Visual Description</h2>
         </div>
-        <div className="p-6">
-          <Button onClick={onOpenPrompt} className="bg-blue-600 hover:bg-blue-700 text-white">
-            Edit prompt
-          </Button>
-          {showPromptEditor && (
-            <PromptEditorModal ad={ad} isOpen={showPromptEditor} onClose={onClosePrompt} />
+        <div className="p-6 space-y-4">
+          {!isVideo && (
+            <div className="bg-white border border-slate-200 rounded-xl p-4">
+              <h3 className="text-sm font-medium text-slate-700 mb-2">
+                Image / Visual Description
+              </h3>
+              <p className="text-slate-800 text-sm whitespace-pre-line">{imageDesc || 'N/A'}</p>
+              <div className="mt-3 text-sm text-slate-600">
+                <span className="font-medium">Text on Image:</span>{' '}
+                {textOnImage ? textOnImage : 'N/A'}
+              </div>
+            </div>
           )}
+
+          <div>
+            <Button onClick={onOpenPrompt} className="bg-blue-600 hover:bg-blue-700 text-white">
+              Edit prompt
+            </Button>
+            {showPromptEditor && (
+              <PromptEditorModal ad={ad} isOpen={showPromptEditor} onClose={onClosePrompt} />
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>
