@@ -22,6 +22,7 @@ import ContentTab from './content-tab.client';
 import { InfoTab } from './info-tab';
 // tag manager removed from header for simplified detail view
 import type { Ad } from '@/lib/core/types';
+import { buildUnifiedAd } from './utils/adData';
 
 // Динамічне завантаження компонентів, які не потрібні одразу
 const ShareModal = dynamic(() => import('./share-modal'), {
@@ -40,12 +41,7 @@ interface AdDetailsProps {
   // adaptationScenarios removed with Adaptations feature
 }
 
-const AdDetails = memo(function AdDetails({
-  ad,
-  relatedAds,
-  groupedSections = [],
-  visualMainParagraphs = [],
-}: AdDetailsProps) {
+const AdDetails = memo(function AdDetails({ ad, relatedAds }: AdDetailsProps) {
   const router = useRouter();
   // Normalize creative id to string to avoid mismatches (some ads have numeric ad_archive_id)
   const creativeId = String(ad.ad_archive_id ?? ad.id);
@@ -160,12 +156,13 @@ const AdDetails = memo(function AdDetails({
 
         {/* Tab Content */}
         {activeTab === 'content' && (
-          <ContentTab
-            ad={ad}
-            relatedAds={relatedAds}
-            groupedSections={groupedSections}
-            visualMainParagraphs={visualMainParagraphs}
-          />
+          <>
+            {console.debug('Rendering ContentTab with ad:', buildUnifiedAd(ad))}
+            <ContentTab
+              ad={buildUnifiedAd(ad)}
+              relatedAds={relatedAds ? relatedAds.map((a) => buildUnifiedAd(a)) : relatedAds}
+            />
+          </>
         )}
         {activeTab === 'info' && <InfoTab ad={ad} />}
 

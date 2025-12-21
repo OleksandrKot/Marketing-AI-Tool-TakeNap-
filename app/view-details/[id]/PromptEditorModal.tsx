@@ -1,32 +1,18 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import type {
-  DropResult,
-  DroppableProvided,
-  DraggableProvided,
-  DraggableStateSnapshot,
-} from '@hello-pangea/dnd';
 import type { Ad } from '@/lib/core/types';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Copy, RotateCcw, GripVertical } from 'lucide-react';
+import { Copy, RotateCcw } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { supabase } from '@/lib/core/supabase';
 import dynamic from 'next/dynamic';
 import Slider from '@mui/material/Slider';
 // date-fns utilities removed; not currently needed in this modal
 
-const DragDropContext = dynamic(
-  () => import('@hello-pangea/dnd').then((mod) => mod.DragDropContext),
-  { ssr: false }
-);
-const Droppable = dynamic(() => import('@hello-pangea/dnd').then((mod) => mod.Droppable), {
-  ssr: false,
-});
-const Draggable = dynamic(() => import('@hello-pangea/dnd').then((mod) => mod.Draggable), {
-  ssr: false,
-});
+// Drag-and-drop removed for compact inline UI
 
 type SupabaseSessionLike = { session?: { user?: Record<string, unknown> } };
 
@@ -44,11 +30,25 @@ interface PromptEditorModalProps {
   onClose: () => void;
 }
 
+// Aligned with StructuredAttributes compact fields (video variant)
 const MAIN_PARAMETERS: Array<{ key: string; label: string }> = [
   { key: 'subject', label: 'Subject' },
-  { key: 'scene', label: 'Scene' },
-  { key: 'style', label: 'Style' },
-  { key: 'emotions', label: 'Emotions' },
+  { key: 'text_on_image', label: 'Text on Image' },
+  // Character
+  { key: 'characterGender', label: 'Character Gender' },
+  { key: 'characterType', label: 'Character Type (realistic or fictional)' },
+  { key: 'bodyType', label: 'Body Type' },
+  { key: 'type', label: 'Type' },
+  { key: 'appearanceDetails', label: 'Appearance Details' },
+  { key: 'clothing', label: 'Clothing' },
+  { key: 'hairColor', label: 'Hair Color' },
+  { key: 'pose', label: 'Pose' },
+  { key: 'characterPositionInFrame', label: 'Character Position in Frame' },
+  // Background / palette
+  { key: 'visualColorPalette', label: 'Visual Color Palette' },
+  { key: 'location', label: 'Location' },
+  { key: 'backgroundElements', label: 'Background Elements' },
+  { key: 'backgroundElementDetails', label: 'Background Element Details' },
 ];
 
 const formatTime = (seconds: number): string => {
@@ -214,11 +214,34 @@ const PromptEditorModal = ({ ad, isOpen, onClose }: PromptEditorModalProps) => {
       isAdditional: false,
     }));
 
-    // Map existing ad fields to parameters
-    if (ad.character) main.find((p) => p.key === 'subject')!.value = ad.character;
-    if (ad.image_description) main.find((p) => p.key === 'scene')!.value = ad.image_description;
-    if (ad.concept) main.find((p) => p.key === 'style')!.value = ad.concept;
-    if (ad.hook) main.find((p) => p.key === 'emotions')!.value = ad.hook;
+    // Map existing ad/unified fields to parameters (best-effort)
+    const A = ad as unknown as Record<string, unknown>;
+    const setIf = (key: string, val?: unknown) => {
+      if (val !== undefined && val !== null && String(val).trim()) {
+        const target = main.find((p) => p.key === key);
+        if (target) target.value = String(val).trim();
+      }
+    };
+
+    // Subject
+    setIf('subject', A.subject ?? A.character ?? A.title);
+    // Text on Image
+    setIf('text_on_image', A.text_on_image ?? A.textOnImage);
+    // Character-related
+    setIf('characterGender', A.characterGender);
+    setIf('characterType', A.characterType);
+    setIf('bodyType', A.bodyType);
+    setIf('type', A.type);
+    setIf('appearanceDetails', A.appearanceDetails);
+    setIf('clothing', A.clothing);
+    setIf('hairColor', A.hairColor);
+    setIf('pose', A.pose);
+    setIf('characterPositionInFrame', A.characterPositionInFrame);
+    // Background / palette
+    setIf('visualColorPalette', A.visualColorPalette);
+    setIf('location', A.location);
+    setIf('backgroundElements', A.backgroundElements);
+    setIf('backgroundElementDetails', A.backgroundElementDetails);
 
     const additional: PromptParameter[] = [
       {
@@ -410,15 +433,7 @@ const PromptEditorModal = ({ ad, isOpen, onClose }: PromptEditorModalProps) => {
     setParameters((prev) => prev.map((p) => (p.id === id ? { ...p, value } : p)));
   };
 
-  const handleDragEnd = (result: DropResult) => {
-    if (!result.destination) return;
-
-    const items = Array.from(parameters);
-    const [reorderedItem] = items.splice(result.source.index, 1);
-    items.splice(result.destination.index, 0, reorderedItem);
-
-    setParameters(items);
-  };
+  // Reordering removed for compact UI
 
   const handleReset = () => {
     setParameters([...originalParameters]);
@@ -691,93 +706,53 @@ const PromptEditorModal = ({ ad, isOpen, onClose }: PromptEditorModalProps) => {
                 </div>
               )}
 
-              {/* Main Parameters (Drag & Drop) */}
+              {/* Main Parameters (Compact inline grid) */}
               <div>
                 <h3 className="text-sm font-medium text-slate-700 mb-3">Main Parameters</h3>
-                {typeof window !== 'undefined' ? (
-                  <DragDropContext onDragEnd={handleDragEnd}>
-                    <Droppable droppableId="main-params">
-                      {(provided: DroppableProvided) => (
-                        <div
-                          {...provided.droppableProps}
-                          ref={provided.innerRef}
-                          className="space-y-3"
-                        >
-                          {mainParams.map((param, index) => (
-                            <Draggable key={param.id} draggableId={param.id} index={index}>
-                              {(provided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
-                                <div
-                                  ref={provided.innerRef}
-                                  {...provided.draggableProps}
-                                  className={`flex items-start gap-3 p-3 border border-slate-200 rounded-lg bg-white ${
-                                    snapshot.isDragging ? 'shadow-lg' : ''
-                                  }`}
-                                >
-                                  <div {...provided.dragHandleProps} className="mt-2 cursor-grab">
-                                    <GripVertical className="h-5 w-5 text-slate-400" />
-                                  </div>
-                                  <div className="flex-1">
-                                    <label
-                                      htmlFor={`param-${param.id}`}
-                                      className="block text-sm font-medium text-slate-700 mb-1"
-                                    >
-                                      {param.label}
-                                    </label>
-                                    <Textarea
-                                      id={`param-${param.id}`}
-                                      value={param.value}
-                                      onChange={(e) => updateParameter(param.id, e.target.value)}
-                                      placeholder={`Enter ${param.label.toLowerCase()}...`}
-                                      rows={3}
-                                      className="w-full"
-                                    />
-                                  </div>
-                                </div>
-                              )}
-                            </Draggable>
-                          ))}
-                          {provided.placeholder}
-                        </div>
-                      )}
-                    </Droppable>
-                  </DragDropContext>
-                ) : (
-                  <div className="space-y-3">
-                    {mainParams.map((param) => (
-                      <div
-                        key={param.id}
-                        className="p-3 border border-slate-200 rounded-lg bg-white"
-                      >
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {mainParams.map((param) => {
+                    const useTextarea = param.value && param.value.length > 60;
+                    return (
+                      <div key={param.id} className="flex flex-col gap-1">
                         <label
                           htmlFor={`param-${param.id}`}
-                          className="block text-sm font-medium text-slate-700 mb-1"
+                          className="text-xs font-medium text-slate-700"
                         >
                           {param.label}
                         </label>
-                        <Textarea
-                          id={`param-${param.id}`}
-                          value={param.value}
-                          onChange={(e) => updateParameter(param.id, e.target.value)}
-                          placeholder={`Enter ${param.label.toLowerCase()}...`}
-                          rows={3}
-                          className="w-full"
-                        />
+                        {useTextarea ? (
+                          <Textarea
+                            id={`param-${param.id}`}
+                            value={param.value}
+                            onChange={(e) => updateParameter(param.id, e.target.value)}
+                            placeholder={`Enter ${param.label.toLowerCase()}...`}
+                            className="text-xs h-16 p-2"
+                          />
+                        ) : (
+                          <Input
+                            id={`param-${param.id}`}
+                            value={param.value}
+                            onChange={(e) => updateParameter(param.id, e.target.value)}
+                            placeholder={`Enter ${param.label.toLowerCase()}...`}
+                            className="text-xs h-8"
+                          />
+                        )}
                       </div>
-                    ))}
-                  </div>
-                )}
+                    );
+                  })}
+                </div>
               </div>
             </div>
 
             {/* Additional Concepts */}
             <div className="w-full">
               <h3 className="text-sm font-medium text-slate-700 mb-3">Additional Concepts</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 w-full gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {additionalParams.map((param) => (
-                  <div key={param.id} className="p-3 border border-slate-200 rounded-lg bg-white">
+                  <div key={param.id} className="flex flex-col gap-1">
                     <label
                       htmlFor={`param-${param.id}`}
-                      className="block text-sm font-medium text-slate-700 mb-1"
+                      className="text-xs font-medium text-slate-700"
                     >
                       {param.label}
                     </label>
@@ -786,8 +761,7 @@ const PromptEditorModal = ({ ad, isOpen, onClose }: PromptEditorModalProps) => {
                       value={param.value}
                       onChange={(e) => updateParameter(param.id, e.target.value)}
                       placeholder={`Enter ${param.label.toLowerCase()}...`}
-                      rows={2}
-                      className="w-full"
+                      className="text-xs h-16 p-2"
                     />
                   </div>
                 ))}

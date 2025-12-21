@@ -26,6 +26,8 @@ import {
   Line,
 } from 'recharts';
 import { TrendingUp, TrendingDown, Loader2, Check, ChevronDown } from 'lucide-react';
+// Removed ThemeDistribution side list per request
+import FunnelsList from '@/components/dashboard/FunnelsList';
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
@@ -105,11 +107,14 @@ export default function DashboardClient({ initialCompetitors }: DashboardClientP
   };
 
   const formatDistributionChart = (data: DistributionItem[], maxItems = 10) => {
-    return data.slice(0, maxItems).map((item) => ({
-      name: item.name.length > 20 ? item.name.substring(0, 20) + '...' : item.name,
-      value: item.count,
-      fullName: item.name,
-    }));
+    return data.slice(0, maxItems).map((item) => {
+      const shortName = item.name.length > 20 ? item.name.substring(0, 20) + '...' : item.name;
+      return {
+        name: `${shortName} (${item.count})`,
+        value: item.count,
+        fullName: item.name,
+      };
+    });
   };
 
   return (
@@ -246,28 +251,73 @@ export default function DashboardClient({ initialCompetitors }: DashboardClientP
               </Card>
             </div>
 
-            {/* Competitor Breakdown */}
-            <Card className="mb-8 border-slate-200 rounded-2xl">
-              <CardHeader>
-                <h2 className="text-xl font-semibold text-slate-900">
-                  Creative Count per Competitor
-                </h2>
-              </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {analytics.competitorBreakdown.map((item: CompetitorBreakdown) => (
-                    <div
-                      key={item.competitor}
-                      className="bg-slate-50 rounded-lg p-4 border border-slate-200"
-                    >
-                      <div className="text-sm text-slate-500 mb-1">{item.competitor}</div>
-                      <div className="text-2xl font-bold text-slate-900">{item.count}</div>
-                      <div className="text-xs text-slate-400 mt-1">{item.percentage}% of total</div>
+            {/* Competitor Breakdown + Summary side-by-side */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+              <div className="lg:col-span-2">
+                <Card className="border-slate-200 rounded-2xl h-full">
+                  <CardHeader>
+                    <h2 className="text-xl font-semibold text-slate-900">
+                      Creative Count per Competitor
+                    </h2>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {analytics.competitorBreakdown.map((item: CompetitorBreakdown) => (
+                        <div
+                          key={item.competitor}
+                          className="bg-slate-50 rounded-lg p-4 border border-slate-200"
+                        >
+                          <div className="text-sm text-slate-500 mb-1">{item.competitor}</div>
+                          <div className="text-2xl font-bold text-slate-900">{item.count}</div>
+                          <div className="text-xs text-slate-400 mt-1">
+                            {item.percentage}% of total
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="lg:col-span-1">
+                <Card className="border-slate-200 rounded-2xl h-full">
+                  <CardHeader>
+                    <h2 className="text-xl font-semibold text-slate-900">Summary by Parameters</h2>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div>
+                        <h3 className="text-sm font-medium text-slate-700 mb-2">
+                          Most Common Lengths:
+                        </h3>
+                        <p className="text-slate-600">
+                          {analytics.durationDistribution.mostCommon.length > 0
+                            ? analytics.durationDistribution.mostCommon.join(', ')
+                            : 'N/A'}
+                        </p>
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-medium text-slate-700 mb-2">Main Mechanics:</h3>
+                        <p className="text-slate-600">
+                          {analytics.mechanicDistribution
+                            .slice(0, 5)
+                            .map((m) => m.name)
+                            .join(', ')}
+                        </p>
+                      </div>
+                      <div>
+                        <h3 className="text-sm font-medium text-slate-700 mb-2">
+                          Most Common Character:
+                        </h3>
+                        <p className="text-slate-600">
+                          {analytics.characterDistribution.mostCommon || 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+            </div>
 
             {/* Theme Distribution */}
             {analytics.themeDistribution.length > 0 && (
@@ -279,6 +329,7 @@ export default function DashboardClient({ initialCompetitors }: DashboardClientP
                   <ResponsiveContainer width="100%" height={400}>
                     <BarChart data={formatDistributionChart(analytics.themeDistribution)}>
                       <CartesianGrid strokeDasharray="3 3" />
+                      {/* Names now include counts in parentheses */}
                       <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
                       <YAxis />
                       <Tooltip
@@ -295,6 +346,32 @@ export default function DashboardClient({ initialCompetitors }: DashboardClientP
               </Card>
             )}
 
+            {/* Hooks Distribution */}
+            {analytics.hookDistribution && analytics.hookDistribution.length > 0 && (
+              <Card className="mb-8 border-slate-200 rounded-2xl">
+                <CardHeader>
+                  <h2 className="text-xl font-semibold text-slate-900">Hooks Distribution</h2>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <BarChart data={formatDistributionChart(analytics.hookDistribution)}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="name" angle={-45} textAnchor="end" height={100} />
+                      <YAxis />
+                      <Tooltip
+                        formatter={(value: number, name: string, props: unknown) => {
+                          const p = props as { payload?: { fullName?: string } } | undefined;
+                          return [`${value} creatives`, p?.payload?.fullName || name];
+                        }}
+                      />
+                      <Legend />
+                      <Bar dataKey="value" fill="#10b981" name="Creatives" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Funnel Distribution */}
             {analytics.funnelDistribution.length > 0 && (
               <Card className="mb-8 border-slate-200 rounded-2xl">
@@ -302,25 +379,14 @@ export default function DashboardClient({ initialCompetitors }: DashboardClientP
                   <h2 className="text-xl font-semibold text-slate-900">Funnel Distribution</h2>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-2 max-h-96 overflow-y-auto">
-                    {analytics.funnelDistribution
-                      .slice(0, 20)
-                      .map((item: DistributionItem, idx: number) => (
-                        <div
-                          key={idx}
-                          className="flex items-center justify-between p-3 bg-slate-50 rounded-lg border border-slate-200"
-                        >
-                          <div className="flex-1 min-w-0">
-                            <div className="text-sm font-medium text-slate-900 truncate">
-                              {item.name}
-                            </div>
-                          </div>
-                          <div className="ml-4 text-right">
-                            <div className="text-sm font-semibold text-slate-900">{item.count}</div>
-                            <div className="text-xs text-slate-500">{item.percentage}%</div>
-                          </div>
-                        </div>
-                      ))}
+                  <div className="max-h-96 overflow-y-auto">
+                    <FunnelsList
+                      funnels={analytics.funnelDistribution.slice(0, 50).map((f) => ({
+                        name: f.name,
+                        count: f.count,
+                        id: f.name,
+                      }))}
+                    />
                   </div>
                 </CardContent>
               </Card>
@@ -379,44 +445,6 @@ export default function DashboardClient({ initialCompetitors }: DashboardClientP
                     <Tooltip />
                   </PieChart>
                 </ResponsiveContainer>
-              </CardContent>
-            </Card>
-
-            {/* Summary */}
-            <Card className="mb-8 border-slate-200 rounded-2xl">
-              <CardHeader>
-                <h2 className="text-xl font-semibold text-slate-900">Summary by Parameters</h2>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <h3 className="text-sm font-medium text-slate-700 mb-2">
-                      Most Common Lengths:
-                    </h3>
-                    <p className="text-slate-600">
-                      {analytics.durationDistribution.mostCommon.length > 0
-                        ? analytics.durationDistribution.mostCommon.join(', ')
-                        : 'N/A'}
-                    </p>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-slate-700 mb-2">Main Mechanics:</h3>
-                    <p className="text-slate-600">
-                      {analytics.mechanicDistribution
-                        .slice(0, 5)
-                        .map((m) => m.name)
-                        .join(', ')}
-                    </p>
-                  </div>
-                  <div>
-                    <h3 className="text-sm font-medium text-slate-700 mb-2">
-                      Most Common Character:
-                    </h3>
-                    <p className="text-slate-600">
-                      {analytics.characterDistribution.mostCommon || 'N/A'}
-                    </p>
-                  </div>
-                </div>
               </CardContent>
             </Card>
 

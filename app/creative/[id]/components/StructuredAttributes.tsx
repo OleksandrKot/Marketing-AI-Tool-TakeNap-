@@ -3,7 +3,6 @@
 import React, {
   useEffect,
   useState,
-  useRef,
   useMemo,
   useImperativeHandle,
   forwardRef,
@@ -12,7 +11,8 @@ import React, {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
-import { Copy, Trash2, Move } from 'lucide-react';
+import { Copy, Trash2 } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 
 import {
   prettifyKey,
@@ -62,9 +62,6 @@ function normalizeKey(input: string | undefined | null): string {
 const PROMPT_FIELDS: { jsonKey: string; label: string; outKey: string }[] = [
   // Core prompt fields (visual prompt)
   { jsonKey: 'subject', label: 'Subject', outKey: 'subject' },
-  { jsonKey: 'scene', label: 'Scene', outKey: 'scene' },
-  { jsonKey: 'style', label: 'Style', outKey: 'style' },
-  { jsonKey: 'emotions', label: 'Emotions', outKey: 'emotions' },
   { jsonKey: 'text_on_image', label: 'Text on Image', outKey: 'text_on_image' },
   { jsonKey: 'textOnImage', label: 'Text on Image', outKey: 'text_on_image' },
 
@@ -221,49 +218,15 @@ const StructuredAttributes = (
   const format = 'json' as const;
 
   /**
-   * Try to guess Topic from raw visual text.
-   */
-  const extractTopicFromVisual = (text: string) => {
-    try {
-      const m = text.match(/topic\s*[:\-]\s*(.+)/i);
-      if (m && m[1]) return m[1].trim();
-      const first = text.split(/\n/)[0];
-      return first.trim().slice(0, 200);
-    } catch {
-      return '';
-    }
-  };
-
-  /**
    * Build initial blocks from:
-   *  - Image / Visual Description JSON
-   *  - new_scenario / video_script
    *  - grouped sections (Topic, Character, etc.)
    *  - DEFAULT_FIELDS (ensures minimal prompt scaffold)
    */
   const mapFromSections = (): Block[] => {
     const out: Block[] = [];
 
-    // 1) try to parse AiPrompt JSON from "Image / Visual Description" section
-    const visual = groupedSections.find(
-      (g) => g.title === 'Image / Visual Description' || g.title === 'Visual Description'
-    );
-
-    let visualJson: Record<string, unknown> | null = null;
-    if (visual && visual.text) {
-      const parsed = tryParseJson(visual.text || '') as unknown;
-      if (parsed && typeof parsed === 'object') {
-        visualJson = parsed as Record<string, unknown>;
-      }
-    }
-
     const addPromptField = (cfg: { jsonKey: string; label: string; outKey: string }) => {
       let raw: unknown;
-
-      // Prefer value from visual prompt JSON
-      if (visualJson && Object.prototype.hasOwnProperty.call(visualJson, cfg.jsonKey)) {
-        raw = visualJson[cfg.jsonKey];
-      }
 
       // If not found, try to read from ad itself
       if (raw === undefined && ad) {
@@ -295,44 +258,7 @@ const StructuredAttributes = (
       addPromptField(cfg);
     }
 
-    // 3) new_scenario → Scenario
-    try {
-      const ns =
-        ad &&
-        ((ad as Record<string, unknown>)['new_scenario'] ??
-          (ad as Record<string, unknown>)['newScenario']);
-      if (ns) {
-        if (typeof ns === 'string') {
-          const parsed = tryParseJson(ns);
-          if (parsed) {
-            out.push({
-              id: uid(),
-              label: 'Scenario',
-              value: JSON.stringify(parsed, null, 2),
-              included: true,
-            });
-          } else {
-            out.push({
-              id: uid(),
-              label: 'Scenario',
-              value: String(ns),
-              included: true,
-            });
-          }
-        } else {
-          out.push({
-            id: uid(),
-            label: 'Scenario',
-            value: stringifyValue(ns),
-            included: true,
-          });
-        }
-      }
-    } catch {
-      // ignore
-    }
-
-    // 4) video_script → Video Script
+    // video_script → Video Script (kept for video creatives)
     try {
       const vs =
         ad &&
@@ -369,18 +295,7 @@ const StructuredAttributes = (
       }
     }
 
-    // 6) try to guess Topic from the visual description text, if not already set
-    if (!out.find((b) => b.label === 'Topic') && visual && visual.text) {
-      const topicGuess = extractTopicFromVisual(visual.text || '');
-      if (topicGuess) {
-        out.push({
-          id: uid(),
-          label: 'Topic',
-          value: topicGuess,
-          included: true,
-        });
-      }
-    }
+    // Note: do not infer Topic from visual description; use grouped sections only
 
     // 7) ensure DEFAULT_FIELDS exist
     for (const def of DEFAULT_FIELDS) {
@@ -412,7 +327,7 @@ const StructuredAttributes = (
       } else {
         // Ephemeral modal mode: start with a minimal set of fields for quick editing
         const base = mapFromSections();
-        const wanted = ['Subject', 'Scene', 'Style', 'Emotions'];
+        const wanted = ['Subject', 'Character Gender', 'Character', 'Appearance Details'];
         const result: Block[] = [];
         for (const label of wanted) {
           const found = base.find((b) => normalizeKey(b.label) === normalizeKey(label));
@@ -430,9 +345,7 @@ const StructuredAttributes = (
     return mapFromSections();
   });
 
-  const dragIndex = useRef<number | null>(null);
-  const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null);
+  // Drag-and-drop removed: compact inline form instead
 
   // Set of normalized labels used in blocks, to avoid duplicate properties
   const usedPropKeys = useMemo(() => {
@@ -454,11 +367,24 @@ const StructuredAttributes = (
   const allProps = useMemo(() => {
     const result: PropItem[] = [];
     const seen = new Set<string>();
+    const excludePatterns = [
+      'image',
+      'description',
+      'new_scenario',
+      'scenario',
+      'scene',
+      'emotions',
+      'style',
+    ];
+    const isExcluded = (key: string) => {
+      const low = key.toLowerCase();
+      return excludePatterns.some((p) => low.includes(p));
+    };
 
     if (ad) {
       // 1) top-level ad fields
       Object.entries(ad)
-        .filter(([, v]) => v !== null && v !== undefined && v !== '')
+        .filter(([k, v]) => v !== null && v !== undefined && v !== '' && !isExcluded(k))
         .forEach(([k, v]) => {
           const key = k;
           const label = prettifyKey(k);
@@ -483,28 +409,10 @@ const StructuredAttributes = (
       for (const item of nested) {
         const val = item.value?.trim();
         if (!val) continue;
+        if (isExcluded(item.key)) continue;
         if (seen.has(item.key)) continue;
         seen.add(item.key);
         result.push({ ...item, value: val });
-      }
-    }
-
-    // 3) JSON from "Image / Visual Description" section
-    const visual = groupedSections.find(
-      (g) => g.title === 'Image / Visual Description' || g.title === 'Visual Description'
-    );
-    if (visual?.text) {
-      const parsed = tryParseJson(visual.text) as unknown;
-      if (parsed && typeof parsed === 'object') {
-        const flat: PropItem[] = [];
-        flattenJsonToProps(flat, parsed, '');
-        for (const item of flat) {
-          const val = item.value?.trim();
-          if (!val) continue;
-          if (seen.has(item.key)) continue;
-          seen.add(item.key);
-          result.push({ ...item, value: val });
-        }
       }
     }
 
@@ -548,65 +456,6 @@ const StructuredAttributes = (
 
   const removeBlock = (id: string) => {
     setBlocks((b) => b.filter((x) => x.id !== id));
-  };
-
-  const onDragStart = (i: number) => {
-    dragIndex.current = i;
-    setDraggingIndex(i);
-  };
-
-  const onDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  /**
-   * Drop handler:
-   *  - if data starts with "prop:", we insert a new Block with that property
-   *  - otherwise, we reorder existing blocks
-   */
-  const onDrop = (e: React.DragEvent, i: number) => {
-    e.preventDefault();
-    const dt = e.dataTransfer.getData('text/plain') || '';
-
-    if (dt.startsWith('prop:')) {
-      const key = dt.slice('prop:'.length);
-      const prop = allProps.find((p) => p.key === key);
-      if (!prop) return;
-      const newBlock: Block = {
-        id: uid(),
-        label: prop.label,
-        value: prop.value,
-        included: true,
-      };
-      setBlocks((b) => {
-        const copy = [...b];
-        copy.splice(i, 0, newBlock);
-        return copy;
-      });
-      return;
-    }
-
-    const from = dragIndex.current;
-    if (from === null || from === undefined) return;
-    const to = i;
-    if (from === to) return;
-    setBlocks((b) => {
-      const copy = [...b];
-      const [m] = copy.splice(from, 1);
-      copy.splice(to, 0, m);
-      return copy;
-    });
-    dragIndex.current = null;
-    setDraggingIndex(null);
-    setHoverIndex(null);
-  };
-
-  const onDragEnter = (i: number) => {
-    setHoverIndex(i);
-  };
-
-  const onDragLeave = () => {
-    setHoverIndex(null);
   };
 
   /**
@@ -707,9 +556,6 @@ const StructuredAttributes = (
       try {
         // rebuild base blocks from sections/ad to restore original order
         setBlocks(mapFromSections());
-        dragIndex.current = null;
-        setDraggingIndex(null);
-        setHoverIndex(null);
         setGenerated(null);
 
         // If a JSON object is provided, apply it after the base blocks are set
@@ -749,7 +595,7 @@ const StructuredAttributes = (
 
         {/* Body */}
         <div className="p-4 space-y-3">
-          {/* Available properties (for drag & click) */}
+          {/* Available properties (click to add to form) */}
           {allProps && allProps.length > 0 && (
             <div className="mb-2">
               <div className="text-sm font-medium mb-2">Available Properties</div>
@@ -762,11 +608,6 @@ const StructuredAttributes = (
                   return (
                     <button
                       key={p.key}
-                      draggable={!disabled}
-                      onDragStart={(e) => {
-                        if (disabled) return;
-                        e.dataTransfer.setData('text/plain', `prop:${p.key}`);
-                      }}
                       onClick={() => {
                         if (disabled) return;
                         setBlocks((b) => [
@@ -790,47 +631,49 @@ const StructuredAttributes = (
             </div>
           )}
 
-          {/* Blocks list */}
-          <div className="space-y-1">
-            {blocks.map((b, i) => (
-              <div
-                key={b.id}
-                draggable={blocks.length > 1}
-                onDragStart={() => onDragStart(i)}
-                onDragOver={onDragOver}
-                onDrop={(e) => onDrop(e, i)}
-                onDragEnter={() => onDragEnter(i)}
-                onDragLeave={onDragLeave}
-                className={`border rounded-md p-2 bg-white flex items-start gap-2 mb-1 ${
-                  draggingIndex === i ? 'bg-blue-50' : ''
-                } ${hoverIndex === i ? 'ring-2 ring-dashed ring-slate-300' : ''}`}
-              >
-                <div className="text-slate-400 mt-1 cursor-grab">
-                  {blocks.length > 1 ? <Move className="h-3 w-3" /> : null}
-                </div>
-                <div className="flex-1">
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <div className="font-medium text-slate-800 text-sm">{b.label}</div>
-                    <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon" onClick={() => removeBlock(b.id)}>
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  </div>
-                  <Textarea
-                    value={b.value}
-                    onChange={(e) =>
-                      setBlocks((prev) =>
-                        prev.map((blk) =>
-                          blk.id === b.id ? { ...blk, value: e.target.value } : blk
+          {/* Inline attributes form: compact grid */}
+          <div className="grid grid-cols-2 gap-3">
+            {blocks.map((b) => {
+              const isTextarea = b.value && b.value.length > 50;
+              return (
+                <div key={b.id} className="flex flex-col gap-1">
+                  <label className="text-xs font-medium text-slate-700">{b.label}</label>
+                  {isTextarea ? (
+                    <Textarea
+                      value={b.value}
+                      onChange={(e) =>
+                        setBlocks((prev) =>
+                          prev.map((blk) =>
+                            blk.id === b.id ? { ...blk, value: e.target.value } : blk
+                          )
                         )
-                      )
-                    }
-                    className="min-h-[80px]"
-                  />
+                      }
+                      className="text-xs h-16 p-2"
+                    />
+                  ) : (
+                    <Input
+                      value={b.value}
+                      onChange={(e) =>
+                        setBlocks((prev) =>
+                          prev.map((blk) =>
+                            blk.id === b.id ? { ...blk, value: e.target.value } : blk
+                          )
+                        )
+                      }
+                      className="text-xs h-8"
+                    />
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => removeBlock(b.id)}
+                    className="h-6 text-xs"
+                  >
+                    <Trash2 className="h-3 w-3 mr-1" /> Remove
+                  </Button>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Controls */}

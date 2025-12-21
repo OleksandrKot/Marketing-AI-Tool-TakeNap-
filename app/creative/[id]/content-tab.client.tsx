@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/core/supabase';
 import { useRouter } from 'next/navigation';
@@ -14,34 +14,36 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import type { Ad } from '@/lib/core/types';
 
 import ContentMedia from '@/components/creative/content/ContentMedia';
 import ContentControls from '@/components/creative/content/ContentControls';
-type SupabaseSessionLike = { session?: { user?: Record<string, unknown> } };
 import StorageImage from '@/lib/storage/StorageImage';
 import cleanAndSplit from './utils/cleanAndSplit';
 import CollapsiblePanel from './components/CollapsiblePanel';
 import GroupedSections from './components/GroupedSections';
 
+// IMPORTANT: Use the unified shape.
+// If your import path differs, adjust it.
+import type { UnifiedAd } from './utils/adData.ts';
+import type { Ad } from '@/lib/core/types';
+
+type SupabaseSessionLike = { session?: { user?: Record<string, unknown> } };
+
 interface ContentTabClientProps {
-  ad: Ad;
-  relatedAds?: Ad[] | null;
-  visualMainParagraphs: string[];
-  groupedSections: { title: string; text: string }[];
+  ad: UnifiedAd; // unified
+  relatedAds?: UnifiedAd[] | null;
 }
 
-export default function ContentTabClient({
-  ad,
-  relatedAds,
-  visualMainParagraphs,
-  groupedSections,
-}: ContentTabClientProps) {
+export default function ContentTabClient({ ad, relatedAds }: ContentTabClientProps) {
   const router = useRouter();
   const leftColRef = useRef<HTMLDivElement | null>(null);
+  const { showToast } = useToast();
+
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showLogin, setShowLogin] = useState(false);
   const [showPromptEditor, setShowPromptEditor] = useState(false);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+
   const LoginModal = dynamic(() => import('@/app/login-auth/LoginModal'), {
     ssr: false,
     loading: () => null,
@@ -57,16 +59,25 @@ export default function ContentTabClient({
     { ssr: false, loading: () => null }
   );
 
-  // Loader component to avoid importing the heavy editor until user requests it
-  // Note: the structured attributes modal is dynamically imported below
-  // via `DynamicStructuredAttributesModal` when needed.
-  const adData = ad; // server-prepared ad
-  const { showToast } = useToast();
-  const [localGroupedSections, setLocalGroupedSections] = useState(groupedSections);
+  // UI reads from unified ad
+  const adData = ad;
 
-  useEffect(() => {
-    setLocalGroupedSections(groupedSections);
+  const groupedSections = adData.groupedSections || [];
+
+  // Visual description paragraphs for copy button (from JSON section if exists)
+  const visualMainParagraphs = useMemo(() => {
+    const vis = groupedSections.find(
+      (s) => s.title === 'Image / Visual Description' || s.title === 'Visual Description'
+    )?.text;
+
+    // If JSON exists, keep it as a single block for copy,
+    // otherwise fallback to empty.
+    return vis ? [vis] : [];
   }, [groupedSections]);
+
+  // Local state so user can edit structured attributes and see updated section
+  const [localGroupedSections, setLocalGroupedSections] = useState(groupedSections);
+  useEffect(() => setLocalGroupedSections(groupedSections), [groupedSections]);
 
   const applyAttributesToVisual = (obj: Record<string, unknown>) => {
     try {
@@ -74,67 +85,63 @@ export default function ContentTabClient({
       const idx = localGroupedSections.findIndex(
         (g) => g.title === 'Image / Visual Description' || g.title === 'Visual Description'
       );
+
       let updated = [...localGroupedSections];
-      if (idx >= 0) {
-        updated[idx] = { ...updated[idx], text: json };
-      } else {
-        updated = [{ title: 'Image / Visual Description', text: json }, ...updated];
-      }
+      if (idx >= 0) updated[idx] = { ...updated[idx], text: json };
+      else updated = [{ title: 'Image / Visual Description', text: json }, ...updated];
+
       setLocalGroupedSections(updated);
-    } catch (e) {
+    } catch {
       // ignore
     }
   };
 
-  // Per AC: Related Ads must come exclusively from Scraper JSON (relatedAds prop)
-  // Do not merge or infer duplicates from other sources. Preserve order from JSON.
-  // Keep only items that have a valid id (number or string). Skip malformed entries.
+  // Related ads come from scraper JSON only
   const scraperRelated = Array.isArray(relatedAds)
     ? relatedAds.filter((it) =>
-        Boolean(it && (typeof (it as Ad).id === 'string' || typeof (it as Ad).id === 'number'))
+        Boolean(it && (typeof it.id === 'string' || typeof it.id === 'number'))
       )
     : [];
-  const [autoRefresh, setAutoRefresh] = useState(false);
+
   useEffect(() => {
     if (!autoRefresh) return;
     const iv = setInterval(() => {
       try {
         router.refresh();
-      } catch (e) {
+      } catch {
         // ignore
       }
     }, 60000);
     return () => clearInterval(iv);
   }, [autoRefresh, router]);
-  const relatedTotal = scraperRelated.length;
 
-  const handleCopyToClipboard = useCallback(
-    async (text: string, fieldName: string): Promise<boolean> => {
+  const handleCopyToClipboard = useCallback(async (text: string, fieldName: string) => {
+    try {
+      // Require auth to copy
       try {
-        // require auth to copy
-        try {
-          const { data: sessionData } = await supabase.auth.getSession();
-          const sessionUser = (sessionData as unknown as SupabaseSessionLike).session?.user;
-          if (!sessionUser) {
-            setShowLogin(true);
-            return false;
-          }
-        } catch (e) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const sessionUser = (sessionData as unknown as SupabaseSessionLike).session?.user;
+        if (!sessionUser) {
           setShowLogin(true);
           return false;
         }
-
-        await navigator.clipboard.writeText(text);
-        setCopiedField(fieldName);
-        setTimeout(() => setCopiedField(null), 2000);
-        return true;
-      } catch (error) {
-        console.error('Failed to copy:', error);
+      } catch {
+        setShowLogin(true);
         return false;
       }
-    },
-    []
-  );
+
+      await navigator.clipboard.writeText(text);
+      setCopiedField(fieldName);
+      setTimeout(() => setCopiedField(null), 2000);
+      return true;
+    } catch (error) {
+      console.error('Failed to copy:', error);
+      return false;
+    }
+  }, []);
+
+  const relatedTotal = scraperRelated.length;
+  const isVideo = String(adData.display_format).toUpperCase() === 'VIDEO';
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -142,13 +149,15 @@ export default function ContentTabClient({
         <Card className="overflow-hidden border-slate-200 rounded-2xl">
           <CardContent className="p-0">
             <div className="bg-slate-100 flex items-center justify-center h-[360px] md:h-[480px] overflow-hidden">
-              <ContentMedia ad={adData} />
+              {/** Cast unified to core Ad for media/control components */}
+              <ContentMedia ad={adData as unknown as Ad} />
             </div>
           </CardContent>
         </Card>
 
         <div className="flex gap-4 items-center flex-wrap">
-          <ContentControls ad={adData} />
+          <ContentControls ad={adData as unknown as Ad} />
+
           {adData.link_url && (
             <Button
               variant="outline"
@@ -160,7 +169,6 @@ export default function ContentTabClient({
             </Button>
           )}
 
-          {/* Meta Library quick actions: visible on sm+; on xs show a compact menu */}
           {(adData.meta_ad_url || adData.ad_archive_id || adData.page_name) && (
             <>
               <div className="hidden sm:inline-flex items-center gap-2">
@@ -197,7 +205,6 @@ export default function ContentTabClient({
                 </Button>
               </div>
 
-              {/* Compact menu for small screens */}
               <div className="sm:hidden">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -240,6 +247,7 @@ export default function ContentTabClient({
           )}
         </div>
 
+        {/* Export CSV (unchanged logic, UI-only) */}
         <div className="mt-3">
           <Button
             variant="outline"
@@ -264,8 +272,6 @@ export default function ContentTabClient({
                   'link_url',
                   'meta_ad_url',
                   'image_url',
-                  'image_description',
-                  'new_scenario',
                   'tags',
                   'duplicates_ad_text',
                   'duplicates_links',
@@ -283,12 +289,7 @@ export default function ContentTabClient({
 
                 const tagsValue = Array.isArray(adData.tags)
                   ? adData.tags.join(',')
-                  : (adData.tags as unknown as string) || '';
-
-                const newScenarioValue =
-                  adData.new_scenario && typeof adData.new_scenario === 'object'
-                    ? JSON.stringify(adData.new_scenario)
-                    : (adData.new_scenario as string) || '';
+                  : String(adData.tags || '');
 
                 const row = [
                   adData.id,
@@ -303,8 +304,6 @@ export default function ContentTabClient({
                   adData.link_url ?? '',
                   adData.meta_ad_url ?? '',
                   adData.image_url ?? '',
-                  adData.image_description ?? '',
-                  newScenarioValue,
                   tagsValue,
                   adData.duplicates_ad_text ?? '',
                   adData.duplicates_links ?? '',
@@ -320,7 +319,7 @@ export default function ContentTabClient({
                   adData.character ?? '',
                 ];
 
-                const csvLines = [] as string[];
+                const csvLines: string[] = [];
                 csvLines.push(header.join(';'));
                 csvLines.push(row.map(esc).join(';'));
 
@@ -348,6 +347,7 @@ export default function ContentTabClient({
           </Button>
         </div>
 
+        {/* Related Ads */}
         <Card className="border-slate-200 rounded-2xl">
           <CardContent className="p-0">
             <div className="bg-blue-50 p-6 border-b border-slate-200">
@@ -363,7 +363,7 @@ export default function ContentTabClient({
                       try {
                         router.refresh();
                         showToast({ message: 'Refreshed related ads', type: 'success' });
-                      } catch (e) {
+                      } catch {
                         showToast({ message: 'Refresh failed', type: 'error' });
                       }
                     }}
@@ -380,6 +380,7 @@ export default function ContentTabClient({
                 </div>
               </div>
             </div>
+
             <div className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {scraperRelated.length === 0 ? (
@@ -397,13 +398,14 @@ export default function ContentTabClient({
                         try {
                           const allRelatedIds = [
                             adData.id,
-                            ...(scraperRelated || []).map((ra) => ra.id),
+                            ...scraperRelated.map((ra) => ra.id),
                           ].filter((id) => id !== relatedAd.id);
-                          const relatedParam =
-                            allRelatedIds.length > 0 ? `?related=${allRelatedIds.join(',')}` : '';
+                          const relatedParam = allRelatedIds.length
+                            ? `?related=${allRelatedIds.join(',')}`
+                            : '';
                           router.push(`/creative/${relatedAd.id}${relatedParam}`);
-                        } catch (e) {
-                          // If relatedAd id malformed or navigation fails, fail gracefully
+                        } catch {
+                          // ignore
                         }
                       }}
                       onKeyDown={(e) => {
@@ -411,10 +413,11 @@ export default function ContentTabClient({
                           e.preventDefault();
                           const allRelatedIds = [
                             adData.id,
-                            ...(relatedAds || []).map((ra) => ra.id),
+                            ...scraperRelated.map((ra) => ra.id),
                           ].filter((id) => id !== relatedAd.id);
-                          const relatedParam =
-                            allRelatedIds.length > 0 ? `?related=${allRelatedIds.join(',')}` : '';
+                          const relatedParam = allRelatedIds.length
+                            ? `?related=${allRelatedIds.join(',')}`
+                            : '';
                           router.push(`/creative/${relatedAd.id}${relatedParam}`);
                         }
                       }}
@@ -440,11 +443,13 @@ export default function ContentTabClient({
                           />
                         ) : null}
                       </div>
+
                       <h3 className="font-medium text-slate-900 mb-1 line-clamp-2">
                         {relatedAd.title || 'Untitled Ad'}
                       </h3>
                       <p className="text-sm text-slate-500 mb-2">{relatedAd.page_name}</p>
-                      {relatedAd?.display_format === 'VIDEO' && (
+
+                      {String(relatedAd.display_format).toUpperCase() === 'VIDEO' && (
                         <span className="inline-block bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded-full">
                           📹 Video
                         </span>
@@ -457,6 +462,7 @@ export default function ContentTabClient({
           </CardContent>
         </Card>
 
+        {/* Common text blocks */}
         {adData.text && (
           <Card className="border-slate-200 rounded-2xl">
             <CardContent className="p-0">
@@ -581,6 +587,7 @@ export default function ContentTabClient({
         )}
       </div>
 
+      {/* Right column */}
       <div className="space-y-6">
         <div className="mb-6">
           <CollapsiblePanel
@@ -588,14 +595,6 @@ export default function ContentTabClient({
             defaultOpen={true}
             actions={
               <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowPromptEditor(true)}
-                  className="text-blue-600 border-blue-200 hover:bg-blue-50"
-                >
-                  Edit prompt
-                </Button>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -615,13 +614,28 @@ export default function ContentTabClient({
           >
             <div className="space-y-4 mb-4">
               <div className="space-y-3">
-                <div className="mb-2">
-                  <DynamicStructuredAttributesModal
-                    groupedSections={localGroupedSections}
-                    ad={adData as unknown as Record<string, unknown>}
-                    onApply={applyAttributesToVisual}
-                  />
-                </div>
+                {!isVideo && (
+                  <div className="mb-2">
+                    <DynamicStructuredAttributesModal
+                      groupedSections={localGroupedSections}
+                      ad={adData as unknown as Record<string, unknown>}
+                      onApply={applyAttributesToVisual}
+                    />
+                  </div>
+                )}
+
+                {isVideo && (
+                  <div className="mb-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowPromptEditor(true)}
+                      className="w-full text-blue-600 border-blue-200 hover:bg-blue-50 font-medium"
+                    >
+                      Edit prompt
+                    </Button>
+                  </div>
+                )}
+
                 <GroupedSections
                   sections={localGroupedSections.filter(
                     (s) =>
@@ -630,6 +644,25 @@ export default function ContentTabClient({
                   onCopy={handleCopyToClipboard}
                   copiedField={copiedField}
                 />
+
+                {/* Format & Creative Concepts summary */}
+                {(() => {
+                  const fccSection = localGroupedSections.find(
+                    (s) => s.title === 'Formats & Creative Concepts'
+                  );
+                  if (!fccSection) return null;
+
+                  return (
+                    <div className="mt-3 text-sm text-slate-700">
+                      <div className="font-medium text-slate-900 mb-2">
+                        Format & Creative Concepts:
+                      </div>
+                      <pre className="whitespace-pre-wrap break-words text-sm">
+                        {fccSection.text}
+                      </pre>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </CollapsiblePanel>
@@ -637,33 +670,41 @@ export default function ContentTabClient({
 
         <div className="mb-6">
           <CollapsiblePanel title="Additional content" defaultOpen={false}>
-            <div className="space-y-6">
-              <GroupedSections
-                sections={groupedSections.filter((s) =>
-                  [
-                    'Title',
-                    'Ad Text',
-                    'text_on_image',
-                    'Call to Action',
-                    'Video Description',
-                    'Audio Description',
-                    'Sound Transcription',
-                    'Audio Style',
-                    'Social Proof',
-                    'Target Audience',
-                  ].includes(String(s.title))
-                )}
-                onCopy={handleCopyToClipboard}
-                copiedField={copiedField}
-              />
-            </div>
+            {/* Filter and show selected sections only (UI list) */}
+            {(() => {
+              const baseTitles = [
+                'Title',
+                'Ad Text',
+                'Call to Action',
+                'Visual Description',
+                'Audio Description',
+                'Sound Transcription',
+                'Audio Style',
+                'Social Proof',
+                'Target Audience',
+              ];
+              const extraStaticTitles = ['Visual Elements', 'Text on Image'];
+              const allowed = isVideo ? baseTitles : baseTitles.concat(extraStaticTitles);
+
+              const filtered = groupedSections.filter((s) => allowed.includes(String(s.title)));
+
+              return (
+                <GroupedSections
+                  sections={filtered}
+                  onCopy={handleCopyToClipboard}
+                  copiedField={copiedField}
+                />
+              );
+            })()}
           </CollapsiblePanel>
         </div>
       </div>
+
       {showLogin ? <LoginModal onClose={() => setShowLogin(false)} /> : null}
+
       {showPromptEditor && (
         <PromptEditorModal
-          ad={ad}
+          ad={ad as unknown as Ad}
           isOpen={showPromptEditor}
           onClose={() => setShowPromptEditor(false)}
         />

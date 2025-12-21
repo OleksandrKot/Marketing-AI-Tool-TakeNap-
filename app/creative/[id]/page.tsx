@@ -11,6 +11,7 @@ import {
   getVisualParagraphs,
   buildMetaAnalysis,
   buildGroupedSections,
+  buildUnifiedAd,
 } from './utils/adData';
 
 // Кешування даних креативу
@@ -349,16 +350,18 @@ export default async function CreativePage({ params, searchParams }: CreativePag
     adaptationScenarios as AdaptationScenario[]
   );
 
+  // Build unified ad with derived fields for simpler client rendering
+  const adUnified = buildUnifiedAd(ad);
+
   return (
     <Suspense fallback={<AdDetailsSkeleton />}>
       <AdDetails
-        ad={ad}
+        ad={adUnified}
         relatedAds={relatedAds}
         groupedSections={groupedSections}
         visualMainParagraphs={visualMainParagraphs}
         visualDerivedFromVideo={visualDerivedFromVideo}
         metaAnalysis={metaAnalysis}
-        adaptationScenarios={adaptationScenarios as unknown as AdaptationScenario[]}
       />
     </Suspense>
   );
