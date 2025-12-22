@@ -6,7 +6,7 @@ import Link from 'next/link';
 export default function AdvanceFilterPage({
   searchParams,
 }: {
-  searchParams?: { page?: string; funnels?: string };
+  searchParams?: { page?: string; funnels?: string; topic?: string; hook?: string };
 }) {
   return (
     <main className="min-h-screen bg-slate-50">
@@ -33,7 +33,13 @@ export default function AdvanceFilterPage({
           </div>
         </div>
         <FilteredContainer
-          initialPageName={searchParams?.page ?? ''}
+          initialPageNames={
+            searchParams?.page
+              ? String(searchParams.page)
+                  .split(',')
+                  .map((s) => decodeURIComponent(s))
+              : undefined
+          }
           initialFunnels={
             searchParams?.funnels
               ? String(searchParams.funnels)
@@ -41,6 +47,8 @@ export default function AdvanceFilterPage({
                   .map((s) => decodeURIComponent(s))
               : undefined
           }
+          initialTopic={searchParams?.topic ? decodeURIComponent(searchParams.topic) : undefined}
+          initialHook={searchParams?.hook ? decodeURIComponent(searchParams.hook) : undefined}
         />
       </div>
     </main>

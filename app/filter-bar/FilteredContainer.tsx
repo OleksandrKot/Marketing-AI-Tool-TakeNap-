@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { extractDataArray } from '@/lib/core/utils';
 import { useToast } from '@/components/ui/toast';
 import ResultsGrid from '@/app/ad-archive-browser/components/ResultsGrid';
@@ -10,24 +11,38 @@ import { getAds } from '@/app/actions';
 import type { Ad } from '@/lib/core/types';
 
 interface FilterOptions {
-  pageName: string;
+  pageName?: string;
+  pageNames?: string[]; // multi-select
   publisherPlatform: string;
+  publisherPlatforms?: string[];
   ctaType: string;
+  ctaTypes?: string[];
   displayFormat: string;
-  dateRange: string;
+  displayFormats?: string[];
   searchQuery: string;
   conceptFormat: string;
+  conceptFormats?: string[];
   realizationFormat: string;
+  realizationFormats?: string[];
   topicFormat: string;
+  topicFormats?: string[];
   hookFormat: string;
+  hookFormats?: string[];
   characterFormat: string;
+  characterFormats?: string[];
   variationCount?: string;
+  variationCounts?: string[];
+  dateRange: string;
+  dateRanges?: string[];
   funnels?: string[]; // multi-select
 }
 
 interface FilteredContainerProps {
   initialPageName?: string;
+  initialPageNames?: string[];
   initialFunnels?: string[];
+  initialTopic?: string;
+  initialHook?: string;
 }
 
 type SortMode = 'auto' | 'most_variations' | 'least_variations' | 'newest';
@@ -70,6 +85,30 @@ function applyDateRangeFilter(ads: Ad[], dateRange: string) {
   return ads.filter((ad) => new Date(ad.created_at) >= startDate);
 }
 
+function applyDateRangesFilter(ads: Ad[], dateRanges: string[]) {
+  if (!dateRanges || dateRanges.length === 0) return ads;
+
+  const now = new Date();
+  const dateFilters = dateRanges.map((range) => {
+    switch (range) {
+      case 'today':
+        return new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      case 'week':
+        return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      case 'month':
+        return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+      case 'quarter':
+        return new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+      default:
+        return new Date(0);
+    }
+  });
+
+  // OR logic: match if ad is within ANY selected date range
+  const mostRecentStart = new Date(Math.max(...dateFilters.map((d) => d.getTime())));
+  return ads.filter((ad) => new Date(ad.created_at) >= mostRecentStart);
+}
+
 /**
  * Apply all non-variation filters.
  * IMPORTANT: funnels filter applies only when funnels.length > 0 (fix for "all zeros").
@@ -88,29 +127,80 @@ function applyFilters(sourceAds: Ad[], filters: FilterOptions, adIdToFunnels: Fu
     );
   }
 
-  // Page name
-  if (filters.pageName) {
+  // Page names (multi-select takes precedence)
+  if (filters.pageNames && Array.isArray(filters.pageNames) && filters.pageNames.length > 0) {
+    const set = new Set(filters.pageNames);
+    out = out.filter((ad) => (ad.page_name ? set.has(ad.page_name) : false));
+  } else if (filters.pageName) {
     out = out.filter((ad) => ad.page_name === filters.pageName);
   }
 
-  // Publisher platform
-  if (filters.publisherPlatform) {
+  // Publisher platform (multi-select OR)
+  if (filters.publisherPlatforms && filters.publisherPlatforms.length > 0) {
+    const wanted = new Set(filters.publisherPlatforms.map((s) => s.toLowerCase()));
+    out = out.filter((ad) => {
+      const norms = normalizePlatforms(ad.publisher_platform);
+      return norms.some((p) => wanted.has(p));
+    });
+  } else if (filters.publisherPlatform) {
     const wanted = filters.publisherPlatform.toLowerCase();
     out = out.filter((ad) => normalizePlatforms(ad.publisher_platform).includes(wanted));
   }
 
-  // Simple equals filters
-  if (filters.ctaType) out = out.filter((ad) => ad.cta_type === filters.ctaType);
-  if (filters.displayFormat) out = out.filter((ad) => ad.display_format === filters.displayFormat);
-  if (filters.conceptFormat) out = out.filter((ad) => ad.concept === filters.conceptFormat);
-  if (filters.realizationFormat)
-    out = out.filter((ad) => ad.realisation === filters.realizationFormat);
-  if (filters.topicFormat) out = out.filter((ad) => ad.topic === filters.topicFormat);
-  if (filters.hookFormat) out = out.filter((ad) => ad.hook === filters.hookFormat);
-  if (filters.characterFormat) out = out.filter((ad) => ad.character === filters.characterFormat);
+  // Simple equals filters with multi-select OR
+  if (filters.ctaTypes && filters.ctaTypes.length > 0) {
+    const set = new Set(filters.ctaTypes);
+    out = out.filter((ad) => (ad.cta_type ? set.has(ad.cta_type) : false));
+  } else if (filters.ctaType) {
+    out = out.filter((ad) => ad.cta_type === filters.ctaType);
+  }
 
-  // Date range
-  if (filters.dateRange) {
+  if (filters.displayFormats && filters.displayFormats.length > 0) {
+    const set = new Set(filters.displayFormats);
+    out = out.filter((ad) => (ad.display_format ? set.has(ad.display_format) : false));
+  } else if (filters.displayFormat) {
+    out = out.filter((ad) => ad.display_format === filters.displayFormat);
+  }
+
+  if (filters.conceptFormats && filters.conceptFormats.length > 0) {
+    const set = new Set(filters.conceptFormats);
+    out = out.filter((ad) => (ad.concept ? set.has(ad.concept) : false));
+  } else if (filters.conceptFormat) {
+    out = out.filter((ad) => ad.concept === filters.conceptFormat);
+  }
+
+  if (filters.realizationFormats && filters.realizationFormats.length > 0) {
+    const set = new Set(filters.realizationFormats);
+    out = out.filter((ad) => (ad.realisation ? set.has(ad.realisation) : false));
+  } else if (filters.realizationFormat) {
+    out = out.filter((ad) => ad.realisation === filters.realizationFormat);
+  }
+
+  if (filters.topicFormats && filters.topicFormats.length > 0) {
+    const set = new Set(filters.topicFormats);
+    out = out.filter((ad) => (ad.topic ? set.has(ad.topic) : false));
+  } else if (filters.topicFormat) {
+    out = out.filter((ad) => ad.topic === filters.topicFormat);
+  }
+
+  if (filters.hookFormats && filters.hookFormats.length > 0) {
+    const set = new Set(filters.hookFormats);
+    out = out.filter((ad) => (ad.hook ? set.has(ad.hook) : false));
+  } else if (filters.hookFormat) {
+    out = out.filter((ad) => ad.hook === filters.hookFormat);
+  }
+
+  if (filters.characterFormats && filters.characterFormats.length > 0) {
+    const set = new Set(filters.characterFormats);
+    out = out.filter((ad) => (ad.character ? set.has(ad.character) : false));
+  } else if (filters.characterFormat) {
+    out = out.filter((ad) => ad.character === filters.characterFormat);
+  }
+
+  // Date ranges (multi-select OR)
+  if (filters.dateRanges && filters.dateRanges.length > 0) {
+    out = applyDateRangesFilter(out, filters.dateRanges);
+  } else if (filters.dateRange) {
     out = applyDateRangeFilter(out, filters.dateRange);
   }
 
@@ -277,8 +367,14 @@ function extractFunnelsFromAd(ad: Ad): string[] {
 
 export default function FilteredContainer({
   initialPageName = '',
+  initialPageNames,
   initialFunnels,
+  initialTopic,
+  initialHook,
 }: FilteredContainerProps) {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [ads, setAds] = useState<Ad[]>([]);
   const [filteredAds, setFilteredAds] = useState<Ad[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -294,6 +390,7 @@ export default function FilteredContainer({
     hookFormats: [] as string[],
     characterFormats: [] as string[],
     variationBuckets: [] as string[],
+    dateRangeOptions: [] as string[],
     funnels: [] as string[],
   });
 
@@ -308,6 +405,7 @@ export default function FilteredContainer({
     hookFormats: {} as Record<string, number>,
     characterFormats: {} as Record<string, number>,
     variationCounts: {} as Record<string, number>,
+    dateRanges: {} as Record<string, number>,
     funnels: {} as Record<string, number>,
   }));
 
@@ -405,7 +503,24 @@ export default function FilteredContainer({
     sourceAds: Ad[],
     funnelsMap: FunnelsMap
   ) => {
-    const countFor = (values: string[], key: keyof FilterOptions | 'variationCount') => {
+    const countFor = (
+      values: string[],
+      key:
+        | keyof FilterOptions
+        | 'variationCount'
+        | 'funnels'
+        | 'pageNames'
+        | 'publisherPlatforms'
+        | 'ctaTypes'
+        | 'displayFormats'
+        | 'conceptFormats'
+        | 'realizationFormats'
+        | 'topicFormats'
+        | 'hookFormats'
+        | 'characterFormats'
+        | 'dateRanges'
+        | 'variationCounts'
+    ) => {
       const out: Record<string, number> = {};
 
       for (const v of values) {
@@ -414,19 +529,68 @@ export default function FilteredContainer({
         if (key === 'funnels') {
           // count as if user selected ONLY this funnel (keeping other filters)
           candidate.funnels = [v];
+        } else if (key === 'pageNames') {
+          // count as if user selected ONLY this page (keeping other filters)
+          candidate.pageNames = [v];
+          candidate.pageName = '';
+        } else if (key === 'publisherPlatforms') {
+          candidate.publisherPlatforms = [v];
+          candidate.publisherPlatform = '';
+        } else if (key === 'ctaTypes') {
+          candidate.ctaTypes = [v];
+          candidate.ctaType = '';
+        } else if (key === 'displayFormats') {
+          candidate.displayFormats = [v];
+          candidate.displayFormat = '';
+        } else if (key === 'conceptFormats') {
+          candidate.conceptFormats = [v];
+          candidate.conceptFormat = '';
+        } else if (key === 'realizationFormats') {
+          candidate.realizationFormats = [v];
+          candidate.realizationFormat = '';
+        } else if (key === 'topicFormats') {
+          candidate.topicFormats = [v];
+          candidate.topicFormat = '';
+        } else if (key === 'hookFormats') {
+          candidate.hookFormats = [v];
+          candidate.hookFormat = '';
+        } else if (key === 'characterFormats') {
+          candidate.characterFormats = [v];
+          candidate.characterFormat = '';
+        } else if (key === 'dateRanges') {
+          candidate.dateRanges = [v];
+          candidate.dateRange = '';
+        } else if (key === 'variationCounts') {
+          candidate.variationCounts = [v];
+          candidate.variationCount = '';
         } else if (key === 'variationCount') {
           candidate.variationCount = v;
         } else {
           (candidate as unknown as Record<string, unknown>)[key as string] = v;
         }
 
-        // 1) Apply all filters except variationCount
+        // 1) Apply all filters except variationCount/variationCounts
         const base = applyFilters(sourceAds, candidate, funnelsMap);
 
         // 2) Apply variation bucket if needed
         const final =
-          candidate.variationCount && key !== 'variationCount'
+          candidate.variationCounts &&
+          candidate.variationCounts.length > 0 &&
+          key !== 'variationCounts'
+            ? candidate.variationCounts.reduce((acc, bucket) => {
+                const g = buildDuplicateGroups(base);
+                const ids = new Set<number>();
+                for (const grp of g) {
+                  if (matchesVariationBucket(grp.length, bucket)) {
+                    for (const a of grp) ids.add(Number(a.id));
+                  }
+                }
+                return base.filter((ad) => ids.has(Number(ad.id)));
+              }, base)
+            : candidate.variationCount && key !== 'variationCount' && key !== 'variationCounts'
             ? filterByVariationBucket(base, String(candidate.variationCount))
+            : key === 'variationCounts'
+            ? filterByVariationBucket(base, String(v))
             : key === 'variationCount'
             ? filterByVariationBucket(base, String(v))
             : base;
@@ -438,16 +602,17 @@ export default function FilteredContainer({
     };
 
     return {
-      pageNames: countFor(opts.pageNames, 'pageName'),
-      publisherPlatforms: countFor(opts.publisherPlatforms, 'publisherPlatform'),
-      ctaTypes: countFor(opts.ctaTypes, 'ctaType'),
-      displayFormats: countFor(opts.displayFormats, 'displayFormat'),
-      conceptFormats: countFor(opts.conceptFormats, 'conceptFormat'),
-      realizationFormats: countFor(opts.realizationFormats, 'realizationFormat'),
-      topicFormats: countFor(opts.topicFormats, 'topicFormat'),
-      hookFormats: countFor(opts.hookFormats, 'hookFormat'),
-      characterFormats: countFor(opts.characterFormats, 'characterFormat'),
-      variationCounts: countFor(opts.variationBuckets as string[], 'variationCount'),
+      pageNames: countFor(opts.pageNames, 'pageNames'),
+      publisherPlatforms: countFor(opts.publisherPlatforms, 'publisherPlatforms'),
+      ctaTypes: countFor(opts.ctaTypes, 'ctaTypes'),
+      displayFormats: countFor(opts.displayFormats, 'displayFormats'),
+      conceptFormats: countFor(opts.conceptFormats, 'conceptFormats'),
+      realizationFormats: countFor(opts.realizationFormats, 'realizationFormats'),
+      topicFormats: countFor(opts.topicFormats, 'topicFormats'),
+      hookFormats: countFor(opts.hookFormats, 'hookFormats'),
+      characterFormats: countFor(opts.characterFormats, 'characterFormats'),
+      variationCounts: countFor(opts.variationBuckets as string[], 'variationCounts'),
+      dateRanges: countFor(opts.dateRangeOptions as string[], 'dateRanges'),
       funnels: countFor(opts.funnels as string[], 'funnels'),
     };
   };
@@ -517,6 +682,7 @@ export default function FilteredContainer({
         ).sort();
 
         const variationBuckets = ['more_than_10', '5_10', '3_5', 'less_than_3'];
+        const dateRangeOptions = ['today', 'week', 'month', 'quarter'];
 
         // Funnels: extract per ad
         const funnelsSet = new Set<string>();
@@ -543,6 +709,7 @@ export default function FilteredContainer({
           hookFormats,
           characterFormats,
           variationBuckets,
+          dateRangeOptions,
           funnels,
         };
 
@@ -559,27 +726,59 @@ export default function FilteredContainer({
         // Initial counts (IMPORTANT: funnels: [] must NOT filter everything)
         const emptyFilters: FilterOptions = {
           pageName: '',
+          pageNames: [],
           publisherPlatform: '',
+          publisherPlatforms: [],
           ctaType: '',
+          ctaTypes: [],
           displayFormat: '',
+          displayFormats: [],
           dateRange: '',
+          dateRanges: [],
           searchQuery: '',
           conceptFormat: '',
+          conceptFormats: [],
           realizationFormat: '',
+          realizationFormats: [],
           topicFormat: '',
+          topicFormats: [],
           hookFormat: '',
+          hookFormats: [],
           characterFormat: '',
-          funnels: [], // safe now
+          characterFormats: [],
+          variationCount: '',
+          variationCounts: [],
+          funnels: [],
         };
 
         const initialCounts = computeCountsForOptions(opts, emptyFilters, allAds, adIdToFunnelsMap);
         setAvailableCounts(initialCounts);
 
-        // Apply initialFunnels if provided
-        if (Array.isArray(initialFunnels) && initialFunnels.length > 0) {
+        // Apply initialPageNames/initialPageName, initialFunnels, initialTopic, and/or initialHook if provided
+        const shouldApplyFilters =
+          (Array.isArray(initialPageNames) && initialPageNames.length > 0) ||
+          initialPageName ||
+          (Array.isArray(initialFunnels) && initialFunnels.length > 0) ||
+          initialTopic ||
+          initialHook;
+
+        if (shouldApplyFilters) {
+          // Prefer initialPageNames if provided, otherwise use initialPageName
+          const pagesToApply =
+            Array.isArray(initialPageNames) && initialPageNames.length > 0
+              ? initialPageNames
+              : initialPageName
+              ? [initialPageName]
+              : [];
+
           const preset: FilterOptions = {
             ...emptyFilters,
-            funnels: initialFunnels,
+            pageName: '',
+            pageNames: pagesToApply,
+            funnels:
+              Array.isArray(initialFunnels) && initialFunnels.length > 0 ? initialFunnels : [],
+            topicFormat: initialTopic || '',
+            hookFormat: initialHook || '',
           };
           handleFiltersChange(preset, allAds, opts, adIdToFunnelsMap);
         }
@@ -617,8 +816,19 @@ export default function FilteredContainer({
     // apply filters
     let next = applyFilters(adsArg, filters, funnelsMapArg);
 
-    // variation bucket filter
-    if (filters.variationCount) {
+    // variation bucket filter (multi-select OR)
+    if (filters.variationCounts && filters.variationCounts.length > 0) {
+      const allGroups = buildDuplicateGroups(next);
+      const keepIds = new Set<number>();
+      for (const bucket of filters.variationCounts) {
+        for (const g of allGroups) {
+          if (matchesVariationBucket(g.length, bucket)) {
+            for (const a of g) keepIds.add(Number(a.id));
+          }
+        }
+      }
+      next = next.filter((ad) => keepIds.has(Number(ad.id)));
+    } else if (filters.variationCount) {
       next = filterByVariationBucket(next, String(filters.variationCount));
     }
 
@@ -627,6 +837,33 @@ export default function FilteredContainer({
 
     setFilteredAds(next);
   };
+
+  // Deep-linking: keep ?page= in sync with selections
+  useEffect(() => {
+    if (!searchParams) return;
+    const selectedPages =
+      currentFilters?.pageNames && currentFilters.pageNames.length > 0
+        ? currentFilters.pageNames
+        : currentFilters?.pageName
+        ? [currentFilters.pageName]
+        : [];
+
+    const params = new URLSearchParams(searchParams.toString());
+    const existing = params.get('page');
+    const nextVal = selectedPages.length > 0 ? selectedPages.join(',') : '';
+
+    if (nextVal) {
+      // Only update if changed
+      if (existing !== nextVal) {
+        params.set('page', nextVal);
+        router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+      }
+    } else if (existing) {
+      params.delete('page');
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentFilters?.pageNames, currentFilters?.pageName]);
 
   // Grouping / dedupe for Advanced Filter results (based only on duplicates_links)
   const {
@@ -725,6 +962,9 @@ export default function FilteredContainer({
         onFiltersChange={handleFiltersChange}
         availableOptions={availableOptions}
         initialPageName={initialPageName}
+        initialPageNames={initialPageNames}
+        initialHook={initialHook}
+        initialTopic={initialTopic}
         counts={availableCounts}
       />
 
