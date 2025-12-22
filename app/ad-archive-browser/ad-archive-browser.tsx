@@ -168,15 +168,27 @@ export function AdArchiveBrowser({
         processingDone={state.processingDone}
       />
 
-      {/* Next page button shown at bottom when more pages are available */}
-      {currentPage < (totalPages || 0) && !isLoading && (
-        <div className="flex justify-center mt-8">
+      {/* Pagination controls shown when there are multiple pages */}
+      {(totalPages || 0) > 1 && !isLoading && (
+        <div className="flex justify-center items-center gap-3 mt-8">
+          <button
+            type="button"
+            onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
+            disabled={currentPage <= 1}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md shadow hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
+          >
+            ← Previous
+          </button>
+          <div className="text-slate-700 font-medium">
+            Page {currentPage} of {totalPages}
+          </div>
           <button
             type="button"
             onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md shadow hover:bg-blue-700"
+            disabled={currentPage >= (totalPages || 0)}
+            className="px-4 py-2 bg-blue-600 text-white rounded-md shadow hover:bg-blue-700 disabled:bg-slate-300 disabled:cursor-not-allowed transition-colors"
           >
-            Next page
+            Next →
           </button>
         </div>
       )}

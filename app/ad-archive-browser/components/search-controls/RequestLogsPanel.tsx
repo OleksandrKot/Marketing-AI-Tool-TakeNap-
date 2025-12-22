@@ -21,12 +21,12 @@ export function RequestLogsPanel({ logs, onClear }: RequestLogsPanelProps) {
   return (
     <div className="mb-6 border rounded-xl p-3 bg-white">
       <div className="flex items-center justify-between mb-2">
-        <p className="text-sm font-medium text-slate-700">Журнал подій</p>
+        <p className="text-sm font-medium text-slate-700">Event Logs</p>
         <Button
           onClick={onClear}
           className="h-7 px-2 text-xs bg-slate-100 hover:bg-slate-200 text-slate-800"
         >
-          Очистити журнали
+          Clear Logs
         </Button>
       </div>
       <div className="max-h-48 overflow-auto text-sm text-slate-700">

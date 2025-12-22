@@ -16,7 +16,7 @@ export function LogsToggle({ checked, onChange }: LogsToggleProps) {
         }`}
         checked={!!checked}
         onCheckedChange={(v) => onChange(Boolean(v))}
-        aria-label="Показувати журнали"
+        aria-label="Show event logs"
       >
         <RadixSwitch.Thumb
           className={`block h-5 w-5 rounded-full bg-white shadow transform transition-transform ${
@@ -24,7 +24,7 @@ export function LogsToggle({ checked, onChange }: LogsToggleProps) {
           }`}
         />
       </RadixSwitch.Root>
-      <span className="text-sm text-slate-700">Показувати журнали подій</span>
+      <span className="text-sm text-slate-700">Show event logs</span>
     </div>
   );
 }
