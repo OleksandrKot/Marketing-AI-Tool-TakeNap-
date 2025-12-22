@@ -369,7 +369,23 @@ export function useAdArchive(
     return map;
   }, [filteredAdsByType]);
 
-  const PHASH_GROUP_COLLAPSE_THRESHOLD = 2;
+  // Create a map of ads grouped by title (for variations counting)
+  // Must be defined BEFORE dedupedAds since it uses this
+  const titleToGroupedAds = useMemo(() => {
+    const map = new Map<string, Ad[]>();
+    if (!filteredAdsByType || filteredAdsByType.length === 0) return map;
+
+    for (const ad of filteredAdsByType) {
+      const title = ad.title?.trim() || '';
+      if (!title) continue;
+      const arr = map.get(title) ?? [];
+      arr.push(ad);
+      map.set(title, arr);
+    }
+    return map;
+  }, [filteredAdsByType]);
+
+  // const PHASH_GROUP_COLLAPSE_THRESHOLD = 2;
   const PHASH_GROUP_MAX_COLLAPSE = 15;
   // Hamming distance threshold for phash clustering. Lower = stricter (only
   // very similar images cluster). Increase only if you want more merging.
@@ -379,84 +395,73 @@ export function useAdArchive(
   const dedupedAds = useMemo(() => {
     if (!filteredAdsByType || filteredAdsByType.length === 0) return [] as Ad[];
 
-    // Use duplicate-based groups computed above
+    // Build comprehensive grouping: duplicates_links + title-based
     const adIdToGroupLocal = new Map<string, Ad[]>();
+
+    // First apply duplicates_links grouping
     groupedAll.forEach((g) => {
       for (const a of g) adIdToGroupLocal.set(String(a.id), g);
     });
 
-    // const phashKeys = Array.from(groupMap.keys()).filter((k) => k.startsWith('phash:'));
+    // Then apply title-based grouping for ads not already in a duplicate group
+    for (const [title, titleGroup] of titleToGroupedAds.entries()) {
+      if (!title) continue;
 
-    // pHash-based clustering/sorting temporarily disabled — keep code for reference
-    // try {
-    //   console.debug(
-    //     '[useAdArchive] PHASH_HAMMING_THRESHOLD=',
-    //     PHASH_HAMMING_THRESHOLD,
-    //     'PHASH_GROUP_COLLAPSE_THRESHOLD=',
-    //     PHASH_GROUP_COLLAPSE_THRESHOLD,
-    //     'phashKeysCount=',
-    //     phashKeys.length
-    //   );
-    // } catch (e) {
-    //   /* noop */
-    // }
-
-    // const { phashClusters, keyToRep } = utils.buildPhashClustersFromKeys(
-    //   phashKeys,
-    //   groupMap,
-    //   PHASH_HAMMING_THRESHOLD
-    // );
-
-    // Use empty stubs so downstream logic treats items as non-phash clustered
-    // const phashClusters = new Map<string, string[]>();
-    // const keyToRep = new Map<string, string>();
+      for (const ad of titleGroup) {
+        // Only assign title group if ad is not already in a duplicates group
+        if (
+          !adIdToGroupLocal.has(String(ad.id)) ||
+          (adIdToGroupLocal.get(String(ad.id))?.length ?? 0) <= 1
+        ) {
+          adIdToGroupLocal.set(String(ad.id), titleGroup);
+        }
+      }
+    }
 
     const seenGroup = new Set<string>();
+    const seenAdId = new Set<number>();
     const out: Ad[] = [];
+
     for (const ad of filteredAdsByType) {
+      // Skip if this ad is already shown as part of another group
+      if (seenAdId.has(Number(ad.id))) continue;
+
       const group = adIdToGroupLocal.get(String(ad.id)) ?? [ad];
       const mapped = String(group[0]?.id ?? ad.id);
       if (seenGroup.has(mapped)) continue;
-      // let effectiveSize = group.length; // kept for reference
-      // pHash clustering is disabled — keep original logic commented for reference
-      // if (mapped !== key) {
-      //   const keysInCluster = phashClusters.get(mapped) ?? [];
-      //   effectiveSize = keysInCluster.reduce((sum, kk) => sum + (groupMap.get(kk)?.length ?? 0), 0);
-      // }
 
-      // const isPhashBased = mapped.startsWith('phash:');
-      // const shouldCollapse = isPhashBased
-      //   ? effectiveSize >= PHASH_GROUP_COLLAPSE_THRESHOLD &&
-      //     effectiveSize <= PHASH_GROUP_MAX_COLLAPSE
-      //   : group.length > 1;
       const shouldCollapse = group.length > 1;
 
       if (shouldCollapse) {
+        // Show only the newest ad from the group
         const rep = group.slice().sort((a, b) => {
           const da = new Date(a.created_at).getTime();
           const db = new Date(b.created_at).getTime();
           return db - da;
         })[0];
-        if (rep) out.push(rep);
+        if (rep) {
+          out.push(rep);
+          // Mark all ads in this group as seen so they don't appear separately
+          for (const groupAd of group) {
+            seenAdId.add(Number(groupAd.id));
+          }
+        }
       } else {
-        out.push(...group);
+        // Single ad, show it
+        out.push(ad);
+        seenAdId.add(Number(ad.id));
       }
       seenGroup.add(mapped);
     }
 
     return out;
-  }, [
-    filteredAdsByType,
-    PHASH_GROUP_COLLAPSE_THRESHOLD,
-    PHASH_GROUP_MAX_COLLAPSE,
-    PHASH_HAMMING_THRESHOLD,
-  ]);
+  }, [filteredAdsByType, groupedAll, titleToGroupedAds]);
 
   const adIdToRelatedCount: Record<string, number> = useMemo(() => {
     const out: Record<string, number> = {};
     if (!filteredAdsByType || filteredAdsByType.length === 0) return out;
 
-    // Compute related counts from duplicate-based groups
+    // Compute related counts from duplicate-based groups first
     const adIdToGroupLocal = new Map<string, Ad[]>();
     groupedAll.forEach((g) => {
       for (const a of g) adIdToGroupLocal.set(String(a.id), g);
@@ -467,8 +472,24 @@ export function useAdArchive(
       out[ad.id] = Math.max(0, group.length - 1);
     }
 
+    // Then, also consider title-based grouping for variations that aren't in duplicates_links
+    // If a title group is larger than the duplicate group, use the title group count
+    for (const [title, titleGroup] of titleToGroupedAds.entries()) {
+      if (!title) continue;
+
+      for (const ad of titleGroup) {
+        const currentCount = out[ad.id] ?? 0;
+        const titleGroupCount = Math.max(0, titleGroup.length - 1);
+
+        // Use the larger of duplicate-based count or title-based count
+        if (titleGroupCount > currentCount) {
+          out[ad.id] = titleGroupCount;
+        }
+      }
+    }
+
     return out;
-  }, [filteredAdsByType, PHASH_HAMMING_THRESHOLD, PHASH_GROUP_MAX_COLLAPSE]);
+  }, [filteredAdsByType, titleToGroupedAds, PHASH_HAMMING_THRESHOLD, PHASH_GROUP_MAX_COLLAPSE]);
 
   // adIdToRelatedCount is now available; create a sorted copy of dedupedAds
   // so we can sort by variations.
@@ -573,11 +594,27 @@ export function useAdArchive(
 
   const adIdToGroupMap: Record<string, Ad[]> = useMemo(() => {
     const out: Record<string, Ad[]> = {};
+
+    // First, map by duplicates_links (primary grouping from DB)
     groupedAll.forEach((groupAds) => {
       for (const ad of groupAds) out[ad.id] = groupAds;
     });
+
+    // Then for ads not in any duplicate group, use title-based grouping
+    // This ensures variations with same title are counted even if not explicitly linked
+    for (const [title, titleGroup] of titleToGroupedAds.entries()) {
+      if (!title) continue;
+
+      for (const ad of titleGroup) {
+        // If ad is not already in a duplicate group, assign it to the title group
+        if (!out[ad.id] || out[ad.id].length === 1) {
+          out[ad.id] = titleGroup;
+        }
+      }
+    }
+
     return out;
-  }, [groupedAll]);
+  }, [groupedAll, titleToGroupedAds]);
 
   const ungroupedPages = useMemo(
     () => utils.chunk(sortedDedupedAds, itemsPerPage),
