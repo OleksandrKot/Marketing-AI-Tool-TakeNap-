@@ -124,6 +124,84 @@ async function getRelatedAdsByIds(ids: string[]): Promise<Ad[] | null> {
   }
 }
 
+// Функція для отримання related ads по title (варіації з однаковою назвою)
+// виключаючи ті які вже в duplicates_links
+async function getRelatedAdsByTitle(ad: Ad): Promise<Ad[] | null> {
+  try {
+    if (!ad.title) return null;
+
+    const supabase = createServerSupabaseClient();
+
+    const { data, error } = await supabase
+      .from('ads_library')
+      .select(
+        `
+        id,
+        created_at,
+        ad_archive_id,
+        page_name,
+        text,
+        caption,
+        cta_text,
+        cta_type,
+        display_format,
+        link_url,
+        title,
+        video_hd_url,
+        video_preview_image_url,
+        publisher_platform,
+        audio_script,
+        video_script,
+        meta_ad_url,
+        image_url,
+        image_description,
+        concept,
+        realisation,
+        topic,
+        hook,
+        character,
+        new_scenario,
+        duplicates_ad_text,
+        duplicates_links,
+        duplicates_preview_image
+      `
+      )
+      .eq('title', ad.title)
+      .neq('id', ad.id);
+
+    if (error) {
+      console.error('Error fetching related ads by title:', error);
+      return null;
+    }
+
+    if (!data || data.length === 0) return null;
+
+    // Парсимо duplicates_links поточної реклами щоб виключити їх з результатів
+    const duplicateIds = new Set<number>();
+    if (ad.duplicates_links && typeof ad.duplicates_links === 'string') {
+      const parts = ad.duplicates_links
+        .split(/[,\n\s]+/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+
+      for (const p of parts) {
+        const asNum = Number(p);
+        if (Number.isFinite(asNum)) {
+          duplicateIds.add(asNum);
+        }
+      }
+    }
+
+    // Фільтруємо - залишаємо тільки ті що не в duplicates_links
+    const filtered = data.filter((a) => !duplicateIds.has(Number(a.id)));
+
+    return filtered.length > 0 ? (filtered as Ad[]) : null;
+  } catch (error) {
+    console.error('Database connection error for related ads by title:', error);
+    return null;
+  }
+}
+
 // Фейкові дані для тестування, коли база даних недоступна
 function getFakeAdById(id: string): Ad | null {
   const fakeAds = {
@@ -329,11 +407,15 @@ export default async function CreativePage({ params, searchParams }: CreativePag
     notFound();
   }
 
-  // Отримуємо related ads якщо є параметр related в URL
+  // Отримуємо related ads по title (варіації з однаковою назвою)
+  // або якщо є параметр related в URL - використовуємо його для сумісності
   let relatedAds = null;
   if (searchParams.related) {
     const relatedIds = searchParams.related.split(',');
     relatedAds = await getRelatedAdsByIds(relatedIds);
+  } else {
+    // За замовчуванням завантажуємо ads з однаковим title, виключаючи duplicates
+    relatedAds = await getRelatedAdsByTitle(ad);
   }
 
   // Precompute parsing and grouped sections on the server to reduce client bundle work
