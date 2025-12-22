@@ -47,7 +47,22 @@ function DropdownMulti({
   })();
 
   const filtered = options
-    .filter((o) => (query.trim() === '' ? true : o.toLowerCase().includes(query.toLowerCase())))
+    .filter((o) => {
+      // Filter by search query
+      if (query.trim() !== '' && !o.toLowerCase().includes(query.toLowerCase())) {
+        return false;
+      }
+      // Hide options with zero count (unless selected)
+      if (
+        counts &&
+        typeof counts[o] === 'number' &&
+        counts[o] === 0 &&
+        !(selected || []).includes(o)
+      ) {
+        return false;
+      }
+      return true;
+    })
     .slice(0, 300);
 
   return (

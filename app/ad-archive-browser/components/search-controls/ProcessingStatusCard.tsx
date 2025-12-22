@@ -165,7 +165,7 @@ export function ProcessingStatusCard({
             }`}
             checked={!!autoClearProcessing}
             onCheckedChange={(v) => setAutoClearProcessing(Boolean(v))}
-            aria-label="Авто-очищення статусу"
+            aria-label="Auto-clear status"
           >
             <RadixSwitch.Thumb
               className={`block h-5 w-5 rounded-full bg-white shadow transform transition-transform ${
@@ -173,7 +173,7 @@ export function ProcessingStatusCard({
               }`}
             />
           </RadixSwitch.Root>
-          <span className="text-sm text-slate-700">Авто-очищення</span>
+          <span className="text-sm text-slate-700">Auto-clear</span>
         </div>
 
         <div>
@@ -181,7 +181,7 @@ export function ProcessingStatusCard({
             onClick={onClearProcessing}
             className="h-8 px-3 text-sm bg-slate-100 hover:bg-slate-200 text-slate-800"
           >
-            Очистити
+            Clear
           </Button>
         </div>
       </div>
