@@ -2,6 +2,8 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
+import { useRouter } from 'next/navigation';
+import { getAds } from '@/app/actions';
 import { PageNavigation } from '@/components/navigation/PageNavigation';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import type {
@@ -9,6 +11,7 @@ import type {
   CompetitorBreakdown,
   DistributionItem,
   VisualPattern,
+  Ad,
 } from '@/lib/core/types';
 import {
   BarChart,
@@ -25,7 +28,7 @@ import {
   LineChart,
   Line,
 } from 'recharts';
-import { TrendingUp, TrendingDown, Loader2, Check, ChevronDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, Loader2 } from 'lucide-react';
 // Removed ThemeDistribution side list per request
 import FunnelsList from '@/components/dashboard/FunnelsList';
 
@@ -36,12 +39,28 @@ interface DashboardClientProps {
 }
 
 export default function DashboardClient({ initialCompetitors }: DashboardClientProps) {
+  const router = useRouter();
   const [selectedCompetitors, setSelectedCompetitors] = useState<string[]>([]);
   const [analytics, setAnalytics] = useState<CompetitorAnalytics | null>(null);
+  const [allAds, setAllAds] = useState<Ad[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Load all ads once on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = (await getAds()) as Ad[] | { data: Ad[] } | null;
+        const ads = Array.isArray(raw) ? raw : (raw as { data: Ad[] })?.data || [];
+        setAllAds(ads);
+      } catch (err) {
+        console.error('Failed to load ads:', err);
+      }
+    })();
+  }, []);
 
   // Fetch analytics when selection changes
   useEffect(() => {
@@ -96,15 +115,23 @@ export default function DashboardClient({ initialCompetitors }: DashboardClientP
     );
   };
 
-  const selectAll = () => {
-    setSelectedCompetitors([...initialCompetitors]);
-    setIsDropdownOpen(false);
-  };
-
   const clearAll = () => {
     setSelectedCompetitors([]);
-    setIsDropdownOpen(false);
   };
+
+  const removeCompetitor = (competitor: string) => {
+    setSelectedCompetitors((prev) => prev.filter((c) => c !== competitor));
+  };
+
+  const filteredCompetitors = initialCompetitors.filter((c) =>
+    c.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  const buttonSummary = (() => {
+    if (selectedCompetitors.length === 0) return 'Select competitors...';
+    if (selectedCompetitors.length <= 2) return selectedCompetitors.join(', ');
+    return `${selectedCompetitors.slice(0, 2).join(', ')} +${selectedCompetitors.length - 2}`;
+  })();
 
   const formatDistributionChart = (data: DistributionItem[], maxItems = 10) => {
     return data.slice(0, maxItems).map((item) => {
@@ -140,53 +167,93 @@ export default function DashboardClient({ initialCompetitors }: DashboardClientP
           <button
             id="dashboard-competitor-toggle"
             onClick={() => setIsDropdownOpen(!isDropdownOpen)}
-            className="w-full md:w-96 px-4 py-2 bg-white border border-slate-300 rounded-lg text-left flex items-center justify-between hover:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            className="w-full md:w-96 px-3 py-2 bg-white border border-slate-300 rounded-md text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <span className="text-slate-700">
-              {selectedCompetitors.length === 0
-                ? 'Select competitors...'
-                : `${selectedCompetitors.length} selected`}
-            </span>
-            <ChevronDown
-              className={`h-5 w-5 text-slate-400 transition-transform ${
+            <span className="text-slate-900 truncate">{buttonSummary}</span>
+            <svg
+              className={`ml-2 h-4 w-4 text-slate-500 transition-transform ${
                 isDropdownOpen ? 'rotate-180' : ''
               }`}
-            />
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              aria-hidden
+            >
+              <path
+                fillRule="evenodd"
+                d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.25a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
+                clipRule="evenodd"
+              />
+            </svg>
           </button>
 
           {isDropdownOpen && (
-            <div className="absolute z-50 mt-2 w-full md:w-96 bg-white border border-slate-200 rounded-lg shadow-lg max-h-80 overflow-y-auto">
-              <div className="flex items-center justify-between px-4 py-2 border-b border-slate-200 bg-slate-50">
-                <button
-                  onClick={selectAll}
-                  className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-                >
-                  Select All
-                </button>
-                <button
-                  onClick={clearAll}
-                  className="text-sm text-slate-600 hover:text-slate-700 font-medium"
-                >
-                  Clear All
-                </button>
-              </div>
-              <div className="py-2">
-                {initialCompetitors.length === 0 ? (
-                  <div className="px-4 py-3 text-sm text-slate-500">No competitors found</div>
-                ) : (
-                  initialCompetitors.map((competitor) => (
+            <div className="absolute z-50 mt-2 w-full md:w-96 bg-white border border-slate-200 rounded-md shadow-lg p-3">
+              <input
+                type="text"
+                aria-label="Search competitors"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search competitors..."
+                className="w-full mb-3 px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder-slate-400"
+              />
+
+              {selectedCompetitors.length > 0 && (
+                <div className="mb-2 flex flex-wrap gap-2">
+                  {selectedCompetitors.map((c) => (
                     <button
-                      key={competitor}
-                      onClick={() => toggleCompetitor(competitor)}
-                      className="w-full px-4 py-2 flex items-center justify-between hover:bg-slate-50 transition"
+                      key={c}
+                      type="button"
+                      onClick={() => removeCompetitor(c)}
+                      className="text-xs px-2 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500"
                     >
-                      <span className="text-slate-700 text-left">{competitor}</span>
-                      {selectedCompetitors.includes(competitor) && (
-                        <Check className="h-5 w-5 text-blue-600" />
-                      )}
+                      {c} ×
                     </button>
-                  ))
+                  ))}
+                </div>
+              )}
+
+              <div className="max-h-56 overflow-auto rounded-md" role="listbox">
+                {filteredCompetitors.length === 0 ? (
+                  <div className="px-2 py-3 text-sm text-slate-500">No competitors found</div>
+                ) : (
+                  filteredCompetitors.map((competitor) => {
+                    const selected = selectedCompetitors.includes(competitor);
+                    return (
+                      <button
+                        key={competitor}
+                        type="button"
+                        role="option"
+                        aria-selected={selected}
+                        onClick={() => toggleCompetitor(competitor)}
+                        className={`w-full flex items-center justify-between py-1.5 px-2 text-left hover:bg-slate-50 rounded ${
+                          selected ? 'bg-violet-50' : ''
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <input type="checkbox" checked={selected} readOnly className="h-4 w-4" />
+                          <span className="text-sm text-slate-700 truncate">{competitor}</span>
+                        </div>
+                      </button>
+                    );
+                  })
                 )}
+              </div>
+
+              <div className="mt-3 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={clearAll}
+                  className="text-sm text-slate-600 hover:text-slate-900"
+                >
+                  Clear
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsDropdownOpen(false)}
+                  className="text-sm px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700"
+                >
+                  Done
+                </button>
               </div>
             </div>
           )}
@@ -339,7 +406,44 @@ export default function DashboardClient({ initialCompetitors }: DashboardClientP
                         }}
                       />
                       <Legend />
-                      <Bar dataKey="value" fill="#3b82f6" name="Creatives" />
+                      <Bar
+                        dataKey="value"
+                        fill="#3b82f6"
+                        name="Creatives"
+                        onClick={(data: unknown) => {
+                          const d = data as { fullName?: string; name?: string } | undefined;
+                          const themeName = d?.fullName || (d?.name as string | undefined) || '';
+
+                          if (themeName && allAds.length > 0) {
+                            // Filter ads with this theme
+                            const adsWithTheme = allAds.filter(
+                              (ad) => ad.topic === themeName || ad.concept === themeName
+                            );
+
+                            if (adsWithTheme.length > 0) {
+                              // Get all page names from selected competitors (or all if none selected)
+                              const selectedPages =
+                                selectedCompetitors.length > 0
+                                  ? selectedCompetitors
+                                  : Array.from(
+                                      new Set(allAds.map((ad) => ad.page_name).filter(Boolean))
+                                    );
+
+                              // Navigate with both topic and page parameters
+                              const params = new URLSearchParams();
+                              params.set('topic', themeName);
+                              if (selectedPages.length > 0) {
+                                params.set(
+                                  'page',
+                                  selectedPages.map((p) => encodeURIComponent(p)).join(',')
+                                );
+                              }
+                              router.push(`/advance-filter?${params.toString()}`);
+                            }
+                          }
+                        }}
+                        style={{ cursor: 'pointer' }}
+                      />
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>
@@ -365,7 +469,42 @@ export default function DashboardClient({ initialCompetitors }: DashboardClientP
                         }}
                       />
                       <Legend />
-                      <Bar dataKey="value" fill="#10b981" name="Creatives" />
+                      <Bar
+                        dataKey="value"
+                        fill="#10b981"
+                        name="Creatives"
+                        onClick={(data: unknown) => {
+                          const d = data as { fullName?: string; name?: string } | undefined;
+                          const hookName = d?.fullName || (d?.name as string | undefined) || '';
+
+                          if (hookName && allAds.length > 0) {
+                            // Filter ads with this hook
+                            const adsWithHook = allAds.filter((ad) => ad.hook === hookName);
+
+                            if (adsWithHook.length > 0) {
+                              // Get all page names from selected competitors (or all if none selected)
+                              const selectedPages =
+                                selectedCompetitors.length > 0
+                                  ? selectedCompetitors
+                                  : Array.from(
+                                      new Set(allAds.map((ad) => ad.page_name).filter(Boolean))
+                                    );
+
+                              // Navigate with both hook and page parameters
+                              const params = new URLSearchParams();
+                              params.set('hook', hookName);
+                              if (selectedPages.length > 0) {
+                                params.set(
+                                  'page',
+                                  selectedPages.map((p) => encodeURIComponent(p)).join(',')
+                                );
+                              }
+                              router.push(`/advance-filter?${params.toString()}`);
+                            }
+                          }
+                        }}
+                        style={{ cursor: 'pointer' }}
+                      />
                     </BarChart>
                   </ResponsiveContainer>
                 </CardContent>

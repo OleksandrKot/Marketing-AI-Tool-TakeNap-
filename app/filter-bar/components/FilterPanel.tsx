@@ -1,20 +1,180 @@
 'use client';
 
-import React, { useState, useEffect, memo } from 'react';
+import React, { useState, useEffect, useRef, memo } from 'react';
+
+type CountsMap = Record<string, number> | undefined;
+
+function DropdownMulti({
+  label,
+  options,
+  selected,
+  counts,
+  onToggle,
+  onClear,
+}: {
+  label: string;
+  options: string[];
+  selected: string[];
+  counts?: CountsMap;
+  onToggle: (value: string) => void;
+  onClear: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (
+        open &&
+        wrapRef.current &&
+        !wrapRef.current.contains(t) &&
+        btnRef.current &&
+        !btnRef.current.contains(t)
+      )
+        setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const summary = (() => {
+    if (!selected || selected.length === 0) return `All ${label.toLowerCase()}`;
+    if (selected.length <= 2) return selected.join(', ');
+    return `${selected.slice(0, 2).join(', ')} +${selected.length - 2}`;
+  })();
+
+  const filtered = options
+    .filter((o) => (query.trim() === '' ? true : o.toLowerCase().includes(query.toLowerCase())))
+    .slice(0, 300);
+
+  return (
+    <div className="relative" ref={wrapRef}>
+      <div className="block text-sm font-medium text-slate-700 mb-2">{label}</div>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-3 py-2 border border-slate-300 rounded-md text-left focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span className="text-slate-900 truncate">{summary}</span>
+        <svg
+          className={`ml-2 h-4 w-4 text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`}
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          aria-hidden
+        >
+          <path
+            fillRule="evenodd"
+            d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.25a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
+            clipRule="evenodd"
+          />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute z-20 mt-2 w-full bg-white border border-slate-200 rounded-md shadow-lg p-3">
+          <input
+            type="text"
+            aria-label={`Search ${label}`}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={`Search ${label.toLowerCase()}...`}
+            className="w-full mb-3 px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder-slate-400"
+          />
+
+          {selected && selected.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-2">
+              {selected.map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => onToggle(n)}
+                  className="text-xs px-2 py-1 rounded-full bg-violet-50 text-violet-700 border border-violet-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-violet-500"
+                >
+                  {n} ×
+                </button>
+              ))}
+            </div>
+          )}
+
+          <div className="max-h-56 overflow-auto rounded-md" role="listbox" aria-label={label}>
+            {filtered.map((opt) => {
+              const sel = (selected || []).includes(opt);
+              const cnt = counts && typeof counts[opt] !== 'undefined' ? counts[opt] : undefined;
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  role="option"
+                  aria-selected={sel}
+                  onClick={() => onToggle(opt)}
+                  className={`w-full flex items-center justify-between py-1.5 px-2 text-left hover:bg-slate-50 rounded ${
+                    sel ? 'bg-violet-50' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <input type="checkbox" checked={sel} readOnly className="h-4 w-4" />
+                    <span className="text-sm text-slate-700 truncate">{opt}</span>
+                  </div>
+                  <div className="text-xs text-slate-500 ml-2 whitespace-nowrap">
+                    {typeof cnt !== 'undefined' ? `(${cnt})` : ''}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-3 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => onClear()}
+              className="text-sm text-slate-600 hover:text-slate-900"
+            >
+              Clear
+            </button>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="text-sm px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 interface FilterOptions {
-  pageName: string;
+  pageName?: string;
+  pageNames?: string[]; // multi-select
   publisherPlatform: string;
+  publisherPlatforms?: string[];
   ctaType: string;
+  ctaTypes?: string[];
   displayFormat: string;
+  displayFormats?: string[];
   dateRange: string;
   searchQuery: string;
   conceptFormat: string;
+  conceptFormats?: string[];
   realizationFormat: string;
+  realizationFormats?: string[];
   topicFormat: string;
+  topicFormats?: string[];
   hookFormat: string;
+  hookFormats?: string[];
   characterFormat: string;
+  characterFormats?: string[];
   variationCount?: string;
+  variationCounts?: string[];
+  dateRanges?: string[];
   funnels?: string[];
 }
 
@@ -31,9 +191,13 @@ interface FilterPanelProps {
     hookFormats: string[];
     characterFormats: string[];
     variationBuckets: string[];
+    dateRangeOptions: string[];
     funnels: string[];
   };
   initialPageName?: string;
+  initialPageNames?: string[];
+  initialTopic?: string;
+  initialHook?: string;
   counts?: {
     pageNames: Record<string, number>;
     publisherPlatforms: Record<string, number>;
@@ -45,6 +209,7 @@ interface FilterPanelProps {
     hookFormats: Record<string, number>;
     characterFormats: Record<string, number>;
     variationCounts?: Record<string, number>;
+    dateRanges?: Record<string, number>;
     funnels?: Record<string, number>;
   };
 }
@@ -53,73 +218,113 @@ function FilterPanelComponent({
   onFiltersChange,
   availableOptions,
   initialPageName = '',
+  initialPageNames = [],
+  initialTopic = '',
+  initialHook = '',
   counts,
 }: FilterPanelProps) {
   const [filters, setFilters] = useState<FilterOptions>({
     pageName: '',
+    pageNames: [],
     publisherPlatform: '',
+    publisherPlatforms: [],
     ctaType: '',
+    ctaTypes: [],
     displayFormat: '',
-    dateRange: '',
+    displayFormats: [],
     searchQuery: '',
     conceptFormat: '',
+    conceptFormats: [],
     realizationFormat: '',
+    realizationFormats: [],
     topicFormat: '',
+    topicFormats: [],
     hookFormat: '',
+    hookFormats: [],
     characterFormat: '',
+    characterFormats: [],
     variationCount: '',
+    variationCounts: [],
+    dateRange: '',
+    dateRanges: [],
     funnels: [],
   });
-  const [funnelInput, setFunnelInput] = useState('');
   // counts is provided from props
 
   // Initialize pageName from prop when component mounts
   useEffect(() => {
-    if (initialPageName) {
-      const newFilters = { ...filters, pageName: initialPageName };
+    if (initialPageNames && initialPageNames.length > 0) {
+      const newFilters = { ...filters, pageName: '', pageNames: initialPageNames };
+      setFilters(newFilters);
+      onFiltersChange(newFilters);
+    } else if (initialPageName) {
+      const newFilters = { ...filters, pageName: '', pageNames: [initialPageName] };
       setFilters(newFilters);
       // Inform parent about initial filter
       onFiltersChange(newFilters);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialPageName]);
+  }, [initialPageName, initialPageNames]);
 
+  // Initialize topicFormat(s) from prop when component mounts
+  useEffect(() => {
+    if (initialTopic) {
+      const newFilters = { ...filters, topicFormat: '', topicFormats: [initialTopic] };
+      setFilters(newFilters);
+      // Inform parent about initial filter
+      onFiltersChange(newFilters);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTopic]);
+
+  // Initialize hookFormat(s) from prop when component mounts
+  useEffect(() => {
+    if (initialHook) {
+      const newFilters = { ...filters, hookFormat: '', hookFormats: [initialHook] };
+      setFilters(newFilters);
+      // Inform parent about initial filter
+      onFiltersChange(newFilters);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialHook]);
   const handleFilterChange = (key: keyof FilterOptions, value: string) => {
     const newFilters = { ...filters, [key]: value };
     setFilters(newFilters);
     onFiltersChange(newFilters);
   };
 
-  const handleAddFunnel = (value?: string) => {
-    const raw = ((value ?? funnelInput) || '').trim();
-    if (!raw) return;
-    const parts = raw
-      .split(',')
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const next = Array.isArray(filters.funnels) ? [...filters.funnels] : [];
-    for (const p of parts) {
-      if (!next.includes(p)) next.unshift(p);
+  const togglePageName = (name: string) => {
+    const current = Array.isArray(filters.pageNames) ? [...filters.pageNames] : [];
+    const idx = current.indexOf(name);
+    if (idx >= 0) current.splice(idx, 1);
+    else current.unshift(name);
+    const newFilters = { ...filters, pageNames: current, pageName: '' };
+    setFilters(newFilters);
+    onFiltersChange(newFilters);
+  };
+
+  // Generic togglers for multi-select filters
+  const makeToggle =
+    (key: keyof FilterOptions, clearKey?: keyof FilterOptions) => (value: string) => {
+      const arr = Array.isArray(filters[key] as unknown[])
+        ? ([...(filters[key] as unknown[])] as string[])
+        : [];
+      const i = arr.indexOf(value);
+      if (i >= 0) arr.splice(i, 1);
+      else arr.unshift(value);
+      const newFilters: FilterOptions = { ...filters, [key]: arr } as FilterOptions;
+      if (clearKey) {
+        newFilters[clearKey] = '' as never;
+      }
+      setFilters(newFilters);
+      onFiltersChange(newFilters);
+    };
+
+  const makeClear = (key: keyof FilterOptions, clearKey?: keyof FilterOptions) => () => {
+    const newFilters: FilterOptions = { ...filters, [key]: [] } as FilterOptions;
+    if (clearKey) {
+      newFilters[clearKey] = '' as never;
     }
-    const newFilters = { ...filters, funnels: next };
-    setFilters(newFilters);
-    setFunnelInput('');
-    onFiltersChange(newFilters);
-  };
-
-  const handleRemoveFunnel = (value: string) => {
-    const next = (filters.funnels || []).filter((f) => f !== value);
-    const newFilters = { ...filters, funnels: next };
-    setFilters(newFilters);
-    onFiltersChange(newFilters);
-  };
-
-  const toggleFunnelFromList = (value: string) => {
-    const next = Array.isArray(filters.funnels) ? [...filters.funnels] : [];
-    const idx = next.indexOf(value);
-    if (idx >= 0) next.splice(idx, 1);
-    else next.unshift(value);
-    const newFilters = { ...filters, funnels: next };
     setFilters(newFilters);
     onFiltersChange(newFilters);
   };
@@ -127,6 +332,7 @@ function FilterPanelComponent({
   const clearFilters = () => {
     const clearedFilters = {
       pageName: '',
+      pageNames: [],
       publisherPlatform: '',
       ctaType: '',
       displayFormat: '',
@@ -171,406 +377,178 @@ function FilterPanelComponent({
           />
         </div>
 
-        {/* Page Name */}
-        <div>
-          <div className="block text-sm font-medium text-slate-700 mb-2">
-            Page Name
-            {filters.pageName &&
-            counts?.pageNames &&
-            typeof counts.pageNames[filters.pageName] !== 'undefined' ? (
-              <span className="ml-2 text-gray-500">({counts.pageNames[filters.pageName]})</span>
-            ) : null}
-          </div>
-          <select
-            aria-label="Filter by page name"
-            value={filters.pageName}
-            onChange={(e) => handleFilterChange('pageName', e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
-          >
-            <option value="">All pages</option>
-            {availableOptions.pageNames.map((name) => (
-              <option key={name} value={name}>
-                {name}
-                {counts?.pageNames && typeof counts.pageNames[name] !== 'undefined'
-                  ? ` (${counts.pageNames[name]})`
-                  : null}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Page Names */}
+        <DropdownMulti
+          label="Page Names"
+          options={availableOptions.pageNames}
+          selected={filters.pageNames || []}
+          counts={counts?.pageNames}
+          onToggle={togglePageName}
+          onClear={() => {
+            const nf = { ...filters, pageNames: [], pageName: '' };
+            setFilters(nf);
+            onFiltersChange(nf);
+          }}
+        />
 
-        {/* Publisher Platform */}
-        <div>
-          <div className="block text-sm font-medium text-slate-700 mb-2">
-            Platform
-            {filters.publisherPlatform &&
-            counts?.publisherPlatforms &&
-            typeof counts.publisherPlatforms[filters.publisherPlatform] !== 'undefined' ? (
-              <span className="ml-2 text-gray-500">
-                ({counts.publisherPlatforms[filters.publisherPlatform]})
-              </span>
-            ) : null}
-          </div>
-          <select
-            aria-label="Filter by platform"
-            value={filters.publisherPlatform}
-            onChange={(e) => handleFilterChange('publisherPlatform', e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
-          >
-            <option value="">All platforms</option>
-            {availableOptions.publisherPlatforms.map((platform) => (
-              <option key={platform} value={platform}>
-                {platform.charAt(0).toUpperCase() + platform.slice(1)}
-                {counts?.publisherPlatforms &&
-                typeof counts.publisherPlatforms[platform] !== 'undefined'
-                  ? ` (${counts.publisherPlatforms[platform]})`
-                  : null}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Publisher Platforms */}
+        <DropdownMulti
+          label="Platforms"
+          options={availableOptions.publisherPlatforms}
+          selected={filters.publisherPlatforms || []}
+          counts={counts?.publisherPlatforms}
+          onToggle={(val) => {
+            const v = val.toLowerCase();
+            makeToggle('publisherPlatforms', 'publisherPlatform')(v);
+          }}
+          onClear={makeClear('publisherPlatforms', 'publisherPlatform')}
+        />
 
-        {/* CTA Type */}
-        <div>
-          <div className="block text-sm font-medium text-slate-700 mb-2">
-            CTA Type
-            {filters.ctaType &&
-            counts?.ctaTypes &&
-            typeof counts.ctaTypes[filters.ctaType] !== 'undefined' ? (
-              <span className="ml-2 text-gray-500">({counts.ctaTypes[filters.ctaType]})</span>
-            ) : null}
-          </div>
-          <select
-            aria-label="Filter by CTA type"
-            value={filters.ctaType}
-            onChange={(e) => handleFilterChange('ctaType', e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
-          >
-            <option value="">All types</option>
-            {availableOptions.ctaTypes.map((type) => (
-              <option key={type} value={type}>
-                {type}
-                {counts?.ctaTypes && typeof counts.ctaTypes[type] !== 'undefined'
-                  ? ` (${counts.ctaTypes[type]})`
-                  : null}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* CTA Types */}
+        <DropdownMulti
+          label="CTA Types"
+          options={availableOptions.ctaTypes}
+          selected={filters.ctaTypes || []}
+          counts={counts?.ctaTypes}
+          onToggle={makeToggle('ctaTypes', 'ctaType')}
+          onClear={makeClear('ctaTypes', 'ctaType')}
+        />
 
-        {/* Display Format */}
-        <div>
-          <div className="block text-sm font-medium text-slate-700 mb-2">
-            Display Format
-            {filters.displayFormat &&
-            counts?.displayFormats &&
-            typeof counts.displayFormats[filters.displayFormat] !== 'undefined' ? (
-              <span className="ml-2 text-gray-500">
-                ({counts.displayFormats[filters.displayFormat]})
-              </span>
-            ) : null}
-          </div>
-          <select
-            aria-label="Filter by display format"
-            value={filters.displayFormat}
-            onChange={(e) => handleFilterChange('displayFormat', e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
-          >
-            <option value="">All formats</option>
-            {availableOptions.displayFormats.map((k) => (
-              <option key={k} value={k}>
-                {k}
-                {counts?.displayFormats && typeof counts.displayFormats[k] !== 'undefined'
-                  ? ` (${counts.displayFormats[k]})`
-                  : null}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Display Formats */}
+        <DropdownMulti
+          label="Display Formats"
+          options={availableOptions.displayFormats}
+          selected={filters.displayFormats || []}
+          counts={counts?.displayFormats}
+          onToggle={makeToggle('displayFormats', 'displayFormat')}
+          onClear={makeClear('displayFormats', 'displayFormat')}
+        />
 
-        {/* Date Range */}
-        <div>
-          <div className="block text-sm font-medium text-slate-700 mb-2">Creation Period</div>
-          <select
-            aria-label="Filter by creation period"
-            value={filters.dateRange}
-            onChange={(e) => handleFilterChange('dateRange', e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
-          >
-            <option value="">All time</option>
-            <option value="today">Today</option>
-            <option value="week">Last week</option>
-            <option value="month">Last month</option>
-            <option value="quarter">Last quarter</option>
-          </select>
-        </div>
-        {/* Concept Format */}
-        <div>
-          <div className="block text-sm font-medium text-slate-700 mb-2">
-            Concept Format
-            {filters.conceptFormat &&
-            counts?.conceptFormats &&
-            typeof counts.conceptFormats[filters.conceptFormat] !== 'undefined' ? (
-              <span className="ml-2 text-gray-500">
-                ({counts.conceptFormats[filters.conceptFormat]})
-              </span>
-            ) : null}
-          </div>
-          <select
-            aria-label="Filter by concept format"
-            value={filters.conceptFormat}
-            onChange={(e) => handleFilterChange('conceptFormat', e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
-          >
-            <option value="">All concepts </option>
-            {availableOptions.conceptFormats.map((format) => (
-              <option key={format} value={format}>
-                {format}
-                {counts?.conceptFormats && typeof counts.conceptFormats[format] !== 'undefined'
-                  ? ` (${counts.conceptFormats[format]})`
-                  : null}
-              </option>
-            ))}
-          </select>
-        </div>
-        {/* Realization Format */}
-        <div>
-          <div className="block text-sm font-medium text-slate-700 mb-2">
-            Realization Format
-            {filters.realizationFormat &&
-            counts?.realizationFormats &&
-            typeof counts.realizationFormats[filters.realizationFormat] !== 'undefined' ? (
-              <span className="ml-2 text-gray-500">
-                ({counts.realizationFormats[filters.realizationFormat]})
-              </span>
-            ) : null}
-          </div>
-          <select
-            aria-label="Filter by realization format"
-            value={filters.realizationFormat}
-            onChange={(e) => handleFilterChange('realizationFormat', e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
-          >
-            <option value="">All realizations </option>
-            {availableOptions.realizationFormats.map((format) => (
-              <option key={format} value={format}>
-                {format}
-                {counts?.realizationFormats &&
-                typeof counts.realizationFormats[format] !== 'undefined'
-                  ? ` (${counts.realizationFormats[format]})`
-                  : null}
-              </option>
-            ))}
-          </select>
-        </div>
-        {/* Topic Format */}
-        <div>
-          <div className="block text-sm font-medium text-slate-700 mb-2">
-            Topic Format
-            {filters.topicFormat &&
-            counts?.topicFormats &&
-            typeof counts.topicFormats[filters.topicFormat] !== 'undefined' ? (
-              <span className="ml-2 text-gray-500">
-                ({counts.topicFormats[filters.topicFormat]})
-              </span>
-            ) : null}
-          </div>
-          <select
-            aria-label="Filter by topic"
-            value={filters.topicFormat}
-            onChange={(e) => handleFilterChange('topicFormat', e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
-          >
-            <option value="">All topics </option>
-            {availableOptions.topicFormats.map((format) => (
-              <option key={format} value={format}>
-                {format}
-                {counts?.topicFormats && typeof counts.topicFormats[format] !== 'undefined'
-                  ? ` (${counts.topicFormats[format]})`
-                  : null}
-              </option>
-            ))}
-          </select>
-        </div>
-        {/* Hook Format */}
-        <div>
-          <div className="block text-sm font-medium text-slate-700 mb-2">
-            Hook Format
-            {filters.hookFormat &&
-            counts?.hookFormats &&
-            typeof counts.hookFormats[filters.hookFormat] !== 'undefined' ? (
-              <span className="ml-2 text-gray-500">({counts.hookFormats[filters.hookFormat]})</span>
-            ) : null}
-          </div>
-          <select
-            aria-label="Filter by hook"
-            value={filters.hookFormat}
-            onChange={(e) => handleFilterChange('hookFormat', e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
-          >
-            <option value="">All hooks </option>
-            {availableOptions.hookFormats.map((format) => (
-              <option key={format} value={format}>
-                {format}
-                {counts?.hookFormats && typeof counts.hookFormats[format] !== 'undefined'
-                  ? ` (${counts.hookFormats[format]})`
-                  : null}
-              </option>
-            ))}
-          </select>
-        </div>
-        {/* Character Format */}
-        <div>
-          <div className="block text-sm font-medium text-slate-700 mb-2">
-            Character Format
-            {filters.characterFormat &&
-            counts?.characterFormats &&
-            typeof counts.characterFormats[filters.characterFormat] !== 'undefined' ? (
-              <span className="ml-2 text-gray-500">
-                ({counts.characterFormats[filters.characterFormat]})
-              </span>
-            ) : null}
-          </div>
-          <select
-            aria-label="Filter by character"
-            value={filters.characterFormat}
-            onChange={(e) => handleFilterChange('characterFormat', e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
-          >
-            <option value="">All characters </option>
-            {availableOptions.characterFormats.map((format) => (
-              <option key={format} value={format}>
-                {format}
-                {counts?.characterFormats && typeof counts.characterFormats[format] !== 'undefined'
-                  ? ` (${counts.characterFormats[format]})`
-                  : null}
-              </option>
-            ))}
-          </select>
-        </div>
-        {/* Variation Count Bucket */}
-        <div>
-          <div className="block text-sm font-medium text-slate-700 mb-2">
-            Variations
-            {filters.variationCount &&
-            counts?.variationCounts &&
-            typeof counts.variationCounts[filters.variationCount] !== 'undefined' ? (
-              <span className="ml-2 text-gray-500">
-                ({counts.variationCounts[filters.variationCount]})
-              </span>
-            ) : null}
-          </div>
-          <select
-            aria-label="Filter by variation count"
-            value={filters.variationCount}
-            onChange={(e) => handleFilterChange('variationCount', e.target.value)}
-            className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900"
-          >
-            <option value="">All variations</option>
-            {availableOptions.variationBuckets.map((b) => {
-              const labelMap: Record<string, string> = {
-                more_than_10: 'More than 10',
-                '5_10': '5–10',
-                '3_5': '3–5',
-                less_than_3: 'Less than 3',
-              };
-              const label = labelMap[b] ?? b;
-              return (
-                <option key={b} value={b}>
-                  {label}
-                  {counts?.variationCounts && typeof counts.variationCounts[b] !== 'undefined'
-                    ? ` (${counts.variationCounts[b]})`
-                    : null}
-                </option>
-              );
-            })}
-          </select>
-        </div>
+        {/* Concept Formats */}
+        <DropdownMulti
+          label="Concept Formats"
+          options={availableOptions.conceptFormats}
+          selected={filters.conceptFormats || []}
+          counts={counts?.conceptFormats}
+          onToggle={makeToggle('conceptFormats', 'conceptFormat')}
+          onClear={makeClear('conceptFormats', 'conceptFormat')}
+        />
+        {/* Realization Formats */}
+        <DropdownMulti
+          label="Realization Formats"
+          options={availableOptions.realizationFormats}
+          selected={filters.realizationFormats || []}
+          counts={counts?.realizationFormats}
+          onToggle={makeToggle('realizationFormats', 'realizationFormat')}
+          onClear={makeClear('realizationFormats', 'realizationFormat')}
+        />
+        {/* Topic Formats */}
+        <DropdownMulti
+          label="Topic Formats"
+          options={availableOptions.topicFormats}
+          selected={filters.topicFormats || []}
+          counts={counts?.topicFormats}
+          onToggle={makeToggle('topicFormats', 'topicFormat')}
+          onClear={makeClear('topicFormats', 'topicFormat')}
+        />
+        {/* Hook Formats */}
+        <DropdownMulti
+          label="Hook Formats"
+          options={availableOptions.hookFormats}
+          selected={filters.hookFormats || []}
+          counts={counts?.hookFormats}
+          onToggle={makeToggle('hookFormats', 'hookFormat')}
+          onClear={makeClear('hookFormats', 'hookFormat')}
+        />
+        {/* Character Formats */}
+        <DropdownMulti
+          label="Character Formats"
+          options={availableOptions.characterFormats}
+          selected={filters.characterFormats || []}
+          counts={counts?.characterFormats}
+          onToggle={makeToggle('characterFormats', 'characterFormat')}
+          onClear={makeClear('characterFormats', 'characterFormat')}
+        />
 
-        {/* Funnels Filter */}
-        <div>
-          <div className="block text-sm font-medium text-slate-700 mb-2">Funnel</div>
-          <div className="mb-2">
-            <input
-              id="funnelInput"
-              type="text"
-              aria-label="Paste funnel URL or value"
-              value={funnelInput}
-              onChange={(e) => setFunnelInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  handleAddFunnel();
-                }
-              }}
-              placeholder="Paste funnel URL or value"
-              className="w-full px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder-slate-400"
-            />
-            <div className="mt-2 flex flex-wrap gap-2">
-              {(filters.funnels || []).map((f) => (
-                <button
-                  key={f}
-                  type="button"
-                  aria-label={`Remove funnel ${f}`}
-                  title={`Remove funnel ${f}`}
-                  onClick={() => handleRemoveFunnel(f)}
-                  className="text-xs px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-                >
-                  {f} ×
-                </button>
-              ))}
-            </div>
-          </div>
+        {/* Variations */}
+        <DropdownMulti
+          label="Variations"
+          options={availableOptions.variationBuckets.map((b) => {
+            const labelMap: Record<string, string> = {
+              more_than_10: 'More than 10',
+              '5_10': '5–10',
+              '3_5': '3–5',
+              less_than_3: 'Less than 3',
+            };
+            return labelMap[b] ?? b;
+          })}
+          selected={(filters.variationCounts || []).map((v) => {
+            const labelMap: Record<string, string> = {
+              more_than_10: 'More than 10',
+              '5_10': '5–10',
+              '3_5': '3–5',
+              less_than_3: 'Less than 3',
+            };
+            return labelMap[v] ?? v;
+          })}
+          counts={counts?.variationCounts}
+          onToggle={(label) => {
+            const reverseMap: Record<string, string> = {
+              'More than 10': 'more_than_10',
+              '5–10': '5_10',
+              '3–5': '3_5',
+              'Less than 3': 'less_than_3',
+            };
+            const bucket = reverseMap[label] ?? label;
+            makeToggle('variationCounts', 'variationCount')(bucket);
+          }}
+          onClear={makeClear('variationCounts', 'variationCount')}
+        />
 
-          <div
-            className="max-h-40 overflow-auto border border-slate-100 rounded-md p-2"
-            role="region"
-            aria-label="Available funnels"
-          >
-            {availableOptions.funnels.length === 0 ? (
-              <div className="text-sm text-slate-500">No funnels detected</div>
-            ) : (
-              availableOptions.funnels
-                .filter(
-                  (opt) => funnelInput.trim() === '' || opt.includes(funnelInput.toLowerCase())
-                )
-                .slice(0, 200)
-                .map((opt) => (
-                  <div
-                    key={opt}
-                    className="flex items-center justify-between py-1 px-2"
-                    role="listitem"
-                  >
-                    <div className="text-sm text-slate-700 truncate">{opt}</div>
-                    <div className="flex items-center gap-2">
-                      <div className="text-xs text-slate-500" aria-hidden>
-                        {counts?.funnels && typeof counts.funnels[opt] !== 'undefined'
-                          ? `(${counts.funnels[opt]})`
-                          : ''}
-                      </div>
-                      <button
-                        type="button"
-                        aria-pressed={(filters.funnels || []).includes(opt)}
-                        aria-label={`Toggle funnel ${opt}. ${
-                          counts?.funnels && typeof counts.funnels[opt] !== 'undefined'
-                            ? `${counts.funnels[opt]} matches`
-                            : ''
-                        }`}
-                        onClick={() => toggleFunnelFromList(opt)}
-                        className={`text-xs px-2 py-1 rounded-md border focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
-                          (filters.funnels || []).includes(opt)
-                            ? 'bg-blue-600 text-white border-blue-600'
-                            : 'bg-white text-slate-700 border-slate-200'
-                        }`}
-                      >
-                        {(filters.funnels || []).includes(opt) ? 'Selected' : 'Select'}
-                      </button>
-                    </div>
-                  </div>
-                ))
-            )}
-          </div>
-        </div>
+        {/* Date Ranges */}
+        <DropdownMulti
+          label="Creation Period"
+          options={availableOptions.dateRangeOptions.map((d) => {
+            const labelMap: Record<string, string> = {
+              today: 'Today',
+              week: 'Last week',
+              month: 'Last month',
+              quarter: 'Last quarter',
+            };
+            return labelMap[d] ?? d;
+          })}
+          selected={(filters.dateRanges || []).map((d) => {
+            const labelMap: Record<string, string> = {
+              today: 'Today',
+              week: 'Last week',
+              month: 'Last month',
+              quarter: 'Last quarter',
+            };
+            return labelMap[d] ?? d;
+          })}
+          counts={counts?.dateRanges}
+          onToggle={(label) => {
+            const reverseMap: Record<string, string> = {
+              Today: 'today',
+              'Last week': 'week',
+              'Last month': 'month',
+              'Last quarter': 'quarter',
+            };
+            const key = reverseMap[label] ?? label;
+            makeToggle('dateRanges', 'dateRange')(key);
+          }}
+          onClear={makeClear('dateRanges', 'dateRange')}
+        />
+
+        {/* Funnels */}
+        <DropdownMulti
+          label="Funnels"
+          options={availableOptions.funnels}
+          selected={filters.funnels || []}
+          counts={counts?.funnels}
+          onToggle={makeToggle('funnels')}
+          onClear={makeClear('funnels')}
+        />
       </div>
     </div>
   );
