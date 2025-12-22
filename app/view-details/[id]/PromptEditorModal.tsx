@@ -34,7 +34,13 @@ interface PromptEditorModalProps {
 const MAIN_PARAMETERS: Array<{ key: string; label: string }> = [
   { key: 'subject', label: 'Subject' },
   { key: 'text_on_image', label: 'Text on Image' },
-  // Character
+  { key: 'concept', label: 'Concept' },
+  { key: 'realisation', label: 'Realisation' },
+  { key: 'topic', label: 'Topic' },
+  { key: 'hook', label: 'Hook' },
+  { key: 'character', label: 'Character' },
+  { key: 'image_description', label: 'Image Description' },
+  // Character Details
   { key: 'characterGender', label: 'Character Gender' },
   { key: 'characterType', label: 'Character Type (realistic or fictional)' },
   { key: 'bodyType', label: 'Body Type' },
@@ -43,12 +49,35 @@ const MAIN_PARAMETERS: Array<{ key: string; label: string }> = [
   { key: 'clothing', label: 'Clothing' },
   { key: 'hairColor', label: 'Hair Color' },
   { key: 'pose', label: 'Pose' },
+  { key: 'action', label: 'Action' },
+  { key: 'facialExpression', label: 'Facial Expression' },
   { key: 'characterPositionInFrame', label: 'Character Position in Frame' },
-  // Background / palette
+  // Visual & Style
   { key: 'visualColorPalette', label: 'Visual Color Palette' },
+  { key: 'colorScheme', label: 'Color Scheme' },
+  { key: 'style', label: 'Style' },
+  { key: 'mood', label: 'Mood' },
+  { key: 'emotions', label: 'Emotions' },
+  { key: 'tone', label: 'Tone' },
+  // Environment & Scene
   { key: 'location', label: 'Location' },
+  { key: 'scene', label: 'Scene' },
+  { key: 'environment', label: 'Environment' },
   { key: 'backgroundElements', label: 'Background Elements' },
   { key: 'backgroundElementDetails', label: 'Background Element Details' },
+  { key: 'props', label: 'Props' },
+  // Technical & Camera
+  { key: 'lighting', label: 'Lighting' },
+  { key: 'cameraAngle', label: 'Camera Angle' },
+  { key: 'composition', label: 'Composition' },
+  { key: 'framing', label: 'Framing' },
+  { key: 'perspective', label: 'Perspective' },
+  { key: 'shotType', label: 'Shot Type' },
+  // Effects & Details
+  { key: 'texture', label: 'Texture' },
+  { key: 'effects', label: 'Effects' },
+  { key: 'visualEffects', label: 'Visual Effects' },
+  { key: 'details', label: 'Details' },
 ];
 
 const formatTime = (seconds: number): string => {
@@ -216,32 +245,96 @@ const PromptEditorModal = ({ ad, isOpen, onClose }: PromptEditorModalProps) => {
 
     // Map existing ad/unified fields to parameters (best-effort)
     const A = ad as unknown as Record<string, unknown>;
-    const setIf = (key: string, val?: unknown) => {
-      if (val !== undefined && val !== null && String(val).trim()) {
-        const target = main.find((p) => p.key === key);
-        if (target) target.value = String(val).trim();
+
+    // Try to parse shortPromptJson if it exists
+    let promptJson: Record<string, unknown> = {};
+    try {
+      if (A.shortPromptJson) {
+        if (typeof A.shortPromptJson === 'string') {
+          promptJson = JSON.parse(A.shortPromptJson as string);
+        } else if (typeof A.shortPromptJson === 'object') {
+          promptJson = A.shortPromptJson as Record<string, unknown>;
+        }
+      }
+    } catch (e) {
+      // ignore parse errors
+    }
+
+    const setIf = (key: string, ...vals: unknown[]) => {
+      for (const val of vals) {
+        if (val !== undefined && val !== null && String(val).trim()) {
+          const target = main.find((p) => p.key === key);
+          if (target) {
+            target.value = String(val).trim();
+            return;
+          }
+        }
       }
     };
 
-    // Subject
-    setIf('subject', A.subject ?? A.character ?? A.title);
+    // Subject - try multiple sources
+    setIf('subject', promptJson.subject, A.subject, A.title);
     // Text on Image
-    setIf('text_on_image', A.text_on_image ?? A.textOnImage);
-    // Character-related
-    setIf('characterGender', A.characterGender);
-    setIf('characterType', A.characterType);
-    setIf('bodyType', A.bodyType);
-    setIf('type', A.type);
-    setIf('appearanceDetails', A.appearanceDetails);
-    setIf('clothing', A.clothing);
-    setIf('hairColor', A.hairColor);
-    setIf('pose', A.pose);
-    setIf('characterPositionInFrame', A.characterPositionInFrame);
-    // Background / palette
-    setIf('visualColorPalette', A.visualColorPalette);
-    setIf('location', A.location);
-    setIf('backgroundElements', A.backgroundElements);
-    setIf('backgroundElementDetails', A.backgroundElementDetails);
+    setIf(
+      'text_on_image',
+      promptJson.text_on_image,
+      promptJson.textOnImage,
+      A.text_on_image,
+      A.textOnImage
+    );
+    // Main content fields
+    setIf('concept', promptJson.concept, A.concept);
+    setIf('realisation', promptJson.realisation, A.realisation);
+    setIf('topic', promptJson.topic, A.topic);
+    setIf('hook', promptJson.hook, A.hook);
+    setIf('character', promptJson.character, A.character);
+    setIf('image_description', promptJson.image_description, A.image_description);
+    // Character-related details
+    setIf('characterGender', promptJson.characterGender, A.characterGender);
+    setIf('characterType', promptJson.characterType, A.characterType);
+    setIf('bodyType', promptJson.bodyType, A.bodyType);
+    setIf('type', promptJson.type, A.type);
+    setIf('appearanceDetails', promptJson.appearanceDetails, A.appearanceDetails);
+    setIf('clothing', promptJson.clothing, A.clothing);
+    setIf('hairColor', promptJson.hairColor, A.hairColor);
+    setIf('pose', promptJson.pose, A.pose);
+    setIf('action', promptJson.action, A.action);
+    setIf('facialExpression', promptJson.facialExpression, A.facialExpression);
+    setIf(
+      'characterPositionInFrame',
+      promptJson.characterPositionInFrame,
+      A.characterPositionInFrame
+    );
+    // Visual & Style
+    setIf('visualColorPalette', promptJson.visualColorPalette, A.visualColorPalette);
+    setIf('colorScheme', promptJson.colorScheme, A.colorScheme);
+    setIf('style', promptJson.style, A.style);
+    setIf('mood', promptJson.mood, A.mood);
+    setIf('emotions', promptJson.emotions, A.emotions);
+    setIf('tone', promptJson.tone, A.tone);
+    // Environment & Scene
+    setIf('location', promptJson.location, A.location);
+    setIf('scene', promptJson.scene, A.scene);
+    setIf('environment', promptJson.environment, A.environment);
+    setIf('backgroundElements', promptJson.backgroundElements, A.backgroundElements);
+    setIf(
+      'backgroundElementDetails',
+      promptJson.backgroundElementDetails,
+      A.backgroundElementDetails
+    );
+    setIf('props', promptJson.props, A.props);
+    // Technical & Camera
+    setIf('lighting', promptJson.lighting, A.lighting);
+    setIf('cameraAngle', promptJson.cameraAngle, A.cameraAngle);
+    setIf('composition', promptJson.composition, A.composition);
+    setIf('framing', promptJson.framing, A.framing);
+    setIf('perspective', promptJson.perspective, A.perspective);
+    setIf('shotType', promptJson.shotType, A.shotType);
+    // Effects & Details
+    setIf('texture', promptJson.texture, A.texture);
+    setIf('effects', promptJson.effects, A.effects);
+    setIf('visualEffects', promptJson.visualEffects, A.visualEffects);
+    setIf('details', promptJson.details, A.details);
 
     const additional: PromptParameter[] = [
       {
@@ -266,6 +359,20 @@ const PromptEditorModal = ({ ad, isOpen, onClose }: PromptEditorModalProps) => {
         isAdditional: true,
       },
       {
+        id: 'cta_text',
+        key: 'cta_text',
+        label: 'CTA Text',
+        value: ad.cta_text || '',
+        isAdditional: true,
+      },
+      {
+        id: 'cta_type',
+        key: 'cta_type',
+        label: 'CTA Type',
+        value: ad.cta_type || '',
+        isAdditional: true,
+      },
+      {
         id: 'audio_script',
         key: 'audio_script',
         label: 'Audio Script',
@@ -277,6 +384,48 @@ const PromptEditorModal = ({ ad, isOpen, onClose }: PromptEditorModalProps) => {
         key: 'video_script',
         label: 'Video Script',
         value: ad.video_script || '',
+        isAdditional: true,
+      },
+      {
+        id: 'page_name',
+        key: 'page_name',
+        label: 'Page Name',
+        value: ad.page_name || '',
+        isAdditional: true,
+      },
+      {
+        id: 'display_format',
+        key: 'display_format',
+        label: 'Display Format',
+        value: ad.display_format || '',
+        isAdditional: true,
+      },
+      {
+        id: 'publisher_platform',
+        key: 'publisher_platform',
+        label: 'Publisher Platform',
+        value: ad.publisher_platform || '',
+        isAdditional: true,
+      },
+      {
+        id: 'link_url',
+        key: 'link_url',
+        label: 'Link URL',
+        value: ad.link_url || '',
+        isAdditional: true,
+      },
+      {
+        id: 'new_scenario',
+        key: 'new_scenario',
+        label: 'New Scenario',
+        value: (A.new_scenario as string) || '',
+        isAdditional: true,
+      },
+      {
+        id: 'tags',
+        key: 'tags',
+        label: 'Tags',
+        value: Array.isArray(ad.tags) ? ad.tags.join(', ') : '',
         isAdditional: true,
       },
     ];
@@ -710,36 +859,38 @@ const PromptEditorModal = ({ ad, isOpen, onClose }: PromptEditorModalProps) => {
               <div>
                 <h3 className="text-sm font-medium text-slate-700 mb-3">Main Parameters</h3>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {mainParams.map((param) => {
-                    const useTextarea = param.value && param.value.length > 60;
-                    return (
-                      <div key={param.id} className="flex flex-col gap-1">
-                        <label
-                          htmlFor={`param-${param.id}`}
-                          className="text-xs font-medium text-slate-700"
-                        >
-                          {param.label}
-                        </label>
-                        {useTextarea ? (
-                          <Textarea
-                            id={`param-${param.id}`}
-                            value={param.value}
-                            onChange={(e) => updateParameter(param.id, e.target.value)}
-                            placeholder={`Enter ${param.label.toLowerCase()}...`}
-                            className="text-xs h-16 p-2"
-                          />
-                        ) : (
-                          <Input
-                            id={`param-${param.id}`}
-                            value={param.value}
-                            onChange={(e) => updateParameter(param.id, e.target.value)}
-                            placeholder={`Enter ${param.label.toLowerCase()}...`}
-                            className="text-xs h-8"
-                          />
-                        )}
-                      </div>
-                    );
-                  })}
+                  {mainParams
+                    .filter((param) => param.value && param.value.trim())
+                    .map((param) => {
+                      const useTextarea = param.value && param.value.length > 60;
+                      return (
+                        <div key={param.id} className="flex flex-col gap-1">
+                          <label
+                            htmlFor={`param-${param.id}`}
+                            className="text-xs font-medium text-slate-700"
+                          >
+                            {param.label}
+                          </label>
+                          {useTextarea ? (
+                            <Textarea
+                              id={`param-${param.id}`}
+                              value={param.value}
+                              onChange={(e) => updateParameter(param.id, e.target.value)}
+                              placeholder={`Enter ${param.label.toLowerCase()}...`}
+                              className="text-xs h-16 p-2"
+                            />
+                          ) : (
+                            <Input
+                              id={`param-${param.id}`}
+                              value={param.value}
+                              onChange={(e) => updateParameter(param.id, e.target.value)}
+                              placeholder={`Enter ${param.label.toLowerCase()}...`}
+                              className="text-xs h-8"
+                            />
+                          )}
+                        </div>
+                      );
+                    })}
                 </div>
               </div>
             </div>
@@ -748,23 +899,25 @@ const PromptEditorModal = ({ ad, isOpen, onClose }: PromptEditorModalProps) => {
             <div className="w-full">
               <h3 className="text-sm font-medium text-slate-700 mb-3">Additional Concepts</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {additionalParams.map((param) => (
-                  <div key={param.id} className="flex flex-col gap-1">
-                    <label
-                      htmlFor={`param-${param.id}`}
-                      className="text-xs font-medium text-slate-700"
-                    >
-                      {param.label}
-                    </label>
-                    <Textarea
-                      id={`param-${param.id}`}
-                      value={param.value}
-                      onChange={(e) => updateParameter(param.id, e.target.value)}
-                      placeholder={`Enter ${param.label.toLowerCase()}...`}
-                      className="text-xs h-16 p-2"
-                    />
-                  </div>
-                ))}
+                {additionalParams
+                  .filter((param) => param.value && param.value.trim())
+                  .map((param) => (
+                    <div key={param.id} className="flex flex-col gap-1">
+                      <label
+                        htmlFor={`param-${param.id}`}
+                        className="text-xs font-medium text-slate-700"
+                      >
+                        {param.label}
+                      </label>
+                      <Textarea
+                        id={`param-${param.id}`}
+                        value={param.value}
+                        onChange={(e) => updateParameter(param.id, e.target.value)}
+                        placeholder={`Enter ${param.label.toLowerCase()}...`}
+                        className="text-xs h-16 p-2"
+                      />
+                    </div>
+                  ))}
               </div>
             </div>
           </CardContent>

@@ -633,47 +633,49 @@ const StructuredAttributes = (
 
           {/* Inline attributes form: compact grid */}
           <div className="grid grid-cols-2 gap-3">
-            {blocks.map((b) => {
-              const isTextarea = b.value && b.value.length > 50;
-              return (
-                <div key={b.id} className="flex flex-col gap-1">
-                  <label className="text-xs font-medium text-slate-700">{b.label}</label>
-                  {isTextarea ? (
-                    <Textarea
-                      value={b.value}
-                      onChange={(e) =>
-                        setBlocks((prev) =>
-                          prev.map((blk) =>
-                            blk.id === b.id ? { ...blk, value: e.target.value } : blk
+            {blocks
+              .filter((b) => b.value && b.value.trim())
+              .map((b) => {
+                const isTextarea = b.value && b.value.length > 50;
+                return (
+                  <div key={b.id} className="flex flex-col gap-1">
+                    <label className="text-xs font-medium text-slate-700">{b.label}</label>
+                    {isTextarea ? (
+                      <Textarea
+                        value={b.value}
+                        onChange={(e) =>
+                          setBlocks((prev) =>
+                            prev.map((blk) =>
+                              blk.id === b.id ? { ...blk, value: e.target.value } : blk
+                            )
                           )
-                        )
-                      }
-                      className="text-xs h-16 p-2"
-                    />
-                  ) : (
-                    <Input
-                      value={b.value}
-                      onChange={(e) =>
-                        setBlocks((prev) =>
-                          prev.map((blk) =>
-                            blk.id === b.id ? { ...blk, value: e.target.value } : blk
+                        }
+                        className="text-xs h-16 p-2"
+                      />
+                    ) : (
+                      <Input
+                        value={b.value}
+                        onChange={(e) =>
+                          setBlocks((prev) =>
+                            prev.map((blk) =>
+                              blk.id === b.id ? { ...blk, value: e.target.value } : blk
+                            )
                           )
-                        )
-                      }
-                      className="text-xs h-8"
-                    />
-                  )}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => removeBlock(b.id)}
-                    className="h-6 text-xs"
-                  >
-                    <Trash2 className="h-3 w-3 mr-1" /> Remove
-                  </Button>
-                </div>
-              );
-            })}
+                        }
+                        className="text-xs h-8"
+                      />
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeBlock(b.id)}
+                      className="h-6 text-xs"
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" /> Remove
+                    </Button>
+                  </div>
+                );
+              })}
           </div>
 
           {/* Controls */}
