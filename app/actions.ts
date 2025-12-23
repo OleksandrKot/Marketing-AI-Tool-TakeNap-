@@ -188,19 +188,65 @@ export async function getAds(
 
     // If we have server credentials, generate proxy URLs for preview images
     // stored in private buckets so server-rendered pages can include accessible
-    // image URLs without exposing the service role key.
+    // image URLs without exposing the service role key. Use storage paths from
+    // the DB when available and try multiple buckets to handle legacy vs new structure.
     try {
       const ads = (data as Ad[]) || [];
+
       const signedPromises = ads.map(async (ad) => {
         try {
           if (!ad || !ad.ad_archive_id) return ad;
-          const bucket =
-            ad.display_format === 'VIDEO' ? 'test10public_preview' : 'test9bucket_photo';
-          const path = `${ad.ad_archive_id}.jpeg`;
-          // Use server proxy route to serve images without expiring client links
+
+          // Determine best storage path: prefer DB-stored path, else fall back to conventional path
+          const storedPhotoPath =
+            typeof ad.image_url === 'string' && ad.image_url.startsWith('ads/')
+              ? ad.image_url
+              : null;
+          const storedPreviewPath =
+            typeof ad.video_preview_image_url === 'string' &&
+            ad.video_preview_image_url.startsWith('ads/')
+              ? ad.video_preview_image_url
+              : null;
+
+          const conventionalBase = `ads/${ad.ad_archive_id}/${ad.ad_archive_id}`;
+          const conventionalPhotoPath = `${conventionalBase}.jpeg`;
+          const conventionalPreviewPath = `${conventionalBase}.jpeg`;
+
+          // Build bucket list: legacy buckets only
+          const photoBuckets = ['test9bucket_photo'];
+          const previewBuckets = ['test10public_preview'];
+
+          // Choose path depending on format
+          let pathToUse =
+            ad.display_format === 'VIDEO'
+              ? storedPreviewPath || conventionalPreviewPath
+              : storedPhotoPath || conventionalPhotoPath;
+
+          // If no main photo path exists for a photo creative, try first card as preview
+          if ((!storedPhotoPath || storedPhotoPath.length === 0) && ad.display_format !== 'VIDEO') {
+            try {
+              const cardRes = await supabase
+                .from('ad_cards')
+                .select('storage_path, card_index')
+                .eq('ad_archive_id', ad.ad_archive_id)
+                .order('card_index', { ascending: true })
+                .limit(1);
+              const firstCard =
+                Array.isArray(cardRes.data) && cardRes.data.length > 0 ? cardRes.data[0] : null;
+              if (firstCard && firstCard.storage_path) {
+                pathToUse = firstCard.storage_path;
+              }
+              // If no card found, keep conventional main path (don't fallback to non-existent cards/0.jpeg)
+            } catch (e) {
+              // If query fails, keep conventional main path
+            }
+          }
+          const buckets = ad.display_format === 'VIDEO' ? previewBuckets : photoBuckets;
+
+          // Use server proxy route which will try buckets in order and resolve unknown extensions
           const proxyUrl = `/api/storage/proxy?bucket=${encodeURIComponent(
-            bucket
-          )}&path=${encodeURIComponent(path)}`;
+            buckets.join(',')
+          )}&path=${encodeURIComponent(pathToUse)}`;
           return { ...ad, signed_image_url: proxyUrl } as Ad & { signed_image_url?: string };
         } catch (e) {
           console.debug('Failed to set proxy image for ad', ad?.id, e);
@@ -209,16 +255,10 @@ export async function getAds(
       });
 
       const withSigned = await Promise.all(signedPromises);
+
       try {
-        // Log a small sample (first 3) so devs can inspect returned shape.
-        // This is a temporary debug log and can be removed later.
-        // eslint-disable-next-line no-console
-        console.debug(
-          '[getAds] sample returned ads count=',
-          (withSigned || []).length,
-          'sample=',
-          JSON.stringify((withSigned || []).slice(0, 3))
-        );
+        // Log only count, not full data to avoid console spam
+        console.debug('[getAds] returned ads count=', (withSigned || []).length);
       } catch (e) {
         /* noop */
       }
