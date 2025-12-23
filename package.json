@@ -59,6 +59,7 @@
     "next": "14.2.16",
     "next-themes": "latest",
     "nodemailer": "^6.10.1",
+    "p-limit": "^7.2.0",
     "pnpm": "^10.19.0",
     "rc-slider": "^11.1.9",
     "react": "^18",

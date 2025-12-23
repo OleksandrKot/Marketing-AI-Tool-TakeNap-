@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Calendar, Tag, Check as CheckIcon } from 'lucide-react';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -17,8 +17,6 @@ interface AdCardProps {
   selectionMode?: boolean;
   selected?: boolean;
   onToggleSelect?: (id: string) => void;
-  // map of selected ids so variations can reflect selection state
-  selectedIds?: Record<string, boolean>;
 }
 
 function AdCardComponent({
@@ -30,7 +28,6 @@ function AdCardComponent({
   selectionMode,
   selected,
   onToggleSelect,
-  selectedIds,
 }: AdCardProps) {
   const [expanded, setExpanded] = useState(false);
   const title = ad.title || 'Untitled Ad';
@@ -49,14 +46,57 @@ function AdCardComponent({
   const href = params.length > 0 ? `${baseUrl}?${params.join('&')}` : baseUrl;
 
   const previewFromStorage = !!ad.ad_archive_id;
-  const previewStorageBucket = isVideo ? 'test10public_preview' : 'test9bucket_photo';
-  const previewStorageFilename = `${ad.ad_archive_id}.jpeg`;
+  // Use legacy buckets only
+  const previewStorageBuckets = isVideo ? ['test10public_preview'] : ['test9bucket_photo'];
+  const previewStorageFilename = ad.image_url?.startsWith('ads/')
+    ? ad.image_url.split('/').pop()
+    : `${ad.ad_archive_id}.jpeg`;
   const signedUrl = ad.signed_image_url ?? undefined;
-  const publicSrc = signedUrl
-    ? signedUrl
-    : previewFromStorage
-    ? getPublicImageUrl(`${previewStorageBucket}/${previewStorageFilename}`)
-    : ad.image_url || ad.video_preview_image_url || '/placeholder.svg';
+  const [publicSrc, setPublicSrc] = useState<string>(() => {
+    if (signedUrl) return signedUrl;
+    if (previewFromStorage) {
+      // Build URL using preferred bucket, will swap on error
+      return getPublicImageUrl(
+        `${previewStorageBuckets[0]}/ads/${ad.ad_archive_id}/${previewStorageFilename}`
+      );
+    }
+    return ad.image_url || ad.video_preview_image_url || '/placeholder.svg';
+  });
+
+  // Fallback to legacy bucket if the first URL fails
+  const handleImageError = () => {
+    if (!previewFromStorage) return;
+    const fallback = previewStorageBuckets[1];
+    if (fallback) {
+      setPublicSrc(
+        getPublicImageUrl(`${fallback}/ads/${ad.ad_archive_id}/${previewStorageFilename}`)
+      );
+    }
+  };
+
+  // Fetch cards previews for this ad
+  const [cards, setCards] = useState<
+    Array<{ storage_bucket: string; storage_path: string; card_index: number }>
+  >([]);
+  useEffect(() => {
+    let cancelled = false;
+    const run = async () => {
+      try {
+        if (!ad.ad_archive_id) return;
+        const res = await fetch(`/api/ads/cards/${encodeURIComponent(String(ad.ad_archive_id))}`);
+        if (!res.ok) return;
+        const payload = await res.json();
+        const rows = Array.isArray(payload?.data) ? payload.data : [];
+        if (!cancelled) setCards(rows);
+      } catch (e) {
+        /* noop */
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [ad.ad_archive_id]);
 
   const tags = Array.isArray(ad.tags) ? ad.tags : [];
 
@@ -104,6 +144,7 @@ function AdCardComponent({
             src={publicSrc}
             alt={title}
             className="max-h-full max-w-full object-contain transition-all duration-300 group-hover:scale-105"
+            onError={handleImageError}
           />
         </div>
 
@@ -165,7 +206,7 @@ function AdCardComponent({
             </div>
           </div>
 
-          {relatedAds && relatedAds.length > 0 && (
+          {cards && cards.length > 0 && (
             <div className="mt-4">
               {!expanded ? (
                 <button
@@ -173,12 +214,12 @@ function AdCardComponent({
                   onClick={() => setExpanded(true)}
                   className="text-sm text-slate-600 hover:text-slate-800 font-medium"
                 >
-                  Show {relatedCount ?? relatedAds.length} similar
+                  Show {cards.length} cards
                 </button>
               ) : (
                 <div>
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-slate-600 font-medium">Similar creatives</span>
+                    <span className="text-sm text-slate-600 font-medium">Cards previews</span>
                     <button
                       type="button"
                       onClick={() => setExpanded(false)}
@@ -188,51 +229,55 @@ function AdCardComponent({
                     </button>
                   </div>
                   <div className="grid grid-cols-4 gap-2">
-                    {relatedAds.slice(0, 8).map((r) => {
-                      const src = r.signed_image_url
-                        ? r.signed_image_url
-                        : r.ad_archive_id
-                        ? getPublicImageUrl(
-                            `${
-                              r.display_format === 'VIDEO'
-                                ? 'test10public_preview'
-                                : 'test9bucket_photo'
-                            }/${r.ad_archive_id}.jpeg`
-                          )
-                        : r.image_url || '/placeholder.svg';
-                      const relSelected = selectedIds ? Boolean(selectedIds[String(r.id)]) : false;
+                    {cards.slice(0, 8).map((c) => {
+                      const src = getPublicImageUrl(`${c.storage_bucket}/${c.storage_path}`);
                       return (
-                        <div key={r.id} className="relative">
-                          <Link href={`/creative/${r.id}`} className="block">
-                            <img
-                              src={src}
-                              alt={r.title || 'related'}
-                              className="w-full h-20 object-cover rounded-md border border-slate-100"
-                            />
-                          </Link>
-                          {selectionMode ? (
-                            <button
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                if (onToggleSelect) onToggleSelect(String(r.id));
-                              }}
-                              title={relSelected ? 'Deselect variation' : 'Select variation'}
-                              className={`absolute right-2 top-2 w-6 h-6 rounded-full flex items-center justify-center transition-colors duration-150 text-xs ${
-                                relSelected
-                                  ? 'bg-blue-600 text-white'
-                                  : 'bg-white border border-slate-200'
-                              }`}
-                            >
-                              {relSelected ? <CheckIcon className="h-3.5 w-3.5" /> : null}
-                            </button>
-                          ) : null}
+                        <div key={c.card_index} className="relative">
+                          <img
+                            src={src}
+                            alt={`card ${c.card_index}`}
+                            className="w-full h-20 object-cover rounded-md border border-slate-100"
+                          />
                         </div>
                       );
                     })}
                   </div>
                 </div>
               )}
+            </div>
+          )}
+          {/* Keep existing related creatives UI if provided */}
+          {relatedAds && relatedAds.length > 0 && (
+            <div className="mt-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm text-slate-600 font-medium">Similar creatives</span>
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {relatedAds.slice(0, 8).map((r) => {
+                  const src = r.signed_image_url
+                    ? r.signed_image_url
+                    : r.ad_archive_id
+                    ? getPublicImageUrl(
+                        `${
+                          r.display_format === 'VIDEO'
+                            ? 'test10public_preview'
+                            : 'test9bucket_photo'
+                        }/ads/${r.ad_archive_id}/${r.ad_archive_id}.jpeg`
+                      )
+                    : r.image_url || '/placeholder.svg';
+                  return (
+                    <div key={r.id} className="relative">
+                      <Link href={`/creative/${r.id}`} className="block">
+                        <img
+                          src={src}
+                          alt={r.title || 'related'}
+                          className="w-full h-20 object-cover rounded-md border border-slate-100"
+                        />
+                      </Link>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
         </div>
