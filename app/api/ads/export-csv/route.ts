@@ -41,7 +41,7 @@ export async function GET(request: NextRequest) {
      * 1. Fetch creatives for this import session (import_job_id)
      */
     const { data: rows, error } = await supabase
-      .from('ads_library')
+      .from('ads')
       .select('*')
       .eq('import_job_id', import_job_id)
       .order('created_at', { ascending: false });
@@ -154,7 +154,7 @@ export async function POST(request: NextRequest) {
     const supabase = createServerSupabaseClient();
 
     const { data: rows, error } = await supabase
-      .from('ads_library')
+      .from('ads')
       .select('*')
       .in('id', ids)
       .order('created_at', { ascending: false });

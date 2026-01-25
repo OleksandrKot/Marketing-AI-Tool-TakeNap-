@@ -5,7 +5,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/core/supabase';
 
-// GET - отримати список креативів
+// GET - get list of creatives
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     const supabase = createServerSupabaseClient();
 
     let query = supabase
-      .from('ads_library')
+      .from('ads')
       .select('*')
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
@@ -47,13 +47,13 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - створити новий креатив
+// POST - create new creative
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const supabase = createServerSupabaseClient();
 
-    const { data, error } = await supabase.from('ads_library').insert([body]).select().single();
+    const { data, error } = await supabase.from('ads').insert([body]).select().single();
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

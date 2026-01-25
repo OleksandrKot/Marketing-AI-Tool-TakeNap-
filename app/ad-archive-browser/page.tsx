@@ -55,7 +55,7 @@ export default async function Page({ searchParams }: { searchParams?: SearchPara
 
   try {
     let query = supabase
-      .from('ads_library')
+      .from('ads')
       .select(selectCols, { count: 'exact' })
       .order('created_at', { ascending: false })
       .order('id', { ascending: false });

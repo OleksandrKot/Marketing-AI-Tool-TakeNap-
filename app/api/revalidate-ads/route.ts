@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // Ревалідуємо головну сторінку, щоб вона завантажила нові дані з Supabase
+    // Revalidate home page to load new data from Supabase
     revalidatePath('/');
 
     return NextResponse.json({ revalidated: true, now: Date.now() });

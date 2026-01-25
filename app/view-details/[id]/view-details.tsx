@@ -156,7 +156,9 @@ const CreativeInfoCard = memo(function CreativeInfoCard({
             <h3 className="text-sm font-medium text-slate-500 mb-2">Created Date</h3>
             <div className="flex items-center">
               <Calendar className="h-4 w-4 mr-2 text-slate-400" />
-              <p className="text-slate-900 font-medium">{formatDate(ad.created_at)}</p>
+              <p className="text-slate-900 font-medium">
+                {ad.created_at ? formatDate(ad.created_at) : 'N/A'}
+              </p>
             </div>
           </div>
 
@@ -408,13 +410,17 @@ const ViewDetailsInner = ({ ad }: ViewDetailsProps) => {
 
   // Derived values memoized so they don't get recomputed on every render.
   const isVideo = useMemo(() => ad.display_format === 'VIDEO', [ad.display_format]);
-  const creativeId = useMemo(() => ad.ad_archive_id || ad.id.toString(), [ad.ad_archive_id, ad.id]);
+  const creativeId = useMemo(
+    () => ad.ad_archive_id || (ad.id != null ? ad.id.toString() : 'unknown'),
+    [ad.ad_archive_id, ad.id]
+  );
   const isLiked = useMemo(
     () => isFavorite(creativeId) || isLikedLocal,
     [isFavorite, creativeId, isLikedLocal]
   );
 
   const activeDays = useMemo(() => {
+    if (!ad.created_at) return 0;
     const createdDate = new Date(ad.created_at);
     const today = new Date();
     return Math.floor((today.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24));
@@ -444,8 +450,11 @@ const ViewDetailsInner = ({ ad }: ViewDetailsProps) => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            bucket: 'test8public',
-            path: `${ad.ad_archive_id}.mp4`,
+            bucket: 'creatives',
+            path:
+              ad.video_storage_path ||
+              ad.storage_path ||
+              `business-unknown/${ad.ad_archive_id}.mp4`,
             expires: 60,
           }),
         });
@@ -474,8 +483,8 @@ const ViewDetailsInner = ({ ad }: ViewDetailsProps) => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            bucket: 'test9bucket_photo',
-            path: `${ad.ad_archive_id}.jpeg`,
+            bucket: 'creatives',
+            path: ad.storage_path || `business-unknown/${ad.ad_archive_id}.jpeg`,
             expires: 60,
           }),
         });
@@ -709,8 +718,8 @@ const ViewDetailsInner = ({ ad }: ViewDetailsProps) => {
                       {ad.ad_archive_id ? (
                         <div className="absolute inset-0 w-full h-full">
                           <StorageImage
-                            bucket="test9bucket_photo"
-                            path={`${ad.ad_archive_id}.jpeg`}
+                            bucket="creatives"
+                            path={ad.storage_path || `business-unknown/${ad.ad_archive_id}.jpeg`}
                             alt={ad.title || 'preview'}
                             fill={true}
                             className="w-full h-full object-cover"

@@ -12,7 +12,7 @@ function getErrorMessage(e: unknown): string {
   }
 }
 
-// API для парсингу Meta Ad Library посилань
+// API for parsing Meta Ad Library links
 export async function POST(request: NextRequest) {
   try {
     const {
@@ -27,18 +27,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid Meta Ad Library link' }, { status: 400 });
     }
 
-    // 🎯 Перевіряємо чи є такий тип креативу
+    // 🎯 Check if such creative type exists
     if (!['all', 'video', 'image'].includes(creativeType)) {
       return NextResponse.json({ error: 'Invalid creative type' }, { status: 400 });
     }
 
-    // 🔍 Визначаємо продукт по URL (необов'язково)
+    // 🔍 Determine product by URL (optional)
     const { productKey, productName, pageId } = detectProductFromUrl(metaLink);
 
-    // 🎯 Обираємо webhook: перевага загальному (щоб не залежати від page_id)
+    // 🎯 Choose webhook: prefer general (to not depend on page_id)
     const envDefault = process.env.MAKE_WEBHOOK_ALL;
     const productWebhook = productKey ? getWebhookUrl(productKey, creativeType) : null;
-    // Якщо немає env — підстрахуємось існуючим Replika webhook'ом
+    // If no env - fallback to existing Replika webhook
     const replikaFallbackMap: Record<string, string | undefined> = {
       all: (await import('@/lib/api/product-webhooks')).PRODUCT_WEBHOOKS.replika?.webhooks.all,
       video: (await import('@/lib/api/product-webhooks')).PRODUCT_WEBHOOKS.replika?.webhooks.video,
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
       productKey: productKey,
       creativeType: creativeType,
       status: 'processing',
-      webhookUrl: webhookUrl, // Для дебагу (можна прибрати в продакшені)
+      webhookUrl: webhookUrl, // For debug (can be removed in production)
     });
   } catch (error: unknown) {
     console.error('Error:', error);

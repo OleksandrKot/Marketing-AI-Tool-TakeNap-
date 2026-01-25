@@ -3,10 +3,10 @@ import { type NextRequest, NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/core/supabase';
 
-// Webhook для Make.com
+// Webhook for Make.com
 export async function POST(request: NextRequest) {
   try {
-    // Перевірка API ключа (додайте в .env)
+    // Verify API key (add to .env)
     const apiKey = request.headers.get('x-api-key');
     if (apiKey !== process.env.MAKE_API_KEY) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -20,7 +20,7 @@ export async function POST(request: NextRequest) {
     switch (action) {
       case 'create_ad':
         const { data: newAd, error: createError } = await supabase
-          .from('ads_library')
+          .from('ads')
           .insert([data])
           .select()
           .single();
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
       case 'update_ad':
         const { id, ...updateData } = data;
         const { data: updatedAd, error: updateError } = await supabase
-          .from('ads_library')
+          .from('ads')
           .update(updateData)
           .eq('id', id)
           .select()
@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
 
       case 'get_ads':
         const { data: ads, error: getError } = await supabase
-          .from('ads_library')
+          .from('ads')
           .select('*')
           .order('created_at', { ascending: false })
           .limit(data.limit || 100);

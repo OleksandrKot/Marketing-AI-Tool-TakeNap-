@@ -25,6 +25,15 @@ type RequestLog = {
   meta?: Record<string, unknown>;
 };
 
+type UploadResponse = {
+  success?: boolean;
+  error?: string;
+  message?: string;
+  stderr?: string;
+  jobId?: string;
+  [key: string]: unknown;
+};
+
 type Props = {
   productFilter: string;
   onProductFilterChange: (value: string) => void;
@@ -53,11 +62,45 @@ type Props = {
   importTotalCreatives?: number | null;
   requestLogs?: RequestLog[];
   clearRequestLogs?: () => void;
+  businesses?: { id: string; name: string; slug: string }[];
+  selectedBusiness?: string;
 };
 
 const PERSISTENCE_KEY = 'ad_archive_show_logs';
 const JOB_ID_KEY = 'ad_archive_import_job_id';
 const UPLOAD_PROGRESS_KEY = 'ad_archive_import_progress';
+
+function uploadWithProgress(
+  url: string,
+  formData: FormData,
+  onProgress: (pct: number) => void
+): Promise<UploadResponse> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', url, true);
+
+    xhr.upload.onprogress = (e) => {
+      if (!e.lengthComputable) return;
+      const pct = Math.round((e.loaded / e.total) * 100);
+      onProgress(pct);
+    };
+
+    xhr.onload = () => {
+      let json: UploadResponse | null = null;
+      try {
+        json = JSON.parse(xhr.responseText || '{}');
+      } catch {
+        // ignore
+      }
+      if (xhr.status >= 200 && xhr.status < 300) return resolve(json ?? {});
+      const msg = json?.error || json?.message || json?.stderr || `Upload failed (${xhr.status})`;
+      return reject(new Error(msg));
+    };
+
+    xhr.onerror = () => reject(new Error('Network error during upload'));
+    xhr.send(formData);
+  });
+}
 
 export function SearchControls({
   productFilter,
@@ -87,13 +130,18 @@ export function SearchControls({
   setAutoClearProcessing = () => {},
   requestLogs = [],
   clearRequestLogs = () => {},
+  businesses = [],
+  selectedBusiness,
 }: Props) {
+  const router = useRouter();
   const [showLogs, setShowLogs] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadPct, setUploadPct] = useState<number>(0);
+
   const [uploadProgress, setUploadProgress] = useState<{
-    phase: 'counting' | 'processing' | 'done';
+    phase: 'uploading' | 'counting' | 'processing' | 'done';
     processed: number;
     total: number;
     toProcess: number;
@@ -102,12 +150,17 @@ export function SearchControls({
     failed: number;
     countDuration?: number;
     processDuration?: number;
+    speedAdsPerSec?: number;
+    etaSec?: number | null;
   } | null>(null);
+
   const [currentJobId, setCurrentJobId] = useState<string | null>(null);
   const [lastUpdateAt, setLastUpdateAt] = useState<number | null>(null);
   const uploadInputRef = useRef<HTMLInputElement | null>(null);
-  const router = useRouter();
   const { requireLoginAndRun, showLogin, closeLogin, showSignInTip } = useSignInGate();
+
+  const refreshedOnceRef = useRef(false);
+  const processingStartedAtRef = useRef<number | null>(null);
 
   useEffect(() => {
     try {
@@ -145,6 +198,7 @@ export function SearchControls({
     } catch (error) {
       console.debug('Unable to restore import state', error);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Persist logs preference
@@ -176,12 +230,9 @@ export function SearchControls({
       : 'Search Static Only';
 
   const handleSearch = () => {
-    // If productFilter looks like a funnel (contains a slash or a host-like token),
-    // open the Advanced Filter page with funnels prefilled so users can inspect results.
     try {
       const val = (productFilter || '').trim();
       if (val && !val.includes('facebook.com/ads/library')) {
-        // Heuristic: treat comma-separated values or any value containing '/' or a dot as funnel
         const parts = val
           .split(',')
           .map((s) => s.trim())
@@ -193,15 +244,14 @@ export function SearchControls({
           return;
         }
       }
-    } catch (e) {
-      /* ignore and fallback to normal search */
+    } catch {
+      /* ignore */
     }
 
     requireLoginAndRun(onSearch);
   };
 
   const resumeImportPolling = (jobId: string) => {
-    // Poll for status every 2 seconds
     const pollInterval = setInterval(async () => {
       try {
         const debugParam = showLogs ? '&debug=1' : '';
@@ -211,7 +261,6 @@ export function SearchControls({
 
         if (!response.ok) {
           if (response.status === 404) {
-            // Job completed or no longer tracked: clear UI state
             clearInterval(pollInterval);
             setUploading(false);
             setCurrentJobId(null);
@@ -223,28 +272,24 @@ export function SearchControls({
             } catch {
               /* noop */
             }
-          }
-          if (response.status !== 404) {
+            // refresh results once
+            if (!refreshedOnceRef.current) {
+              refreshedOnceRef.current = true;
+              router.refresh();
+            }
+          } else {
             setUploadError(`Failed to poll status (${response.status} ${response.statusText})`);
           }
           return;
         }
 
         const payload = await response.json();
+
         if (typeof payload?.lastUpdateAt === 'number') {
           setLastUpdateAt(payload.lastUpdateAt);
         }
-        if (payload?.running) {
-          console.info('[import] polling ok', {
-            jobId,
-            lastUpdateAt: payload.lastUpdateAt,
-            stopRequested: !!payload.stopRequested,
-          });
-        }
-        if (payload?.stopRequested) {
-          console.warn('[import] stop requested by user');
-        }
-        // Stream debug tails when present
+
+        // Debug tails
         if (Array.isArray(payload?.logTail) && payload.logTail.length) {
           for (const line of payload.logTail) console.debug('[import-debug]', line);
         }
@@ -255,7 +300,7 @@ export function SearchControls({
           for (const line of payload.stderrTail) console.error('[import-stderr]', line);
         }
 
-        // If worker is dead and status is finalized, stop polling
+        // Final status
         if (
           payload?.status === 'stopped' ||
           payload?.status === 'failed' ||
@@ -298,20 +343,33 @@ export function SearchControls({
             /* noop */
           }
           clearInterval(pollInterval);
+
+          // refresh results once
+          if (!refreshedOnceRef.current) {
+            refreshedOnceRef.current = true;
+            router.refresh();
+          }
           return;
         }
 
-        // Update count progress if available
+        // Count progress
         if (payload?.lastCountProgress) {
           const { checked, total, will_process } = payload.lastCountProgress;
-          console.info('[import] count_progress', payload.lastCountProgress);
           setUploadMessage(
             `Counting: checked ${checked}/${total} ads, will process ${will_process}`
           );
           setUploadProgress((prev) => {
-            if (!prev) return prev;
+            const base = prev ?? {
+              phase: 'counting' as const,
+              processed: 0,
+              total: 0,
+              toProcess: 0,
+              ok: 0,
+              skipped: 0,
+              failed: 0,
+            };
             const updated = {
-              ...prev,
+              ...base,
               phase: 'counting' as const,
               processed: checked,
               total,
@@ -326,17 +384,26 @@ export function SearchControls({
           });
         }
 
-        // Update count complete if available
+        // Count complete => processing phase starts
         if (payload?.countEvent) {
           const { total, to_process, duration_ms } = payload.countEvent;
-          console.info('[import] count', payload.countEvent);
           setUploadMessage(
             `Count complete: ${to_process} ads to process (${total - to_process} already in DB)`
           );
+          if (!processingStartedAtRef.current) processingStartedAtRef.current = Date.now();
+
           setUploadProgress((prev) => {
-            if (!prev) return prev;
+            const base = prev ?? {
+              phase: 'processing' as const,
+              processed: 0,
+              total: 0,
+              toProcess: 0,
+              ok: 0,
+              skipped: 0,
+              failed: 0,
+            };
             const updated = {
-              ...prev,
+              ...base,
               phase: 'processing' as const,
               total,
               toProcess: to_process,
@@ -351,24 +418,38 @@ export function SearchControls({
           });
         }
 
-        // Update progress if available
+        // Processing progress
         if (payload?.lastProgress) {
           const { ok, skipped, failed, processed, total } = payload.lastProgress;
-          if (payload?.lastProgress?.event === 'heartbeat') {
-            console.debug('[import] heartbeat', payload.lastProgress);
-          } else {
-            console.info('[import] progress', payload.lastProgress);
-          }
-          setUploadMessage(`Processing: ${processed}/${total} ads (✓${ok} ⊘${skipped} ✗${failed})`);
+
+          const startedAt = processingStartedAtRef.current;
+          const elapsedSec = startedAt ? (Date.now() - startedAt) / 1000 : 0;
+          const speedAdsPerSec = elapsedSec > 0 ? processed / elapsedSec : undefined;
+
           setUploadProgress((prev) => {
-            if (!prev) return prev;
+            const base = prev ?? {
+              phase: 'processing' as const,
+              processed: 0,
+              total,
+              toProcess: total,
+              ok: 0,
+              skipped: 0,
+              failed: 0,
+            };
+            const toProcess = base.toProcess || total;
+            const remaining = Math.max(0, toProcess - processed);
+            const etaSec = speedAdsPerSec && speedAdsPerSec > 0 ? remaining / speedAdsPerSec : null;
+
             const updated = {
-              ...prev,
+              ...base,
               phase: 'processing' as const,
               processed,
+              total,
               ok,
               skipped,
               failed,
+              speedAdsPerSec,
+              etaSec,
             };
             try {
               localStorage.setItem(UPLOAD_PROGRESS_KEY, JSON.stringify(updated));
@@ -377,12 +458,13 @@ export function SearchControls({
             }
             return updated;
           });
+
+          setUploadMessage(`Processing: ${processed}/${total} ads (✓${ok} ⊘${skipped} ✗${failed})`);
         }
 
-        // Check if done
+        // Done event (legacy)
         if (payload?.doneEvent) {
           const { status, ok, skipped, failed, processed, total, duration_ms } = payload.doneEvent;
-          console.info('[import] done', payload.doneEvent);
           const countDur = payload?.countEvent?.duration_ms || 0;
           setUploadProgress({
             phase: 'done',
@@ -401,7 +483,6 @@ export function SearchControls({
           setUploading(false);
           setCurrentJobId(null);
 
-          // Clean up storage
           try {
             localStorage.removeItem(JOB_ID_KEY);
             localStorage.removeItem(UPLOAD_PROGRESS_KEY);
@@ -410,6 +491,11 @@ export function SearchControls({
           }
 
           clearInterval(pollInterval);
+
+          if (!refreshedOnceRef.current) {
+            refreshedOnceRef.current = true;
+            router.refresh();
+          }
         }
       } catch (error) {
         console.debug('Error polling status:', error);
@@ -419,38 +505,42 @@ export function SearchControls({
 
   const handleImportJson = async (file: File) => {
     setUploadError(null);
-    setUploadMessage(`Uploading ${file.name}...`);
-    setUploadProgress(null);
+    setUploadPct(0);
+    setUploadProgress({
+      phase: 'uploading',
+      processed: 0,
+      total: 0,
+      toProcess: 0,
+      ok: 0,
+      skipped: 0,
+      failed: 0,
+    });
+    setUploadMessage(`Uploading ${file.name}... 0%`);
     setUploading(true);
+    refreshedOnceRef.current = false;
+    processingStartedAtRef.current = null;
+
     try {
       const formData = new FormData();
       formData.append('file', file);
-      if (showLogs) {
-        formData.append('debug', '1');
-      }
+      if (showLogs) formData.append('debug', '1');
 
-      const response = await fetch('/api/import-ads-json', {
-        method: 'POST',
-        body: formData,
+      const payload = await uploadWithProgress('/api/import-ads-json', formData, (pct) => {
+        setUploadPct(pct);
+        setUploadMessage(`Uploading ${file.name}... ${pct}%`);
       });
 
-      const payload = await response.json();
-
-      // Check for error first
-      if (!response.ok || payload?.success === false) {
+      if (payload?.success === false) {
         const err =
           payload?.error || payload?.message || payload?.stderr || 'Failed to start import';
-        const details = [payload?.stderr, payload?.stdout].filter(Boolean).join('\n');
-        setUploading(false);
-        throw new Error(details ? `${err}\n${details}` : err);
+        throw new Error(err);
       }
 
-      // Store job ID and progress for restore on page refresh
+      // Initialize progress display for counting
       if (payload?.jobId) {
         setCurrentJobId(payload.jobId);
         try {
           localStorage.setItem(JOB_ID_KEY, payload.jobId);
-          // Initialize progress display
           const initialProgress = {
             phase: 'counting' as const,
             processed: 0,
@@ -466,14 +556,14 @@ export function SearchControls({
           console.debug('Unable to save job ID', e);
         }
 
-        // Start polling immediately
         setUploadMessage(`Import started (job: ${payload.jobId.slice(0, 8)}...) - counting ads...`);
-        console.log('[SearchControls] Starting polling for import job:', payload.jobId);
         resumeImportPolling(payload.jobId);
+        return;
       }
 
-      // Note: Legacy code below handles synchronous responses, but with polling above
-      // these cases won't happen with async imports. Keep for backward compatibility.
+      // Fallback: if backend returns synchronous status (rare)
+      setUploadMessage('Import started, but no jobId returned.');
+      setUploading(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       setUploadError(message);
@@ -484,7 +574,6 @@ export function SearchControls({
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) handleImportJson(file);
-    // allow re-upload of the same file
     event.target.value = '';
   };
 
@@ -498,19 +587,57 @@ export function SearchControls({
       const formData = new FormData();
       formData.append('action', 'stop');
       formData.append('jobId', currentJobId);
-      await fetch('/api/import-ads-json', {
-        method: 'POST',
-        body: formData,
-      });
+      await fetch('/api/import-ads-json', { method: 'POST', body: formData });
       setUploadMessage('Stop signal sent — processing remaining ads...');
-    } catch (e) {
+    } catch {
       setUploadError('Failed to send stop signal');
     }
   };
 
+  const renderLastUpdate = () =>
+    lastUpdateAt ? (
+      <div className="text-xs text-slate-500 mt-1">
+        Last update: {Math.max(0, Math.round((Date.now() - lastUpdateAt) / 1000))}s ago
+      </div>
+    ) : null;
+
   return (
     <>
       {productFilter && <div className="mb-4" aria-hidden />}
+
+      {/* Business Selector */}
+      {businesses && businesses.length > 0 && (
+        <div className="mb-6">
+          <label
+            htmlFor="business-selector"
+            className="block text-sm font-medium text-slate-700 mb-2"
+          >
+            Filter by Business
+          </label>
+          <select
+            id="business-selector"
+            value={selectedBusiness || ''}
+            onChange={(e) => {
+              const value = e.target.value;
+              const params = new URLSearchParams(window.location.search);
+              if (value) {
+                params.set('business', value);
+              } else {
+                params.delete('business');
+              }
+              router.push(`/?${params.toString()}`);
+            }}
+            className="w-full px-4 py-2 border border-slate-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="">All Businesses</option>
+            {businesses.map((business) => (
+              <option key={business.id} value={business.id}>
+                {business.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
         <StatsBar
@@ -550,9 +677,7 @@ export function SearchControls({
         autoClearProcessing={typeof autoClearProcessing === 'boolean' ? autoClearProcessing : true}
         setAutoClearProcessing={(v: boolean) => {
           try {
-            if (typeof v === 'boolean') {
-              setAutoClearProcessing?.(v);
-            }
+            if (typeof v === 'boolean') setAutoClearProcessing?.(v);
           } catch (e) {
             console.debug('setAutoClearProcessing error', e);
           }
@@ -566,6 +691,7 @@ export function SearchControls({
           <input
             ref={uploadInputRef}
             type="file"
+            multiple={true}
             accept="application/json"
             className="hidden"
             onChange={handleFileChange}
@@ -580,6 +706,17 @@ export function SearchControls({
           >
             {uploading ? '⏳ Importing ads…' : '📤 Upload JSON to import'}
           </button>
+
+          {currentJobId && (
+            <button
+              type="button"
+              onClick={handleStopImport}
+              className="w-full px-4 py-2 rounded-md border border-red-300 bg-red-50 text-red-700 shadow-sm hover:bg-red-100 text-sm"
+              title="Stop the import process gracefully"
+            >
+              ⛔ Stop import
+            </button>
+          )}
 
           {!uploading && !uploadProgress && (
             <div className="text-xs text-slate-500 bg-blue-50 border border-blue-200 rounded p-2">
@@ -597,19 +734,24 @@ export function SearchControls({
             </div>
           )}
 
-          {currentJobId && (
-            <button
-              type="button"
-              onClick={handleStopImport}
-              className="w-full px-4 py-2 rounded-md border border-red-300 bg-red-50 text-red-700 shadow-sm hover:bg-red-100 text-sm"
-              title="Stop the import process gracefully"
-            >
-              ⛔ Stop import
-            </button>
-          )}
-
           {uploadProgress && (
             <div className="text-sm bg-slate-100 p-3 rounded-md space-y-2 border border-slate-300">
+              {uploadProgress.phase === 'uploading' && (
+                <>
+                  <div className="font-medium text-blue-700 flex items-center gap-2">
+                    <span className="animate-spin">⏳</span>
+                    Uploading JSON
+                  </div>
+                  <div className="text-xs text-slate-600">{uploadPct}%</div>
+                  <div className="w-full bg-slate-300 rounded h-2 mt-2">
+                    <div
+                      className="bg-blue-500 h-2 rounded transition-all"
+                      style={{ width: `${Math.max(0, Math.min(100, uploadPct))}%` }}
+                    />
+                  </div>
+                </>
+              )}
+
               {uploadProgress.phase === 'counting' && (
                 <>
                   <div className="font-medium text-blue-700 flex items-center gap-2">
@@ -634,18 +776,15 @@ export function SearchControls({
                     <div
                       className="bg-blue-500 h-2 rounded transition-all"
                       style={{
-                        width: `${Math.round(
-                          (uploadProgress.processed / uploadProgress.total) * 100
-                        )}%`,
+                        width: uploadProgress.total
+                          ? `${Math.round(
+                              (uploadProgress.processed / uploadProgress.total) * 100
+                            )}%`
+                          : '0%',
                       }}
                     />
                   </div>
-                  {lastUpdateAt && (
-                    <div className="text-xs text-slate-500 mt-1">
-                      Last update: {Math.max(0, Math.round((Date.now() - lastUpdateAt) / 1000))}s
-                      ago
-                    </div>
-                  )}
+                  {renderLastUpdate()}
                 </>
               )}
 
@@ -667,6 +806,17 @@ export function SearchControls({
                       ✗ Failed: {uploadProgress.failed}
                     </div>
                   </div>
+
+                  {typeof uploadProgress.speedAdsPerSec === 'number' &&
+                    uploadProgress.speedAdsPerSec > 0 && (
+                      <div className="text-xs text-slate-500">
+                        ⚡ {uploadProgress.speedAdsPerSec.toFixed(1)} ads/sec
+                        {typeof uploadProgress.etaSec === 'number'
+                          ? ` · ETA ~${Math.round(uploadProgress.etaSec)}s`
+                          : ''}
+                      </div>
+                    )}
+
                   {uploadProgress.toProcess > 0 && (
                     <>
                       <div className="w-full bg-slate-300 rounded h-2 mt-2">
@@ -674,26 +824,25 @@ export function SearchControls({
                           className="bg-green-500 h-2 rounded transition-all"
                           style={{
                             width: `${Math.round(
-                              (uploadProgress.processed / uploadProgress.toProcess) * 100
+                              (uploadProgress.processed / Math.max(1, uploadProgress.toProcess)) *
+                                100
                             )}%`,
                           }}
                         />
                       </div>
                       <div className="text-xs text-slate-500 text-center">
-                        {Math.round((uploadProgress.processed / uploadProgress.toProcess) * 100)}%
-                        complete
+                        {Math.round(
+                          (uploadProgress.processed / Math.max(1, uploadProgress.toProcess)) * 100
+                        )}
+                        % complete
                       </div>
                     </>
                   )}
+
                   <div className="text-xs text-slate-500 bg-white rounded p-2 mt-2">
                     💡 Check browser console (F12) for detailed logs
                   </div>
-                  {lastUpdateAt && (
-                    <div className="text-xs text-slate-500 mt-1">
-                      Last update: {Math.max(0, Math.round((Date.now() - lastUpdateAt) / 1000))}s
-                      ago
-                    </div>
-                  )}
+                  {renderLastUpdate()}
                 </>
               )}
 
@@ -722,9 +871,13 @@ export function SearchControls({
                       ⏱ Process phase: {Math.round(uploadProgress.processDuration / 1000)}s
                     </div>
                   )}
-                  <div className="text-xs text-blue-600 bg-blue-50 rounded p-2 mt-2">
-                    🔄 Refresh page to see new ads
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => router.refresh()}
+                    className="w-full mt-2 px-4 py-2 rounded-md border border-blue-300 bg-blue-50 text-blue-700 shadow-sm hover:bg-blue-100 text-sm"
+                  >
+                    🔄 Refresh results
+                  </button>
                 </>
               )}
             </div>
@@ -737,6 +890,7 @@ export function SearchControls({
             </div>
           )}
         </div>
+
         <div className="md:col-span-2 flex justify-start w-full">
           <FilterBar
             onFilterChange={handleFilterChange}

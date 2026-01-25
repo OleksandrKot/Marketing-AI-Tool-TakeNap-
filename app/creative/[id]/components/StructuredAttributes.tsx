@@ -58,77 +58,57 @@ function normalizeKey(input: string | undefined | null): string {
     .replace(/[^a-zA-Z0-9\u0400-\u04FF]+/g, '');
 }
 
-// Strict mapping for known prompt-related fields.
+// Strict mapping for known prompt-related fields from creative_concepts
 const PROMPT_FIELDS: { jsonKey: string; label: string; outKey: string }[] = [
-  // Core prompt fields (visual prompt)
-  { jsonKey: 'subject', label: 'Subject', outKey: 'subject' },
-  { jsonKey: 'text_on_image', label: 'Text on Image', outKey: 'text_on_image' },
-  { jsonKey: 'textOnImage', label: 'Text on Image', outKey: 'text_on_image' },
-
-  // Character (UA → unified EN-ish keys)
-  { jsonKey: 'Character Gender', label: 'Character Gender', outKey: 'characterGender' },
-  {
-    jsonKey: 'Character Type',
-    label: 'Character Type (realistic or fictional)',
-    outKey: 'characterType',
-  },
-  { jsonKey: 'Body Type', label: 'Body Type', outKey: 'bodyType' },
-  { jsonKey: 'Type', label: 'Type', outKey: 'type' },
-  { jsonKey: 'Appearance Details', label: 'Appearance Details', outKey: 'appearanceDetails' },
-  { jsonKey: 'Clothing', label: 'Clothing', outKey: 'clothing' },
-  { jsonKey: 'Hair Color', label: 'Hair Color', outKey: 'hairColor' },
-  { jsonKey: 'Pose', label: 'Pose', outKey: 'pose' },
-  {
-    jsonKey: 'Character Position in Frame',
-    label: 'Character Position in Frame',
-    outKey: 'characterPositionInFrame',
-  },
-
-  // Background / palette (UA → unified EN-ish keys)
-  {
-    jsonKey: 'Visual Color Palette',
-    label: 'Visual Color Palette',
-    outKey: 'visualColorPalette',
-  },
-  { jsonKey: 'Location', label: 'Location', outKey: 'location' },
-  { jsonKey: 'Background Elements', label: 'Background Elements', outKey: 'backgroundElements' },
-  {
-    jsonKey: 'Background Element Details',
-    label: 'Background Element Details',
-    outKey: 'backgroundElementDetails',
-  },
+  { jsonKey: 'Hook', label: 'Hook', outKey: 'Hook' },
+  { jsonKey: 'Topic', label: 'Topic', outKey: 'Topic' },
+  { jsonKey: 'Concept', label: 'Concept', outKey: 'Concept' },
+  { jsonKey: 'Realisation', label: 'Realisation', outKey: 'Realisation' },
+  { jsonKey: 'Character', label: 'Character', outKey: 'Character' },
+  { jsonKey: 'Persona', label: 'Persona', outKey: 'Persona' },
+  { jsonKey: 'Primary_Subject', label: 'Primary Subject', outKey: 'Primary_Subject' },
+  { jsonKey: 'Text', label: 'Text', outKey: 'Text' },
+  { jsonKey: 'Mood', label: 'Mood', outKey: 'Mood' },
+  { jsonKey: 'Style', label: 'Style', outKey: 'Style' },
+  { jsonKey: 'Visual_Focus', label: 'Visual Focus', outKey: 'Visual_Focus' },
+  { jsonKey: 'Color_Palette', label: 'Color Palette', outKey: 'Color_Palette' },
+  { jsonKey: 'Lighting', label: 'Lighting', outKey: 'Lighting' },
+  { jsonKey: 'Camera_Style', label: 'Camera Style', outKey: 'Camera_Style' },
+  { jsonKey: 'Composition', label: 'Composition', outKey: 'Composition' },
+  { jsonKey: 'Environment', label: 'Environment', outKey: 'Environment' },
+  { jsonKey: 'Secondary_Elements', label: 'Secondary Elements', outKey: 'Secondary_Elements' },
+  { jsonKey: 'Background_Elements', label: 'Background Elements', outKey: 'Background_Elements' },
+  { jsonKey: 'Symbolism', label: 'Symbolism', outKey: 'Symbolism' },
+  { jsonKey: 'Call_To_Action', label: 'Call To Action', outKey: 'Call_To_Action' },
 ];
 
 // Fallback section titles used when JSON / strict fields are not available
-const INITIAL_KEYS = [
-  'Topic',
-  'Character',
-  'Tone',
-  'Scenario',
-  'Hooks',
-  'Camera Angles',
-  'Color Palette',
-  'Emotional State',
-];
+// Aligned with creative_concepts structure
+const INITIAL_KEYS = ['Hook', 'Topic', 'Concept', 'Character', 'Mood', 'Style', 'Environment'];
 
 // Default blocks that must exist in the main list (UI + final prompt)
+// Aligned with creative_concepts from raw_json
 const DEFAULT_FIELDS: { label: string; value: string }[] = [
-  { label: 'Character Gender', value: 'female/male' },
-  { label: 'Character', value: 'realistic / fictional' },
-  { label: 'Body Type', value: '' },
-  { label: 'Type', value: '' },
-  { label: 'Appearance Details', value: '' },
-  { label: 'Clothing', value: '' },
-  { label: 'Hair Color', value: '' },
-  { label: 'Pose', value: '' },
-  { label: 'Character Position in Frame', value: '' },
-  { label: 'Emotions', value: 'Positive emotions such as warmth, happiness, comfort' },
-  { label: 'Visual Color Palette', value: '' },
-  { label: 'Location', value: '' },
-  { label: 'Background Elements', value: '' },
-  { label: 'Background Element Details', value: '' },
-  { label: 'Scene', value: 'Warm indoor environment with soft ambient lighting' },
-  { label: 'Style', value: 'Clean, modern, warm and inviting color palette' },
+  { label: 'Hook', value: '' },
+  { label: 'Topic', value: '' },
+  { label: 'Concept', value: '' },
+  { label: 'Realisation', value: '' },
+  { label: 'Character', value: '' },
+  { label: 'Persona', value: '' },
+  { label: 'Primary_Subject', value: '' },
+  { label: 'Text', value: '' },
+  { label: 'Mood', value: '' },
+  { label: 'Style', value: '' },
+  { label: 'Visual_Focus', value: '' },
+  { label: 'Color_Palette', value: '' },
+  { label: 'Lighting', value: '' },
+  { label: 'Camera_Style', value: '' },
+  { label: 'Composition', value: '' },
+  { label: 'Environment', value: '' },
+  { label: 'Secondary_Elements', value: '' },
+  { label: 'Background_Elements', value: '' },
+  { label: 'Symbolism', value: '' },
+  { label: 'Call_To_Action', value: '' },
 ];
 
 // Default props for Available Properties (derived from DEFAULT_FIELDS → no duplication)
@@ -155,12 +135,26 @@ const SHORT_LABELS: Record<string, string> = {
   'Meta Ad Url': 'Meta URL',
   'Image Url': 'Image',
   'Image Description': 'Image Desc',
+  // creative_concepts fields
+  Hook: 'Hook',
+  Topic: 'Topic',
   Concept: 'Concept',
   Realisation: 'Realisation',
-  Topic: 'Topic',
-  Hook: 'Hook',
   Character: 'Character',
-  'New Scenario': 'New Scenario',
+  Persona: 'Persona',
+  Primary_Subject: 'Primary Subject',
+  Mood: 'Mood',
+  Style: 'Style',
+  Visual_Focus: 'Visual Focus',
+  Color_Palette: 'Color Palette',
+  Lighting: 'Lighting',
+  Camera_Style: 'Camera Style',
+  Composition: 'Composition',
+  Environment: 'Environment',
+  Secondary_Elements: 'Secondary Elements',
+  Background_Elements: 'Background Elements',
+  Symbolism: 'Symbolism',
+  Call_To_Action: 'Call To Action',
 };
 
 const MAX_PILL_LABEL_LEN = 26;
@@ -228,7 +222,28 @@ const StructuredAttributes = (
     const addPromptField = (cfg: { jsonKey: string; label: string; outKey: string }) => {
       let raw: unknown;
 
-      // If not found, try to read from ad itself
+      // First, try to read from raw_json.creative_concepts
+      if (ad && ad.raw_json) {
+        try {
+          let rawJson: Record<string, unknown> | null = null;
+          if (typeof ad.raw_json === 'string') {
+            rawJson = JSON.parse(ad.raw_json as string);
+          } else if (typeof ad.raw_json === 'object') {
+            rawJson = ad.raw_json as Record<string, unknown>;
+          }
+
+          if (rawJson && rawJson.creative_concepts) {
+            const creativeConcepts = rawJson.creative_concepts as Record<string, unknown>;
+            if (Object.prototype.hasOwnProperty.call(creativeConcepts, cfg.jsonKey)) {
+              raw = creativeConcepts[cfg.jsonKey];
+            }
+          }
+        } catch (e) {
+          console.error('Error parsing raw_json.creative_concepts:', e);
+        }
+      }
+
+      // Fallback: try to read from ad itself
       if (raw === undefined && ad) {
         const rad = ad as Record<string, unknown>;
         if (Object.prototype.hasOwnProperty.call(rad, cfg.outKey)) {
@@ -253,7 +268,7 @@ const StructuredAttributes = (
       });
     };
 
-    // 2) strictly collect AiPrompt fields (UA/EN → canonical labels)
+    // 2) strictly collect fields from creative_concepts
     for (const cfg of PROMPT_FIELDS) {
       addPromptField(cfg);
     }
@@ -327,7 +342,7 @@ const StructuredAttributes = (
       } else {
         // Ephemeral modal mode: start with a minimal set of fields for quick editing
         const base = mapFromSections();
-        const wanted = ['Subject', 'Character Gender', 'Character', 'Appearance Details'];
+        const wanted = ['Hook', 'Topic', 'Concept', 'Character', 'Mood', 'Style'];
         const result: Block[] = [];
         for (const label of wanted) {
           const found = base.find((b) => normalizeKey(b.label) === normalizeKey(label));
@@ -375,13 +390,86 @@ const StructuredAttributes = (
       'scene',
       'emotions',
       'style',
+      'embedding',
+      'vec',
+      'business',
+      'date',
+      'created',
+      'updated',
     ];
     const isExcluded = (key: string) => {
       const low = key.toLowerCase();
+      // Special case: never exclude raw_json
+      if (low === 'raw_json') return false;
       return excludePatterns.some((p) => low.includes(p));
     };
 
+    console.log('[StructuredAttributes] ad object:', ad);
+    console.log('[StructuredAttributes] ad.raw_json:', ad?.raw_json);
+
     if (ad) {
+      // First: extract creative_concepts from raw_json and add them to available properties
+      if (ad.raw_json) {
+        try {
+          let rawJson: Record<string, unknown> | null = null;
+          if (typeof ad.raw_json === 'string') {
+            rawJson = JSON.parse(ad.raw_json as string);
+          } else if (typeof ad.raw_json === 'object' && ad.raw_json !== null) {
+            rawJson = ad.raw_json as Record<string, unknown>;
+          }
+
+          console.log('[StructuredAttributes] Parsed rawJson:', rawJson);
+
+          if (rawJson && rawJson.creative_concepts) {
+            const creativeConcepts = rawJson.creative_concepts as Record<string, string>;
+            console.log(
+              '[StructuredAttributes] Found creative_concepts:',
+              Object.keys(creativeConcepts)
+            );
+
+            // Add each creative_concepts field to available properties
+            for (const [key, value] of Object.entries(creativeConcepts)) {
+              if (value && String(value).trim()) {
+                const normalizedKey = normalizeKey(key);
+                if (!seen.has(normalizedKey)) {
+                  // Find matching label from PROMPT_FIELDS
+                  const promptField = PROMPT_FIELDS.find((f) => f.jsonKey === key);
+                  const label = promptField ? promptField.label : key.replace(/_/g, ' ');
+
+                  result.push({
+                    key: normalizedKey,
+                    label: label,
+                    value: String(value).trim(),
+                  });
+                  seen.add(normalizedKey);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.error('[StructuredAttributes] Error parsing raw_json:', e);
+        }
+      }
+
+      // Special case: add raw_json itself if exists
+      if (ad.raw_json !== undefined && ad.raw_json !== null) {
+        const rawJsonValue =
+          typeof ad.raw_json === 'string' ? ad.raw_json : JSON.stringify(ad.raw_json, null, 2);
+
+        console.log('[StructuredAttributes] Adding raw_json:', rawJsonValue.substring(0, 100));
+
+        if (!seen.has('raw_json')) {
+          result.push({
+            key: 'raw_json',
+            label: 'Raw JSON',
+            value: rawJsonValue,
+          });
+          seen.add('raw_json');
+        }
+      } else {
+        console.log('[StructuredAttributes] raw_json not found or empty');
+      }
+
       // 1) top-level ad fields
       Object.entries(ad)
         .filter(([k, v]) => v !== null && v !== undefined && v !== '' && !isExcluded(k))

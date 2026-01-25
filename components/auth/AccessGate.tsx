@@ -23,15 +23,20 @@ export default function AccessGate() {
   const [message, setMessage] = useState<string | null>(null);
   const [adminStatus, setAdminStatus] = useState<string | null>(null);
   const [approvedStatus, setApprovedStatus] = useState<string | null>(null);
-  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [userEmail] = useState<string | null>(null);
   const adminCtx = useAdmin();
   const router = useRouter();
 
   const doCheck = useCallback(async () => {
-    setChecking(true);
+    // 🔓 TEMPORARY: Allow all users (access control disabled)
+    setChecking(false);
+    setAllowed(true);
     setMessage(null);
     setAdminStatus(null);
     setApprovedStatus(null);
+    return; // Skip all checks
+
+    /* ORIGINAL CODE - TEMPORARILY DISABLED
     try {
       const { data } = await supabase.auth.getSession();
       const sessionData = (data as unknown) || (await supabase.auth.getSession()).data;
@@ -73,6 +78,7 @@ export default function AccessGate() {
       setUserEmail(null);
       setApprovedStatus('error');
     }
+    */
   }, []);
 
   useEffect(() => {

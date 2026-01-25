@@ -1,7 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { usePathname } from 'next/navigation';
-import { supabase } from '@/lib/core/supabase';
 
 export default function AuthContentGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -9,6 +8,11 @@ export default function AuthContentGate({ children }: { children: React.ReactNod
   const [allowed, setAllowed] = useState(false);
 
   useEffect(() => {
+    // 🔓 TEMPORARY: Allow all users (access control disabled)
+    setAllowed(true);
+    setChecking(false);
+
+    /* ORIGINAL CODE - TEMPORARILY DISABLED
     let mounted = true;
     async function check() {
       // allow request-access page to render without gating
@@ -90,6 +94,7 @@ export default function AuthContentGate({ children }: { children: React.ReactNod
         // ignore
       }
     };
+    */
   }, [pathname]);
 
   // While checking or not allowed, do not render children to avoid loading main UI.

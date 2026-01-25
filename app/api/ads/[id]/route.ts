@@ -3,15 +3,15 @@ import { type NextRequest, NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/core/supabase';
 
-// GET - отримати конкретний креатив
+// GET - get specific creative
 export async function GET(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const supabase = createServerSupabaseClient();
 
     const { data, error } = await supabase
-      .from('ads_library')
+      .from('ads')
       .select('*')
-      .eq('id', params.id)
+      .eq('ad_archive_id', params.id)
       .single();
 
     if (error) {
@@ -28,16 +28,16 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-// PUT - оновити креатив
+// PUT - update creative
 export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const body = await request.json();
     const supabase = createServerSupabaseClient();
 
     const { data, error } = await supabase
-      .from('ads_library')
+      .from('ads')
       .update(body)
-      .eq('id', params.id)
+      .eq('ad_archive_id', params.id)
       .select()
       .single();
 
@@ -51,12 +51,12 @@ export async function PUT(request: NextRequest, { params }: { params: { id: stri
   }
 }
 
-// DELETE - видалити креатив
+// DELETE - delete creative
 export async function DELETE(request: NextRequest, { params }: { params: { id: string } }) {
   try {
     const supabase = createServerSupabaseClient();
 
-    const { error } = await supabase.from('ads_library').delete().eq('id', params.id);
+    const { error } = await supabase.from('ads').delete().eq('ad_archive_id', params.id);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });

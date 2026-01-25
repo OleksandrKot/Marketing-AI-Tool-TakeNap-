@@ -38,39 +38,34 @@ function AdCardComponent({
   const today = new Date();
   const activeDays = Math.floor((today.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24));
 
-  const relatedAdsIds = relatedAds.map((relatedAd) => relatedAd.id).join(',');
-  const baseUrl = `/creative/${ad.id}`;
+  const relatedAdsIds = relatedAds.map((relatedAd) => relatedAd.ad_archive_id).join(',');
+  const baseUrl = `/creative/${ad.ad_archive_id}`;
   const params = [] as string[];
   if (relatedAdsIds) params.push(`related=${encodeURIComponent(relatedAdsIds)}`);
   if (from) params.push(`from=${encodeURIComponent(from)}`);
   const href = params.length > 0 ? `${baseUrl}?${params.join('&')}` : baseUrl;
 
   const previewFromStorage = !!ad.ad_archive_id;
-  // Use legacy buckets only
-  const previewStorageBuckets = isVideo ? ['test10public_preview'] : ['test9bucket_photo'];
-  const previewStorageFilename = ad.image_url?.startsWith('ads/')
-    ? ad.image_url.split('/').pop()
-    : `${ad.ad_archive_id}.jpeg`;
+  // Use storage_path from database (format: business-slug/ad_archive_id.ext)
+  const bucket = 'creatives';
+  const storagePath = isVideo ? ad.video_storage_path || ad.storage_path : ad.storage_path;
   const signedUrl = ad.signed_image_url ?? undefined;
   const [publicSrc, setPublicSrc] = useState<string>(() => {
     if (signedUrl) return signedUrl;
-    if (previewFromStorage) {
-      // Build URL using preferred bucket, will swap on error
-      return getPublicImageUrl(
-        `${previewStorageBuckets[0]}/ads/${ad.ad_archive_id}/${previewStorageFilename}`
-      );
+    if (previewFromStorage && storagePath) {
+      return getPublicImageUrl(`${bucket}/${storagePath}`);
     }
     return ad.image_url || ad.video_preview_image_url || '/placeholder.svg';
   });
 
-  // Fallback to legacy bucket if the first URL fails
+  // Fallback if image fails to load
   const handleImageError = () => {
     if (!previewFromStorage) return;
-    const fallback = previewStorageBuckets[1];
-    if (fallback) {
-      setPublicSrc(
-        getPublicImageUrl(`${fallback}/ads/${ad.ad_archive_id}/${previewStorageFilename}`)
-      );
+    // Try using image_url as fallback
+    if (ad.image_url && ad.image_url !== publicSrc) {
+      setPublicSrc(ad.image_url);
+    } else {
+      setPublicSrc('/placeholder.svg');
     }
   };
 
@@ -79,22 +74,25 @@ function AdCardComponent({
     Array<{ storage_bucket: string; storage_path: string; card_index: number }>
   >([]);
   useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
     const run = async () => {
       try {
         if (!ad.ad_archive_id) return;
-        const res = await fetch(`/api/ads/cards/${encodeURIComponent(String(ad.ad_archive_id))}`);
+        const res = await fetch(`/api/ads/cards/${encodeURIComponent(String(ad.ad_archive_id))}`, {
+          signal: controller.signal,
+        });
         if (!res.ok) return;
         const payload = await res.json();
         const rows = Array.isArray(payload?.data) ? payload.data : [];
-        if (!cancelled) setCards(rows);
+        setCards(rows);
       } catch (e) {
+        if (e instanceof Error && e.name === 'AbortError') return;
         /* noop */
       }
     };
     run();
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [ad.ad_archive_id]);
 
@@ -256,18 +254,14 @@ function AdCardComponent({
                 {relatedAds.slice(0, 8).map((r) => {
                   const src = r.signed_image_url
                     ? r.signed_image_url
+                    : r.storage_path
+                    ? getPublicImageUrl(`creatives/${r.storage_path}`)
                     : r.ad_archive_id
-                    ? getPublicImageUrl(
-                        `${
-                          r.display_format === 'VIDEO'
-                            ? 'test10public_preview'
-                            : 'test9bucket_photo'
-                        }/ads/${r.ad_archive_id}/${r.ad_archive_id}.jpeg`
-                      )
+                    ? getPublicImageUrl(`creatives/business-unknown/${r.ad_archive_id}.jpeg`)
                     : r.image_url || '/placeholder.svg';
                   return (
-                    <div key={r.id} className="relative">
-                      <Link href={`/creative/${r.id}`} className="block">
+                    <div key={r.ad_archive_id} className="relative">
+                      <Link href={`/creative/${r.ad_archive_id}`} className="block">
                         <img
                           src={src}
                           alt={r.title || 'related'}

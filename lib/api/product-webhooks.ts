@@ -1,4 +1,4 @@
-// 🎯 Конфігурація продуктів і їх webhooks
+// 🎯 Configuration of products and their webhooks
 export interface ProductWebhooks {
   [productName: string]: {
     page_id: string;
@@ -21,7 +21,7 @@ export const PRODUCT_WEBHOOKS: ProductWebhooks = {
       image: 'https://hook.us2.make.com/o3mat9a4q1v186mdhi7xu1sjamublb28',
     },
   },
-  // 📝 Додаємо інші продукти тут...
+  // 📝 Add other products here...
   // betterme: {
   //   page_id: "123456789",
   //   name: "BetterMe",
@@ -34,7 +34,7 @@ export const PRODUCT_WEBHOOKS: ProductWebhooks = {
 };
 
 /**
- * 🔍 Визначає продукт по Meta Ad Library URL
+ * 🔍 Determines product by Meta Ad Library URL
  */
 export function detectProductFromUrl(url: string): {
   productKey: string | null;
@@ -42,7 +42,7 @@ export function detectProductFromUrl(url: string): {
   pageId: string | null;
 } {
   try {
-    // Витягуємо page_id з URL
+    // Extract page_id from URL
     const urlObj = new URL(url);
     const pageId =
       urlObj.searchParams.get('view_all_page_id') ||
@@ -53,7 +53,7 @@ export function detectProductFromUrl(url: string): {
       return { productKey: null, productName: null, pageId: null };
     }
 
-    // Шукаємо продукт по page_id
+    // Find product by page_id
     for (const [key, config] of Object.entries(PRODUCT_WEBHOOKS)) {
       if (config.page_id === pageId) {
         return {

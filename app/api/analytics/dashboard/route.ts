@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 
     // Fetch all ads for selected competitors
     const { data: ads, error } = await supabase
-      .from('ads_library')
+      .from('ads')
       .select('*')
       .in('page_name', competitors);
 
@@ -276,7 +276,8 @@ function clusterVisualPatterns(ads: Ad[]): VisualPattern[] {
       const pattern = patterns.get(category)!;
       pattern.count += 1;
       if (pattern.examples.length < 3) {
-        pattern.examples.push(ad.page_name);
+        const example = ad.page_name?.trim();
+        if (example) pattern.examples.push(example);
       }
     }
   });

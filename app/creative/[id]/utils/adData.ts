@@ -416,15 +416,22 @@ function extractSocialProof(ad: Ad, visualParagraphs: string[]): string {
 
 export const buildMetaAnalysis = (ad: Ad, visualMainParagraphs: string[]) => {
   const ex = ad as unknown as Record<string, unknown>;
+
+  // Helper to return value or "WIP" if empty
+  const getOrWip = (value: string | null | undefined): string => {
+    const val = String(value || '').trim();
+    return val || 'WIP';
+  };
+
   const fcc = {
-    Concept: ad.concept || '',
+    Concept: getOrWip(ad.concept),
     Format:
       String(ad.display_format || '').toLowerCase() ||
       (ad.display_format === 'VIDEO' ? 'video' : 'image'),
-    Realisation: (ad.realisation as string) || '',
-    Topic: (ad.topic as string) || '',
-    Hook: cleanExtraSymbols(ad.hook || ''),
-    Character: (ad.character as string) || '',
+    Realisation: getOrWip(ad.realisation as string),
+    Topic: getOrWip(ad.topic as string),
+    Hook: getOrWip(cleanExtraSymbols(ad.hook || '')),
+    Character: getOrWip(ad.character as string),
   };
 
   // Extract social proof from visual and text elements
@@ -724,7 +731,7 @@ export const buildGroupedSections = (
 
   if (finalFcc) {
     const fcText = Object.entries(finalFcc)
-      .map(([k, v]) => `${k}: ${cleanExtraSymbols(String(v === '' ? 'Nothing to find...' : v))}`)
+      .map(([k, v]) => `${k}: ${cleanExtraSymbols(String(v === '' ? 'WIP' : v))}`)
       .join('\n');
     pushUnique(out, 'Formats & Creative Concepts', fcText);
   }

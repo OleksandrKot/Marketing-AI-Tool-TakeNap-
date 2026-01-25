@@ -1,36 +1,36 @@
 import { NextResponse } from 'next/server';
 import { createServerSupabaseClient } from '@/lib/core/supabase';
 
-// GET - отримати статистику
+// GET - get statistics
 export async function GET() {
   try {
     const supabase = createServerSupabaseClient();
 
-    // Загальна кількість креативів
+    // Total number of creatives
     const { count: totalAds } = await supabase
-      .from('ads_library')
+      .from('ads')
       .select('*', { count: 'exact', head: true });
 
-    // Кількість відео креативів
+    // Number of video creatives
     const { count: videoAds } = await supabase
-      .from('ads_library')
+      .from('ads')
       .select('*', { count: 'exact', head: true })
       .eq('display_format', 'VIDEO');
 
-    // Унікальні сторінки
+    // Unique pages
     const { data: pages } = await supabase
-      .from('ads_library')
+      .from('ads')
       .select('page_name')
       .not('page_name', 'is', null);
 
     const uniquePages = [...new Set(pages?.map((p) => p.page_name) || [])];
 
-    // Креативи за останні 30 днів
+    // Creatives from the last 30 days
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
     const { count: recentAds } = await supabase
-      .from('ads_library')
+      .from('ads')
       .select('*', { count: 'exact', head: true })
       .gte('created_at', thirtyDaysAgo.toISOString());
 

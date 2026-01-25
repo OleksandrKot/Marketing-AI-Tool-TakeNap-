@@ -35,16 +35,29 @@ function prettyJson(obj: unknown) {
 }
 
 export default function PromptEditor({ ad }: { ad: Ad }) {
+  // Parse creative_concepts from raw_json
+  const creativeConcepts = useMemo(() => {
+    try {
+      if (ad.raw_json && typeof ad.raw_json === 'object' && 'creative_concepts' in ad.raw_json) {
+        return ad.raw_json.creative_concepts as Record<string, string>;
+      }
+      return {};
+    } catch (e) {
+      console.error('Failed to parse creative_concepts:', e);
+      return {};
+    }
+  }, [ad.raw_json]);
+
   const initial: PromptShape = {
-    persona: ad.character || '',
+    persona: creativeConcepts.Persona || ad.character || '',
     size: '',
-    format: ad.display_format || '',
-    appearance: ad.image_description || '',
-    concept: ad.concept || '',
-    hook: ad.hook || '',
+    format: creativeConcepts.Camera_Style || ad.display_format || '',
+    appearance: creativeConcepts.Visual_Focus || ad.image_description || '',
+    concept: creativeConcepts.Concept || ad.concept || '',
+    hook: creativeConcepts.Hook || ad.hook || '',
     title: ad.title || '',
     caption: ad.caption || '',
-    text: ad.text || '',
+    text: creativeConcepts.Text || ad.text || '',
     audio_script: ad.audio_script || '',
     video_script: ad.video_script || '',
   };

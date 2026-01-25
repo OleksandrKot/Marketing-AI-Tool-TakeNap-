@@ -37,6 +37,8 @@ export default function StorageImage({
 
     async function fetchSigned() {
       try {
+        console.log('[StorageImage] Fetching:', { bucket, path: cleanPath });
+
         // Check the in-memory cache first
         // Query the server helper to get a signed URL for the specific path.
         // This avoids importing the shared storage cache module which caused
@@ -59,6 +61,8 @@ export default function StorageImage({
           return typeof u === 'string' ? u : null;
         }
         const url = parseUrl(j);
+        console.log('[StorageImage] URL result:', { url, ok: res.ok });
+
         if (!mounted) return;
         // If getSignedUrl returned null it usually means the object doesn't exist in storage;
         // in that case we don't set a storage URL so the parent component can fallback to
@@ -67,13 +71,14 @@ export default function StorageImage({
           setSrc(url);
         } else {
           // leave src empty to trigger placeholder
-          setSrc('');
+          setSrc('/placeholder.svg');
         }
       } catch (e) {
+        console.error('[StorageImage] Error:', e);
         // fallback: public URL (may 403 if truly private)
         if (!mounted) return;
         const pub = getPublicImageUrl(storagePath);
-        setSrc(pub);
+        setSrc(pub || '/placeholder.svg');
       }
     }
 

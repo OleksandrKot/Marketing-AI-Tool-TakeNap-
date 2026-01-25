@@ -7,7 +7,7 @@ export async function GET() {
 
     // total rows (exact)
     const { count: totalCount, error: totalErr } = await supabase
-      .from('ads_library')
+      .from('ads')
       .select('*', { count: 'exact', head: true });
 
     if (totalErr) {
@@ -20,9 +20,7 @@ export async function GET() {
     // (skipping not-deleted and latest-created checks for a minimal head response)
 
     // distinct ad_archive_id count (fetching ids and deduping server-side)
-    const { data: idRows, error: idErr } = await supabase
-      .from('ads_library')
-      .select('ad_archive_id');
+    const { data: idRows, error: idErr } = await supabase.from('ads').select('ad_archive_id');
     if (idErr) {
       console.error('Error fetching ad_archive_id list for distinct count:', idErr);
       return NextResponse.json({ error: 'Failed to fetch head' }, { status: 502 });

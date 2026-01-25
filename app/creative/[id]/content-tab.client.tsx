@@ -425,12 +425,11 @@ export default function ContentTabClient({ ad, relatedAds }: ContentTabClientPro
                       <div className="aspect-video bg-slate-100 rounded-lg overflow-hidden mb-3">
                         {relatedAd.ad_archive_id ? (
                           <StorageImage
-                            bucket={
-                              relatedAd.display_format === 'VIDEO'
-                                ? 'test10public_preview'
-                                : 'test9bucket_photo'
+                            bucket="creatives"
+                            path={
+                              relatedAd.storage_path ||
+                              `business-unknown/${relatedAd.ad_archive_id}.jpeg`
                             }
-                            path={`${relatedAd.ad_archive_id}.jpeg`}
                             alt={relatedAd.title || 'Related ad'}
                             fill={true}
                             className="w-full h-full object-cover"
@@ -618,7 +617,12 @@ export default function ContentTabClient({ ad, relatedAds }: ContentTabClientPro
                   <div className="mb-2">
                     <DynamicStructuredAttributesModal
                       groupedSections={localGroupedSections}
-                      ad={adData as unknown as Record<string, unknown>}
+                      ad={
+                        {
+                          ...adData,
+                          raw_json: ad.raw_json, // Ensure raw_json is passed
+                        } as unknown as Record<string, unknown>
+                      }
                       onApply={applyAttributesToVisual}
                     />
                   </div>

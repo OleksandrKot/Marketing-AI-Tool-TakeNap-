@@ -24,10 +24,10 @@ export default function ContentMedia({ ad }: Props) {
         </div>
       ) : (
         <div className="flex items-center justify-center h-[360px] md:h-[480px]">
-          {ad.ad_archive_id ? (
+          {ad.storage_path ? (
             <StorageImage
-              bucket={isVideo ? 'test10public_preview' : 'test9bucket_photo'}
-              path={`${ad.ad_archive_id}.jpeg`}
+              bucket="creatives"
+              path={ad.storage_path}
               alt={ad.title || 'preview'}
               fill={false}
               className="max-h-full max-w-full object-contain mx-auto"

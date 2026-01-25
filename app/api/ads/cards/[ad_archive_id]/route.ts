@@ -3,25 +3,29 @@ export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/core/supabase';
 
 // GET /api/ads/cards/[ad_archive_id]
-export async function GET(_req: NextRequest, { params }: { params: { ad_archive_id: string } }) {
+// GET /api/ads/cards/[ad_archive_id]?businessId=...
+export async function GET(req: NextRequest, { params }: { params: { ad_archive_id: string } }) {
   try {
     const ad_archive_id = params?.ad_archive_id;
-    if (!ad_archive_id) {
-      return NextResponse.json({ error: 'ad_archive_id is required' }, { status: 400 });
-    }
+    const { searchParams } = new URL(req.url);
+    const businessId = searchParams.get('businessId');
 
     const supabase = createServerSupabaseClient();
-    const { data, error } = await supabase
-      .from('ad_cards')
-      .select('ad_archive_id, card_index, storage_bucket, storage_path, source_url, created_at')
-      .eq('ad_archive_id', ad_archive_id)
-      .order('card_index', { ascending: true });
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    let query = supabase.from('ads').select('cards_json').eq('ad_archive_id', ad_archive_id);
+
+    // If businessId exists, query will run instantly via index
+    if (businessId) {
+      query = query.eq('business_id', businessId);
     }
 
-    return NextResponse.json({ data });
+    const { data, error } = await query.single();
+
+    if (error || !data?.cards_json) {
+      return NextResponse.json({ data: [] });
+    }
+
+    return NextResponse.json({ data: data.cards_json });
   } catch (e) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }

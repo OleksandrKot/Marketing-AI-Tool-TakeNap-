@@ -80,7 +80,7 @@ function AINewsModalComponent({
   const [currentNewsIndex, setCurrentNewsIndex] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
 
-  // Безпечна функція для зміни новин
+  // Safe function for changing news
   const changeNews = useCallback(() => {
     if (!isOpen || processingDone) return;
 
@@ -94,10 +94,10 @@ function AINewsModalComponent({
     }, 300);
   }, [isOpen]);
 
-  // Ефект для автоматичної зміни новин
+  // Effect for automatic news change
   useEffect(() => {
     if (!isOpen) {
-      // Скидаємо стан при закритті модалки
+      // Reset state when modal closes
       setCurrentNewsIndex(0);
       setIsAnimating(false);
       return;
@@ -112,7 +112,7 @@ function AINewsModalComponent({
     };
   }, [isOpen, changeNews]);
 
-  // Функція для ручної зміни новин
+  // Function for manual news change
   const handleNewsChange = useCallback(
     (index: number) => {
       if (index >= 0 && index < newsItems.length && index !== currentNewsIndex) {

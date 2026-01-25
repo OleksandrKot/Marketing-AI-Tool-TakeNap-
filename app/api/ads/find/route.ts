@@ -22,7 +22,7 @@ export async function GET(request: Request) {
 
     if (!Number.isNaN(asNum)) {
       const { data, error } = await supabase
-        .from('ads_library')
+        .from('ads')
         .select('*')
         .or(`id.eq.${asNum},ad_archive_id.eq.${encodeURIComponent(term)}`)
         .limit(200);
@@ -33,7 +33,7 @@ export async function GET(request: Request) {
       rows = Array.isArray(data) ? (data as AdRow[]) : [];
     } else {
       const { data, error } = await supabase
-        .from('ads_library')
+        .from('ads')
         .select('*')
         .or(
           `ad_archive_id.eq.${encodeURIComponent(term)},page_name.ilike.%${encodeURIComponent(

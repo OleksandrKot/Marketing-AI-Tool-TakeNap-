@@ -24,7 +24,7 @@ import { InfoTab } from './info-tab';
 import type { Ad } from '@/lib/core/types';
 import { buildUnifiedAd } from './utils/adData';
 
-// Динамічне завантаження компонентів, які не потрібні одразу
+// Dynamic loading of components not needed immediately
 const ShareModal = dynamic(() => import('./share-modal'), {
   loading: () => <ModalLoading />,
   ssr: false,

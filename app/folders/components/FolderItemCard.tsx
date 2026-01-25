@@ -30,10 +30,8 @@ export default function FolderItemCard({ it, ad, onOpenNote, onRemove }: Props) 
           {ad?.ad_archive_id ? (
             <div className="relative w-full h-full">
               <StorageImage
-                bucket={
-                  ad.display_format === 'VIDEO' ? 'test10public_preview' : 'test9bucket_photo'
-                }
-                path={`${ad.ad_archive_id}.jpeg`}
+                bucket="creatives"
+                path={ad.storage_path || `business-unknown/${ad.ad_archive_id}.jpeg`}
                 alt={ad?.title || 'preview'}
                 fill={true}
                 className="object-cover"

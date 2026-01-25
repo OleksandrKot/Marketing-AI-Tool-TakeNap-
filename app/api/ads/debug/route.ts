@@ -14,7 +14,7 @@ export async function GET() {
 
     // total rows (exact)
     const { count: totalCount, error: totalErr } = await supabase
-      .from('ads_library')
+      .from('ads')
       .select('*', { count: 'exact', head: true });
 
     if (totalErr) {
@@ -26,7 +26,7 @@ export async function GET() {
 
     // fetch ad_archive_id list
     const { data: idRows, error: idErr } = await supabase
-      .from('ads_library')
+      .from('ads')
       .select('id, ad_archive_id, created_at, page_name');
     if (idErr) {
       console.error('Error fetching ad_archive_id list for debug:', idErr);

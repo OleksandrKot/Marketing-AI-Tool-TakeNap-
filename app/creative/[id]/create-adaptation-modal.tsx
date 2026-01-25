@@ -36,9 +36,9 @@ export default function CreateAdaptationModal({ ad, onClose }: CreateAdaptationM
 
     setIsLoading(true);
 
-    // Тут буде логіка відправки до Make.com коли буде готовий ланцюг
+    // Logic for sending to Make.com when chain is ready
     try {
-      // Симулюємо API запит
+      // Simulate API request
       await new Promise((resolve) => setTimeout(resolve, 1200));
 
       // If user selected a persona, prepend persona description to prompt
@@ -53,7 +53,7 @@ export default function CreateAdaptationModal({ ad, onClose }: CreateAdaptationM
         }
       }
 
-      // Показуємо успішне повідомлення
+      // Show success message
       // For now we show the final prompt for user confirmation
       console.debug('[CreateAdaptation] finalPrompt', finalPrompt);
       setWarnTitle('Adaptation sent');

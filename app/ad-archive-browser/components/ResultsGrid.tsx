@@ -1,3 +1,5 @@
+'use client';
+
 import React from 'react';
 import dynamic from 'next/dynamic';
 import { AdCard } from '@/components/ads/AdCard';
@@ -21,7 +23,6 @@ type Props = {
   selectedCreativeType: 'all' | 'video' | 'image';
   onCloseModal?: () => void;
   processingDone?: boolean;
-  // selection mode props
   selectionMode?: boolean;
   selectedIds?: Record<string, boolean>;
   onToggleSelect?: (id: string) => void;
@@ -59,38 +60,30 @@ function ResultsGrid({
           }`}
         >
           {currentPageAds.map((ad: Ad, idx: number) => {
-            const fullGroup = adIdToGroupMap[ad.id] ?? [];
-            const relatedAds = fullGroup.filter((a: Ad) => a.id !== ad.id);
+            // In new schema use ad_archive_id as primary key
+            const adKey = ad.ad_archive_id || String(ad.id);
+
+            // Safety check: try to find group by both id and ad_archive_id
+            const fullGroup = adIdToGroupMap[adKey] || adIdToGroupMap[String(ad.id)] || [];
+
+            // Filter current ad from related ads list
+            const relatedAds = fullGroup.filter((a: Ad) => a.ad_archive_id !== ad.ad_archive_id);
+
+            // Get related ads count
             const relatedCount = adIdToRelatedCount
-              ? adIdToRelatedCount[ad.id] ?? relatedAds.length
+              ? adIdToRelatedCount[adKey] ?? relatedAds.length
               : relatedAds.length;
-            try {
-              // Log first few entries so developer can inspect mapping in browser console
-              if (typeof window !== 'undefined' && idx < 5) {
-                // eslint-disable-next-line no-console
-                console.debug(
-                  '[ResultsGrid] ad=',
-                  ad.id,
-                  'relatedCount=',
-                  relatedCount,
-                  'exactGroup=',
-                  fullGroup.length
-                );
-              }
-            } catch (e) {
-              /* noop */
-            }
+
             return (
               <AdCard
-                key={ad.id}
+                key={adKey}
                 ad={ad}
                 relatedAds={relatedAds}
                 relatedCount={relatedCount}
                 index={idx + 1}
-                // selection props
                 selectionMode={selectionMode}
-                selected={selectedIds ? Boolean(selectedIds[String(ad.id)]) : false}
-                selectedIds={selectedIds}
+                // Check selection by ad_archive_id
+                selected={selectedIds ? Boolean(selectedIds[adKey]) : false}
                 onToggleSelect={onToggleSelect}
               />
             );

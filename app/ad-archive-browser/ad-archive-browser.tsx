@@ -6,11 +6,14 @@ import SearchControls from './components/search-controls';
 import ResultsGrid from './components/ResultsGrid';
 import PaginationBar from './components/PaginationBar';
 import type { Ad } from '@/lib/core/types';
-import useAdArchive, { type UseAdArchiveReturn } from './useAdArchive';
+import useAdArchive from './useAdArchive';
+import type { UseAdArchiveReturn } from './useAdArchive';
 
 interface AdArchiveBrowserProps {
   initialAds: Ad[];
   pages: string[];
+  businesses?: { id: string; name: string; slug: string }[];
+  selectedBusiness?: string;
   initialFilters?: import('@/lib/core/types').FilterOptions | null;
   initialTotalAds?: number;
 }
@@ -18,6 +21,8 @@ interface AdArchiveBrowserProps {
 export function AdArchiveBrowser({
   initialAds,
   pages,
+  businesses = [],
+  selectedBusiness,
   initialFilters,
   initialTotalAds,
 }: AdArchiveBrowserProps) {
@@ -25,9 +30,10 @@ export function AdArchiveBrowser({
   const clearedFilters = { search: '', page: null, date: null, tags: null };
   const state = useAdArchive(
     initialAds,
-    initialFilters ?? clearedFilters,
+    { ...(initialFilters ?? clearedFilters), businessId: selectedBusiness ?? undefined },
     initialTotalAds,
-    60 * 1000 // poll every 30 seconds by default
+    7 * 60 * 1000, // poll every 7 minutes
+    selectedBusiness
   ) as UseAdArchiveReturn;
 
   const {
@@ -40,16 +46,16 @@ export function AdArchiveBrowser({
     processingMessage,
     handleSearch,
     handlePageChange,
+    handleFilterChange,
     viewMode,
     setViewMode,
     currentPage,
     totalPages,
     productFilter,
     handleProductFilterChange,
-    handleFilterChange,
     availableTags,
     selectedTags,
-    handleTagsChange,
+    setSelectedTags,
     clearProductFilter,
     selectedCreativeType,
     setSelectedCreativeType,
@@ -63,8 +69,6 @@ export function AdArchiveBrowser({
     importStatus,
     importSavedCreatives,
     importTotalCreatives,
-    autoClearProcessing,
-    setAutoClearProcessing,
     userSortMode,
     setUserSortMode,
   } = state;
@@ -95,7 +99,15 @@ export function AdArchiveBrowser({
         handleFilterChange={handleFilterChange}
         availableTags={availableTags}
         selectedTags={selectedTags}
-        handleTagsChange={handleTagsChange}
+        handleTagsChange={async (tags: string[]) => {
+          setSelectedTags(tags);
+          await handleFilterChange({
+            search: productFilter,
+            page: currentPage.toString(),
+            date: null,
+            tags,
+          });
+        }}
         pagesLength={pages.length}
         pages={pages}
         filteredAdsCount={totalAds}
@@ -109,11 +121,11 @@ export function AdArchiveBrowser({
         importStatus={importStatus}
         importSavedCreatives={importSavedCreatives}
         importTotalCreatives={importTotalCreatives}
-        autoClearProcessing={autoClearProcessing}
-        setAutoClearProcessing={setAutoClearProcessing}
         clearProcessingDisplay={state.clearProcessingDisplay}
         requestLogs={state.requestLogs}
         clearRequestLogs={state.clearRequestLogs}
+        businesses={businesses}
+        selectedBusiness={selectedBusiness}
       />
 
       <div className="flex items-center justify-between w-full gap-4 mb-8">

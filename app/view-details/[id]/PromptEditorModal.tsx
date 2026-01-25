@@ -30,54 +30,28 @@ interface PromptEditorModalProps {
   onClose: () => void;
 }
 
-// Aligned with StructuredAttributes compact fields (video variant)
+// Aligned with creative_concepts from raw_json
 const MAIN_PARAMETERS: Array<{ key: string; label: string }> = [
-  { key: 'subject', label: 'Subject' },
-  { key: 'text_on_image', label: 'Text on Image' },
-  { key: 'concept', label: 'Concept' },
-  { key: 'realisation', label: 'Realisation' },
-  { key: 'topic', label: 'Topic' },
-  { key: 'hook', label: 'Hook' },
-  { key: 'character', label: 'Character' },
-  { key: 'image_description', label: 'Image Description' },
-  // Character Details
-  { key: 'characterGender', label: 'Character Gender' },
-  { key: 'characterType', label: 'Character Type (realistic or fictional)' },
-  { key: 'bodyType', label: 'Body Type' },
-  { key: 'type', label: 'Type' },
-  { key: 'appearanceDetails', label: 'Appearance Details' },
-  { key: 'clothing', label: 'Clothing' },
-  { key: 'hairColor', label: 'Hair Color' },
-  { key: 'pose', label: 'Pose' },
-  { key: 'action', label: 'Action' },
-  { key: 'facialExpression', label: 'Facial Expression' },
-  { key: 'characterPositionInFrame', label: 'Character Position in Frame' },
-  // Visual & Style
-  { key: 'visualColorPalette', label: 'Visual Color Palette' },
-  { key: 'colorScheme', label: 'Color Scheme' },
-  { key: 'style', label: 'Style' },
-  { key: 'mood', label: 'Mood' },
-  { key: 'emotions', label: 'Emotions' },
-  { key: 'tone', label: 'Tone' },
-  // Environment & Scene
-  { key: 'location', label: 'Location' },
-  { key: 'scene', label: 'Scene' },
-  { key: 'environment', label: 'Environment' },
-  { key: 'backgroundElements', label: 'Background Elements' },
-  { key: 'backgroundElementDetails', label: 'Background Element Details' },
-  { key: 'props', label: 'Props' },
-  // Technical & Camera
-  { key: 'lighting', label: 'Lighting' },
-  { key: 'cameraAngle', label: 'Camera Angle' },
-  { key: 'composition', label: 'Composition' },
-  { key: 'framing', label: 'Framing' },
-  { key: 'perspective', label: 'Perspective' },
-  { key: 'shotType', label: 'Shot Type' },
-  // Effects & Details
-  { key: 'texture', label: 'Texture' },
-  { key: 'effects', label: 'Effects' },
-  { key: 'visualEffects', label: 'Visual Effects' },
-  { key: 'details', label: 'Details' },
+  { key: 'Hook', label: 'Hook' },
+  { key: 'Topic', label: 'Topic' },
+  { key: 'Concept', label: 'Concept' },
+  { key: 'Realisation', label: 'Realisation' },
+  { key: 'Character', label: 'Character' },
+  { key: 'Persona', label: 'Persona' },
+  { key: 'Primary_Subject', label: 'Primary Subject' },
+  { key: 'Text', label: 'Text' },
+  { key: 'Mood', label: 'Mood' },
+  { key: 'Style', label: 'Style' },
+  { key: 'Visual_Focus', label: 'Visual Focus' },
+  { key: 'Color_Palette', label: 'Color Palette' },
+  { key: 'Lighting', label: 'Lighting' },
+  { key: 'Camera_Style', label: 'Camera Style' },
+  { key: 'Composition', label: 'Composition' },
+  { key: 'Environment', label: 'Environment' },
+  { key: 'Secondary_Elements', label: 'Secondary Elements' },
+  { key: 'Background_Elements', label: 'Background Elements' },
+  { key: 'Symbolism', label: 'Symbolism' },
+  { key: 'Call_To_Action', label: 'Call To Action' },
 ];
 
 const formatTime = (seconds: number): string => {
@@ -246,18 +220,24 @@ const PromptEditorModal = ({ ad, isOpen, onClose }: PromptEditorModalProps) => {
     // Map existing ad/unified fields to parameters (best-effort)
     const A = ad as unknown as Record<string, unknown>;
 
-    // Try to parse shortPromptJson if it exists
-    let promptJson: Record<string, unknown> = {};
+    // Try to parse raw_json first (new field), then shortPromptJson
+    let creativeConcepts: Record<string, string> = {};
     try {
-      if (A.shortPromptJson) {
-        if (typeof A.shortPromptJson === 'string') {
-          promptJson = JSON.parse(A.shortPromptJson as string);
-        } else if (typeof A.shortPromptJson === 'object') {
-          promptJson = A.shortPromptJson as Record<string, unknown>;
+      // Parse creative_concepts from raw_json
+      if (A.raw_json) {
+        let rawJson: Record<string, unknown> | null = null;
+        if (typeof A.raw_json === 'string') {
+          rawJson = JSON.parse(A.raw_json as string);
+        } else if (typeof A.raw_json === 'object' && A.raw_json !== null) {
+          rawJson = A.raw_json as Record<string, unknown>;
+        }
+
+        if (rawJson && rawJson.creative_concepts) {
+          creativeConcepts = rawJson.creative_concepts as Record<string, string>;
         }
       }
     } catch (e) {
-      // ignore parse errors
+      console.error('Error parsing creative_concepts:', e);
     }
 
     const setIf = (key: string, ...vals: unknown[]) => {
@@ -272,69 +252,27 @@ const PromptEditorModal = ({ ad, isOpen, onClose }: PromptEditorModalProps) => {
       }
     };
 
-    // Subject - try multiple sources
-    setIf('subject', promptJson.subject, A.subject, A.title);
-    // Text on Image
-    setIf(
-      'text_on_image',
-      promptJson.text_on_image,
-      promptJson.textOnImage,
-      A.text_on_image,
-      A.textOnImage
-    );
-    // Main content fields
-    setIf('concept', promptJson.concept, A.concept);
-    setIf('realisation', promptJson.realisation, A.realisation);
-    setIf('topic', promptJson.topic, A.topic);
-    setIf('hook', promptJson.hook, A.hook);
-    setIf('character', promptJson.character, A.character);
-    setIf('image_description', promptJson.image_description, A.image_description);
-    // Character-related details
-    setIf('characterGender', promptJson.characterGender, A.characterGender);
-    setIf('characterType', promptJson.characterType, A.characterType);
-    setIf('bodyType', promptJson.bodyType, A.bodyType);
-    setIf('type', promptJson.type, A.type);
-    setIf('appearanceDetails', promptJson.appearanceDetails, A.appearanceDetails);
-    setIf('clothing', promptJson.clothing, A.clothing);
-    setIf('hairColor', promptJson.hairColor, A.hairColor);
-    setIf('pose', promptJson.pose, A.pose);
-    setIf('action', promptJson.action, A.action);
-    setIf('facialExpression', promptJson.facialExpression, A.facialExpression);
-    setIf(
-      'characterPositionInFrame',
-      promptJson.characterPositionInFrame,
-      A.characterPositionInFrame
-    );
-    // Visual & Style
-    setIf('visualColorPalette', promptJson.visualColorPalette, A.visualColorPalette);
-    setIf('colorScheme', promptJson.colorScheme, A.colorScheme);
-    setIf('style', promptJson.style, A.style);
-    setIf('mood', promptJson.mood, A.mood);
-    setIf('emotions', promptJson.emotions, A.emotions);
-    setIf('tone', promptJson.tone, A.tone);
-    // Environment & Scene
-    setIf('location', promptJson.location, A.location);
-    setIf('scene', promptJson.scene, A.scene);
-    setIf('environment', promptJson.environment, A.environment);
-    setIf('backgroundElements', promptJson.backgroundElements, A.backgroundElements);
-    setIf(
-      'backgroundElementDetails',
-      promptJson.backgroundElementDetails,
-      A.backgroundElementDetails
-    );
-    setIf('props', promptJson.props, A.props);
-    // Technical & Camera
-    setIf('lighting', promptJson.lighting, A.lighting);
-    setIf('cameraAngle', promptJson.cameraAngle, A.cameraAngle);
-    setIf('composition', promptJson.composition, A.composition);
-    setIf('framing', promptJson.framing, A.framing);
-    setIf('perspective', promptJson.perspective, A.perspective);
-    setIf('shotType', promptJson.shotType, A.shotType);
-    // Effects & Details
-    setIf('texture', promptJson.texture, A.texture);
-    setIf('effects', promptJson.effects, A.effects);
-    setIf('visualEffects', promptJson.visualEffects, A.visualEffects);
-    setIf('details', promptJson.details, A.details);
+    // Set all fields from creative_concepts
+    setIf('Hook', creativeConcepts.Hook);
+    setIf('Topic', creativeConcepts.Topic);
+    setIf('Concept', creativeConcepts.Concept);
+    setIf('Realisation', creativeConcepts.Realisation);
+    setIf('Character', creativeConcepts.Character);
+    setIf('Persona', creativeConcepts.Persona);
+    setIf('Primary_Subject', creativeConcepts.Primary_Subject);
+    setIf('Text', creativeConcepts.Text);
+    setIf('Mood', creativeConcepts.Mood);
+    setIf('Style', creativeConcepts.Style);
+    setIf('Visual_Focus', creativeConcepts.Visual_Focus);
+    setIf('Color_Palette', creativeConcepts.Color_Palette);
+    setIf('Lighting', creativeConcepts.Lighting);
+    setIf('Camera_Style', creativeConcepts.Camera_Style);
+    setIf('Composition', creativeConcepts.Composition);
+    setIf('Environment', creativeConcepts.Environment);
+    setIf('Secondary_Elements', creativeConcepts.Secondary_Elements);
+    setIf('Background_Elements', creativeConcepts.Background_Elements);
+    setIf('Symbolism', creativeConcepts.Symbolism);
+    setIf('Call_To_Action', creativeConcepts.Call_To_Action);
 
     const additional: PromptParameter[] = [
       {
@@ -501,8 +439,11 @@ const PromptEditorModal = ({ ad, isOpen, onClose }: PromptEditorModalProps) => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            bucket: 'test8public',
-            path: `${ad.ad_archive_id}.mp4`,
+            bucket: 'creatives',
+            path:
+              ad.video_storage_path ||
+              ad.storage_path ||
+              `business-unknown/${ad.ad_archive_id}.mp4`,
             expires: 3600, // 1 hour expiration for video
           }),
         });
@@ -637,6 +578,61 @@ const PromptEditorModal = ({ ad, isOpen, onClose }: PromptEditorModalProps) => {
     }
 
     return JSON.stringify(json, null, 2);
+  };
+
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    if (!ad.ad_archive_id) {
+      setSaveError('No ad ID available');
+      return;
+    }
+
+    setSaving(true);
+    setSaveError(null);
+
+    try {
+      // Prepare data to save
+      const mainParams = parameters.filter((p) => !p.isAdditional);
+      const updateData: Record<string, unknown> = {};
+
+      // Save main parameters directly to their columns
+      for (const param of mainParams) {
+        if (param.value.trim()) {
+          updateData[param.key] = param.value;
+        }
+      }
+
+      // Save all parameters to raw_json as well
+      const promptJSON = generatePromptJSON();
+      updateData.raw_json = JSON.parse(promptJSON);
+
+      // Make API call to update the ad
+      const response = await fetch(`/api/ads/${ad.ad_archive_id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(errorData.error || 'Failed to save');
+      }
+
+      // Success - close modal
+      onClose();
+
+      // Optionally refresh the page to show updated data
+      if (typeof window !== 'undefined') {
+        window.location.reload();
+      }
+    } catch (error) {
+      console.error('Error saving ad:', error);
+      setSaveError(error instanceof Error ? error.message : 'Failed to save changes');
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleCopyAndClose = async () => {
@@ -921,19 +917,37 @@ const PromptEditorModal = ({ ad, isOpen, onClose }: PromptEditorModalProps) => {
               </div>
             </div>
           </CardContent>
-          <div className="border-t border-slate-200 p-6 bg-slate-50 flex items-center justify-between">
-            <Button variant="outline" onClick={handleReset}>
-              <RotateCcw className="h-4 w-4 mr-2" />
-              Reset to Original
-            </Button>
-            <div className="flex gap-3">
-              <Button variant="ghost" onClick={onClose}>
-                Cancel
+          <div className="border-t border-slate-200 p-6 bg-slate-50">
+            {saveError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+                {saveError}
+              </div>
+            )}
+            <div className="flex items-center justify-between">
+              <Button variant="outline" onClick={handleReset} disabled={saving}>
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Reset to Original
               </Button>
-              <Button onClick={handleCopyAndClose} className="bg-blue-600 hover:bg-blue-700">
-                <Copy className="h-4 w-4 mr-2" />
-                Copy and Close
-              </Button>
+              <div className="flex gap-3">
+                <Button variant="ghost" onClick={onClose} disabled={saving}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSave}
+                  className="bg-green-600 hover:bg-green-700"
+                  disabled={saving}
+                >
+                  {saving ? 'Saving...' : 'Save Changes'}
+                </Button>
+                <Button
+                  onClick={handleCopyAndClose}
+                  className="bg-blue-600 hover:bg-blue-700"
+                  disabled={saving}
+                >
+                  <Copy className="h-4 w-4 mr-2" />
+                  Copy and Close
+                </Button>
+              </div>
             </div>
           </div>
         </Card>

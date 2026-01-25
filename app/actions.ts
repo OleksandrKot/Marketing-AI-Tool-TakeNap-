@@ -1,477 +1,289 @@
 'use server';
 
+import { unstable_noStore as noStore } from 'next/cache';
 import { createServerSupabaseClient } from '@/lib/core/supabase';
-import type { Ad } from '@/lib/core/types';
+import type { Ad, AdsGroup } from '@/lib/core/types';
 
+/**
+ * Получение групп объявлений с их представителями
+ */
+export async function getAdGroups(
+  businessId?: string,
+  limit = 100
+): Promise<{ group: AdsGroup; representative: Ad }[]> {
+  noStore(); // Disable caching for this function
+
+  try {
+    const supabase = createServerSupabaseClient();
+
+    let groupQuery = supabase
+      .from('ads_groups_test')
+      .select('*')
+      .order('last_ad_added_at', { ascending: false })
+      .limit(limit);
+
+    if (businessId) {
+      groupQuery = groupQuery.eq('business_id', businessId);
+    }
+
+    const { data: groups, error: groupError } = await groupQuery;
+
+    if (groupError || !groups || groups.length === 0) {
+      if (groupError) console.error('❌ Error fetching groups:', groupError);
+      return [];
+    }
+
+    const repIds = groups.map((g) => g.rep_ad_archive_id);
+
+    // In the new schema, ad_archive_id is unique, so .in() will work correctly.
+    // But for index optimization, it's better to add business_id if it exists.
+    let adsQuery = supabase.from('ads').select('ad_archive_id').in('ad_archive_id', repIds);
+    if (businessId) adsQuery = adsQuery.eq('business_id', businessId);
+
+    const { data: reps, error: repsError } = await adsQuery;
+
+    if (repsError) {
+      console.error('❌ Error fetching representative ads:', repsError);
+      return [];
+    }
+
+    // Return only group data (without full ad data)
+    // Ads will be loaded on client
+    return groups
+      .map((group) => {
+        const rep = (reps || []).find((r) => r.ad_archive_id === group.rep_ad_archive_id);
+        if (!rep) return null;
+        return {
+          group: group as AdsGroup,
+          representative: {
+            id: rep.ad_archive_id,
+            ad_archive_id: rep.ad_archive_id,
+          } as Ad,
+        };
+      })
+      .filter((item): item is { group: AdsGroup; representative: Ad } => item !== null);
+  } catch (error) {
+    console.error('❌ Error in getAdGroups:', error);
+    return [];
+  }
+}
+
+/**
+ * Получение списка объявлений с фильтрацией
+ */
 export async function getAds(
   search?: string,
   page?: string | null,
   date?: string | null,
   tags?: string[] | null,
-  publisherPlatform?: string | null
-  // limit = 100,
+  publisherPlatform?: string | null,
+  businessId?: string
 ): Promise<Ad[]> {
+  noStore(); // Disable caching for large requests
+
   try {
-    console.log('🔍 Starting getAds function...');
-
-    // Перевіряємо змінні середовища
-    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      console.error('❌ Missing Supabase environment variables');
-      return getFakeAds(search, tags, publisherPlatform); // Передаємо search, tags, platform для фільтрації фейкових даних
-    }
-
-    console.log('✅ Environment variables found');
     const supabase = createServerSupabaseClient();
 
-    let query = supabase
-      .from('ads_library')
-      .select(
-        `
-      id,
-      created_at,
-      ad_archive_id,
-      page_name,
-      text,
-      caption,
-      cta_text,
-      cta_type,
-      display_format,
-      link_url,
-      title,
-      video_hd_url,
-      video_preview_image_url,
-      publisher_platform,
-      audio_script,
-      video_script,
-      meta_ad_url,
-      image_url,
-      image_description,
-      duplicates_links,
-      duplicates_ad_text,
-      duplicates_preview_image,
-      new_scenario,
-      tags,
-      concept,
-      realisation,
-      topic,
-      hook, 
-      character
-    `
-      )
-      .order('created_at', { ascending: false })
-      .order('id', { ascending: false });
-    // .limit(limit)
+    // Get group representative IDs
+    let groupsQuery = supabase.from('ads_groups_test').select('rep_ad_archive_id');
 
-    if (search) {
-      const searchTerm = search.trim();
-      if (searchTerm) {
-        // Improved search - using proper Supabase parameterized queries
+    if (businessId) {
+      groupsQuery = groupsQuery.eq('business_id', businessId);
+    }
+
+    const { data: groups, error: groupsError } = await groupsQuery;
+
+    if (groupsError) {
+      console.error('❌ Error fetching groups:', groupsError);
+      return [];
+    }
+
+    const repIds = (groups || [])
+      .map((g: Record<string, unknown>) => String(g.rep_ad_archive_id))
+      .filter(Boolean);
+
+    if (repIds.length === 0) {
+      console.warn('⚠️ No representative ads found in groups');
+      return [];
+    }
+
+    // Split IDs into chunks of 100 and load in parallel
+    const chunkSize = 100;
+    const chunks: string[][] = [];
+
+    for (let i = 0; i < repIds.length; i += chunkSize) {
+      chunks.push(repIds.slice(i, i + chunkSize) as string[]);
+    }
+
+    // Load all chunks in parallel
+    const allPromises = chunks.map(async (chunk) => {
+      let query = supabase
+        .from('ads')
+        .select(
+          `
+          business_id,
+          ad_archive_id,
+          page_name,
+          publisher_platform,
+          text,
+          caption,
+          cta_text,
+          cta_type,
+          display_format,
+          link_url,
+          title,
+          storage_path,
+          video_storage_path,
+          vector_group,
+          created_at
+        `
+        )
+        .in('ad_archive_id', chunk)
+        .order('created_at', { ascending: false });
+
+      if (businessId) {
+        query = query.eq('business_id', businessId);
+      }
+
+      if (search?.trim()) {
+        const term = search.trim();
         query = query.or(
-          `page_name.ilike.%${searchTerm}%,title.ilike.%${searchTerm}%,text.ilike.%${searchTerm}%,caption.ilike.%${searchTerm}%`
+          `page_name.ilike.%${term}%,title.ilike.%${term}%,text.ilike.%${term}%,caption.ilike.%${term}%`
         );
       }
-    }
 
-    if (page) {
-      query = query.eq('page_name', page);
-    }
+      if (page) query = query.eq('page_name', page);
 
-    // Filter by publisher platform: column may contain comma-separated values like
-    // "FACEBOOK, INSTAGRAM" so use ILIKE matching for case-insensitive partial match.
-    if (publisherPlatform) {
-      const term = publisherPlatform.trim();
-      if (term) {
-        query = query.ilike('publisher_platform', `%${term}%`);
-      }
-    }
-
-    if (date) {
-      const now = new Date();
-      let daysAgo;
-
-      switch (date) {
-        case '7days':
-          daysAgo = 7;
-          break;
-        case '30days':
-          daysAgo = 30;
-          break;
-        case '90days':
-          daysAgo = 90;
-          break;
-        default:
-          daysAgo = 0;
+      if (publisherPlatform?.trim()) {
+        query = query.ilike('publisher_platform', `%${publisherPlatform.trim()}%`);
       }
 
-      if (daysAgo > 0) {
-        const pastDate = new Date(now);
-        pastDate.setDate(now.getDate() - daysAgo);
-        query = query.gte('created_at', pastDate.toISOString());
-      }
-    }
-
-    // Фільтрація по тегах (якщо підтримується в Supabase)
-    if (tags && tags.length > 0) {
-      // Припускаємо, що tags зберігається як JSON array в Supabase
-      query = query.overlaps('tags', tags);
-    }
-
-    console.log('🚀 Executing Supabase query...');
-    const res = await query;
-    const data = res.data;
-    const error = res.error;
-
-    if (error) {
-      console.error('❌ Supabase error:', error);
-      console.log('🔄 Falling back to fake data...');
-      return getFakeAds(search, tags, publisherPlatform);
-    }
-
-    console.log(
-      '✅ Successfully fetched',
-      Array.isArray(data) ? data.length : 0,
-      'ads from Supabase'
-    );
-    try {
-      const ads = Array.isArray(data) ? (data as Ad[]) : [];
-      const ids = ads.map((a) => a.id);
-      console.log('Fetched ad IDs from Supabase:', ids.join(', '));
-
-      // If no filters provided, also fetch the global count to compare
-      const hasFilters = !!(
-        search ||
-        page ||
-        date ||
-        (tags && tags.length > 0) ||
-        publisherPlatform
-      );
-      if (!hasFilters) {
-        try {
-          const { data: allRows, error: allError } = await supabase
-            .from('ads_library')
-            .select('id');
-          if (!allError && Array.isArray(allRows)) {
-            const allIds = allRows.map((r: unknown) => (r as { id: number }).id);
-            console.log('All ad IDs in DB:', allIds.join(', '));
-            // Compute missing ids (in DB but not in fetched page)
-            const missing = allIds.filter((id) => !ids.map(String).includes(String(id)));
-            if (missing.length > 0) {
-              console.log('Missing ad IDs (in DB but not returned):', missing.join(', '));
-              try {
-                const { data: missingRows, error: missingErr } = await supabase
-                  .from('ads_library')
-                  .select(
-                    'id, created_at, ad_archive_id, page_name, display_format, image_url, tags'
-                  )
-                  .in('id', missing as (string | number)[]);
-                if (missingErr) {
-                  console.debug('Error fetching missing rows details', missingErr);
-                } else {
-                  console.log('Details for missing rows:', JSON.stringify(missingRows, null, 2));
-                }
-              } catch (e) {
-                console.debug('Failed to fetch missing rows details', e);
-              }
-            } else {
-              console.log('No missing ad IDs detected between DB and fetched set.');
-            }
-          } else if (allError) {
-            console.debug('Error fetching all ad ids for comparison', allError);
-          }
-        } catch (e) {
-          console.debug('Failed to fetch global id list for ads_library', e);
+      if (date) {
+        const days = { '7days': 7, '30days': 30, '90days': 90 }[date] || 0;
+        if (days > 0) {
+          const pastDate = new Date();
+          pastDate.setDate(pastDate.getDate() - days);
+          query = query.gte('created_at', pastDate.toISOString());
         }
       }
-    } catch (e) {
-      console.debug('Failed to log fetched ad ids', e);
-    }
 
-    // If we have server credentials, generate proxy URLs for preview images
-    // stored in private buckets so server-rendered pages can include accessible
-    // image URLs without exposing the service role key. Use storage paths from
-    // the DB when available and try multiple buckets to handle legacy vs new structure.
-    try {
-      const ads = (data as Ad[]) || [];
+      const { data, error } = await query;
 
-      const signedPromises = ads.map(async (ad) => {
-        try {
-          if (!ad || !ad.ad_archive_id) return ad;
-
-          // Determine best storage path: prefer DB-stored path, else fall back to conventional path
-          const storedPhotoPath =
-            typeof ad.image_url === 'string' && ad.image_url.startsWith('ads/')
-              ? ad.image_url
-              : null;
-          const storedPreviewPath =
-            typeof ad.video_preview_image_url === 'string' &&
-            ad.video_preview_image_url.startsWith('ads/')
-              ? ad.video_preview_image_url
-              : null;
-
-          const conventionalBase = `ads/${ad.ad_archive_id}/${ad.ad_archive_id}`;
-          const conventionalPhotoPath = `${conventionalBase}.jpeg`;
-          const conventionalPreviewPath = `${conventionalBase}.jpeg`;
-
-          // Build bucket list: legacy buckets only
-          const photoBuckets = ['test9bucket_photo'];
-          const previewBuckets = ['test10public_preview'];
-
-          // Choose path depending on format
-          let pathToUse =
-            ad.display_format === 'VIDEO'
-              ? storedPreviewPath || conventionalPreviewPath
-              : storedPhotoPath || conventionalPhotoPath;
-
-          // If no main photo path exists for a photo creative, try first card as preview
-          if ((!storedPhotoPath || storedPhotoPath.length === 0) && ad.display_format !== 'VIDEO') {
-            try {
-              const cardRes = await supabase
-                .from('ad_cards')
-                .select('storage_path, card_index')
-                .eq('ad_archive_id', ad.ad_archive_id)
-                .order('card_index', { ascending: true })
-                .limit(1);
-              const firstCard =
-                Array.isArray(cardRes.data) && cardRes.data.length > 0 ? cardRes.data[0] : null;
-              if (firstCard && firstCard.storage_path) {
-                pathToUse = firstCard.storage_path;
-              }
-              // If no card found, keep conventional main path (don't fallback to non-existent cards/0.jpeg)
-            } catch (e) {
-              // If query fails, keep conventional main path
-            }
-          }
-          const buckets = ad.display_format === 'VIDEO' ? previewBuckets : photoBuckets;
-
-          // Use server proxy route which will try buckets in order and resolve unknown extensions
-          const proxyUrl = `/api/storage/proxy?bucket=${encodeURIComponent(
-            buckets.join(',')
-          )}&path=${encodeURIComponent(pathToUse)}`;
-          return { ...ad, signed_image_url: proxyUrl } as Ad & { signed_image_url?: string };
-        } catch (e) {
-          console.debug('Failed to set proxy image for ad', ad?.id, e);
-        }
-        return ad;
-      });
-
-      const withSigned = await Promise.all(signedPromises);
-
-      try {
-        // Log only count, not full data to avoid console spam
-        console.debug('[getAds] returned ads count=', (withSigned || []).length);
-      } catch (e) {
-        /* noop */
+      if (error) {
+        console.error('❌ Supabase error:', error);
+        return [];
       }
-      return withSigned as Ad[];
-    } catch (e) {
-      console.error('Error generating signed URLs:', e);
-      return (data as Ad[]) || getFakeAds(search, tags, publisherPlatform);
+
+      return data || [];
+    });
+
+    const results = await Promise.all(allPromises);
+    const allAds: Ad[] = results.flat();
+
+    if (allAds.length === 0) {
+      return [];
     }
+
+    // Process media file paths
+    const bucket = process.env.NEXT_PUBLIC_AD_BUCKET || 'creatives';
+
+    return allAds.map((ad: Ad) => {
+      // Define preview path (using new storage_path column)
+      const displayFormat = ad.display_format || 'IMAGE';
+      const pathValue = ad.video_storage_path || ad.storage_path || '';
+      let pathToUse = displayFormat === 'VIDEO' ? pathValue : ad.storage_path || '';
+
+      // If no path in main table, can keep conventional path logic
+      if (!pathToUse) {
+        pathToUse = `ads/${ad.ad_archive_id}/${ad.ad_archive_id}.jpeg`;
+      }
+
+      const proxyUrl = `/api/storage/proxy?bucket=${encodeURIComponent(
+        bucket
+      )}&path=${encodeURIComponent(String(pathToUse))}`;
+
+      return {
+        ...ad,
+        signed_image_url: proxyUrl,
+      } as Ad;
+    });
   } catch (error) {
     console.error('❌ Error in getAds:', error);
-    console.log('🔄 Falling back to fake data...');
-    return getFakeAds(search, tags, publisherPlatform);
+    return [];
   }
 }
 
-function getFakeAds(
-  search?: string,
-  tags?: string[] | null,
-  publisherPlatform?: string | null
-): Ad[] {
-  const allFakeAds = [
-    {
-      id: 1,
-      created_at: '2024-01-15T10:30:00Z',
-      ad_archive_id: 'LSC789456123',
-      page_name: 'Lovescape - Dating App',
-      text: 'Ready to find your perfect match? 💕\n\nLovescape uses advanced AI to connect you with people who truly understand you. No more endless swiping - just meaningful connections.\n\n✨ Smart matching algorithm\n💬 Video chat before you meet\n🔒 Verified profiles only\n🎯 Find love, not just dates\n\nJoin 2M+ singles who found love on Lovescape!\n\nDownload now and get 7 days premium FREE! 🎁',
-      caption:
-        'Your love story starts here. Join Lovescape today! 💕 #LovescapeApp #Dating #FindLove #TrueLove',
-      cta_text: 'Download Free',
-      cta_type: 'INSTALL_MOBILE_APP',
-      display_format: 'VIDEO',
-      link_url: 'https://lovescape.app/download',
-      title: 'Find Your Perfect Match with Lovescape AI',
-      video_hd_url: '/generic-dating-app-video.png',
-      video_preview_image_url: '/lovescape-app-preview-couple-smiling.png', // Змінено назву
-      publisher_platform: 'Facebook',
-      audio_script:
-        'Upbeat romantic music starts. Narrator: Tired of meaningless swipes? Ready for something real?',
-      video_script:
-        '00:00 - 00:02: Close-up of a young woman looking frustrated while swiping through a dating app.',
-      meta_ad_url: 'https://www.facebook.com/ads/library/?id=LSC789456123',
-      image_url: '/lovescape-coffee-date.png',
-      image_description:
-        'A warm, inviting image showing a diverse couple having coffee at a modern café.',
-      tags: ['dating', 'ai', 'relationships', 'mobile-app'], // Масив тегів
-      concept: 'Modern Dating',
-      realisation: 'Video Ad',
-      topic: 'Dating App',
-      hook: 'Find meaningful connections',
-      character: 'Lorem ipsum',
-      new_scenario: `\`\`\`json
-[
-  {
-    "persona_adapted_for": "The Seeker of Connection",
-    "original_ad_id": "788617743754033",
-    "ad_script_title": "Find Your Unconditional Connection",
-    "ad_script_full_text": "Tired of feeling unheard? There's someone who truly gets you. Your AI companion is here to listen, understand, and share every moment, day or night. Experience a connection that's always there, just for you.",
-    "technical_task_json": {
-      "visual_elements": [
-        "Maintain the static, intimate close-up on an expressive face, focusing on empathy.",
-        "Begin with a cool, blue-toned background that slowly shifts to a warm, inviting golden hue as the character's expression softens.",
-        "Subtle text overlay at start: 'Feeling alone?' which gently fades away as the character smiles.",
-        "The character's final expression is not just happy, but deeply empathetic and understanding, with a slow, reassuring nod."
-      ],
-      "audio_style": "A warm, gentle, and soothing female voiceover. The background music is a soft, ambient piano track that builds from a simple, slightly melancholic melody to a fuller, hopeful chord progression.",
-      "call_to_action": "Find Your Companion"
-    }
-  },
-  {
-    "persona_adapted_for": "The Social Strategist",
-    "original_ad_id": "788617743754033",
-    "ad_script_title": "Your Secret Social Playbook",
-    "ad_script_full_text": "Want to be the most interesting person in the room? Practice your chat, master witty banter, and learn to flirt with confidence. Your AI partner is ready for smart, engaging conversations that sharpen your social skills. Never be tongue-tied again.",
-    "technical_task_json": {
-      "visual_elements": [
-        "Dynamic split-screen: A simulated, fast-paced text conversation on the left, and a man reacting with growing confidence on the right.",
-        "Quick-cut montage of the AI character with different playful expressions (a smirk, a wink, a curious head tilt) in various stylish social settings (a cafe, a lounge).",
-        "Kinetic typography callouts pop on screen over the visuals: 'Witty Banter,' 'Confidence Boost,' 'Perfect Your Opening Line.'",
-        "End shot on the AI character giving a confident, playful wink directly to the camera."
-      ],
-      "audio_style": "An upbeat, modern, and stylish lo-fi hip-hop or chill-pop instrumental. The voiceover is confident, slightly sassy, and energetic (female voice), like a helpful 'wingwoman'.",
-      "call_to_action": "Boost Your Confidence"
-    }
-  }
-]
-\`\`\``,
-    },
-    {
-      id: 2,
-      created_at: '2024-01-14T15:20:00Z',
-      ad_archive_id: 'BM123789456',
-      page_name: 'BetterMe',
-      text: 'How to hit enough protein for weight loss and gain muscle? High Protein Meal Plan for Busy Women on a Weight Loss Journey',
-      caption: 'Transform your body with our meal plan',
-      concept: 'Modern Dating',
-      realisation: 'Video Ad',
-      topic: 'Dating App',
-      hook: 'Find meaningful connections',
-      character: 'Lorem ipsum',
-      cta_text: 'Try now!',
-      cta_type: 'LEARN_MORE',
-      display_format: 'VIDEO',
-      link_url: 'https://betterme.world',
-      title: 'High Protein Meal Plan',
-      video_hd_url: '/video-placeholder.png',
-      video_preview_image_url: '/placeholder.svg?height=400&width=600', // Змінено назву
-      publisher_platform: 'Facebook',
-      audio_script:
-        "How to hit enough protein for weight loss and gain muscle. In a week, you'll start to feel it...",
-      video_script:
-        '00:00 – 00:02: A hand uses a spoon to scoop a spoonful of a fruit-and-yogurt-based meal.',
-      meta_ad_url: 'https://www.facebook.com/ads/library/ad_archive/?id=123456789',
-      image_url: '/placeholder-hm5r5.png',
-      image_description: 'Image of a healthy protein-rich meal.',
-      tags: ['fitness', 'nutrition', 'weight-loss', 'health'], // Масив тегів
-      new_scenario: null,
-    },
-    {
-      id: 3,
-      created_at: '2024-01-13T09:15:00Z',
-      ad_archive_id: 'NK987654321',
-      page_name: 'Nike',
-      text: 'Just Do It. New collection available now.',
-      caption: 'Nike Air Max - Step into greatness',
-      cta_text: 'Shop Now',
-      cta_type: 'SHOP_NOW',
-      concept: 'Modern Dating',
-      realisation: 'Video Ad',
-      topic: 'Dating App',
-      hook: 'Find meaningful connections',
-      character: 'Lorem ipsum',
-      display_format: 'IMAGE',
-      link_url: 'https://nike.com',
-      title: 'Nike Air Max Collection',
-      video_hd_url: null,
-      video_preview_image_url: '/placeholder.svg?height=400&width=600', // Змінено назву
-      publisher_platform: 'Instagram',
-      audio_script: null,
-      video_script: null,
-      meta_ad_url: 'https://www.facebook.com/ads/library/ad_archive/?id=987654321',
-      image_url: '/stylish-sneakers.png',
-      image_description: 'Close-up of Nike Air Max shoes on a running track.',
-      tags: ['fashion', 'sports', 'sneakers', 'lifestyle'], // Масив тегів
-      new_scenario: null,
-    },
-  ];
-
-  let filteredAds = allFakeAds;
-
-  if (search?.trim()) {
-    const searchTerms = search.toLowerCase().trim().split(/\s+/);
-    filteredAds = filteredAds.filter((ad) => {
-      const searchableText = [ad.page_name, ad.title, ad.text, ad.caption, ...(ad.tags || [])]
-        .join(' ')
-        .toLowerCase();
-
-      return searchTerms.every((term) => searchableText.includes(term));
-    });
-  }
-
-  // Якщо є теги, фільтруємо по тегах - безпечна перевірка
-  if (tags && tags.length > 0) {
-    filteredAds = filteredAds.filter(
-      (ad) => Array.isArray(ad.tags) && ad.tags.some((tag) => tags.includes(tag))
-    );
-  }
-
-  // Якщо є фільтр платформи (fake data)
-  if (publisherPlatform && publisherPlatform.trim()) {
-    const wanted = publisherPlatform.trim().toLowerCase();
-    filteredAds = filteredAds.filter((ad) => {
-      const platforms = (ad.publisher_platform || '')
-        .split(',')
-        .map((p) => p.trim().toLowerCase())
-        .filter(Boolean);
-      return platforms.includes(wanted);
-    });
-  }
-
-  return filteredAds;
-}
-
-export async function getUniquePages(): Promise<string[]> {
+/**
+ * Получение уникальных имен страниц
+ */
+export async function getUniquePages(businessId?: string): Promise<string[]> {
   try {
-    console.log('🔍 Starting getUniquePages function...');
-
-    // Перевіряємо змінні середовища
-    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-      console.error('❌ Missing Supabase environment variables');
-      return ['Lovescape - Dating App', 'BetterMe', 'Nike'];
-    }
-
     const supabase = createServerSupabaseClient();
 
-    console.log('🚀 Executing Supabase query for pages...');
-    const { data, error } = await supabase
-      .from('ads_library')
-      .select('page_name')
-      .order('page_name')
-      .not('page_name', 'is', null);
+    let query = supabase.from('ads').select('page_name').not('page_name', 'is', null);
 
-    if (error) {
-      console.error('❌ Supabase error in getUniquePages:', error);
-      return ['Lovescape - Dating App', 'BetterMe', 'Nike'];
+    if (businessId) {
+      query = query.eq('business_id', businessId);
     }
 
-    // Extract unique page names
-    const uniquePages = [...new Set(data.map((item) => item.page_name))];
-    console.log('✅ Successfully fetched', uniquePages.length, 'unique pages');
-    return uniquePages.length > 0 ? uniquePages : ['Lovescape - Dating App', 'BetterMe', 'Nike'];
+    const { data, error } = await query.order('page_name');
+
+    if (error || !data) return [];
+
+    return Array.from(new Set(data.map((item) => item.page_name)));
   } catch (error) {
     console.error('❌ Error in getUniquePages:', error);
-    return ['Lovescape - Dating App', 'BetterMe', 'Nike'];
+    return [];
+  }
+}
+
+/**
+ * Получение всех объявлений группы
+ */
+export async function getRelatedAdsByGroup(businessId: string, vectorGroup: number): Promise<Ad[]> {
+  try {
+    const supabase = createServerSupabaseClient();
+
+    const { data, error } = await supabase
+      .from('ads')
+      .select('*')
+      .eq('business_id', businessId)
+      .eq('vector_group', vectorGroup)
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+
+    return (data || []).map((ad) => ({
+      ...ad,
+      id: ad.ad_archive_id,
+      realisation: ad.realization,
+    })) as Ad[];
+  } catch (error) {
+    console.error('❌ Error in getRelatedAdsByGroup:', error);
+    return [];
+  }
+}
+
+/**
+ * Получение списка бизнесов
+ */
+export async function getBusinesses(): Promise<{ id: string; name: string; slug: string }[]> {
+  try {
+    const supabase = createServerSupabaseClient();
+
+    const { data, error } = await supabase
+      .from('businesses')
+      .select('id, name, slug')
+      .order('name', { ascending: true });
+
+    if (error) {
+      console.error('❌ Error fetching businesses:', error);
+      return [];
+    }
+
+    return data || [];
+  } catch (error) {
+    console.error('❌ Error in getBusinesses:', error);
+    return [];
   }
 }

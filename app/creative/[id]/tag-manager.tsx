@@ -33,17 +33,17 @@ export function TagManager({ ad, onTagsUpdate }: TagManagerProps) {
     setIsLoading(true);
 
     try {
-      // Тут буде API запит для збереження тегів в базу даних
-      // Поки що просто оновлюємо локальний стан
+      // API request to save tags to database will be here
+      // For now we just update local state
       const updatedTags = [...tags, trimmedTag];
       setTags(updatedTags);
       setNewTag('');
       setIsAddingTag(false);
 
-      // Викликаємо callback якщо він переданий
+      // Call callback if provided
       onTagsUpdate?.(updatedTags);
 
-      // Симулюємо API запит
+      // Simulate API request
       await new Promise((resolve) => setTimeout(resolve, 500));
     } catch (error) {
       console.error('Error adding tag:', error);
@@ -57,14 +57,14 @@ export function TagManager({ ad, onTagsUpdate }: TagManagerProps) {
       setIsLoading(true);
 
       try {
-        // Тут буде API запит для видалення тегу з бази даних
+        // API request to delete tag from database will be here
         const updatedTags = tags.filter((tag) => tag !== tagToRemove);
         setTags(updatedTags);
 
-        // Викликаємо callback якщо він переданий
+        // Call callback if provided
         onTagsUpdate?.(updatedTags);
 
-        // Симулюємо API запит
+        // Simulate API request
         await new Promise((resolve) => setTimeout(resolve, 300));
       } catch (error) {
         console.error('Error removing tag:', error);

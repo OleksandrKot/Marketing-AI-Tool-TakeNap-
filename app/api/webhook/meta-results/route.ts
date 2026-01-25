@@ -3,10 +3,10 @@ import { type NextRequest, NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 import { createServerSupabaseClient } from '@/lib/core/supabase';
 
-// Webhook для отримання результатів від Make.com
+// Webhook for receiving results from Make.com
 export async function POST(request: NextRequest) {
   try {
-    // Перевірка API ключа
+    // Verify API key
     const apiKey = request.headers.get('x-api-key');
     if (apiKey !== process.env.MAKE_API_KEY) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -15,12 +15,12 @@ export async function POST(request: NextRequest) {
     const { ads_data } = await request.json();
     const supabase = createServerSupabaseClient();
 
-    // Збереження всіх знайдених креативів
+    // Save all found creatives
     const results = [];
 
     for (const adData of ads_data) {
       const { data, error } = await supabase
-        .from('ads_library')
+        .from('ads')
         .insert([
           {
             ad_archive_id: adData.ad_archive_id,

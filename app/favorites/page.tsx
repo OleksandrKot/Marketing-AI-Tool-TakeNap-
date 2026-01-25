@@ -331,12 +331,8 @@ export default function FavoritesPage() {
                         <div className="relative w-full h-full">
                           {/* storage-backed preview */}
                           <StorageImage
-                            bucket={
-                              ad.display_format === 'VIDEO'
-                                ? 'test10public_preview'
-                                : 'test9bucket_photo'
-                            }
-                            path={`${ad.ad_archive_id}.jpeg`}
+                            bucket="creatives"
+                            path={ad.storage_path || `business-unknown/${ad.ad_archive_id}.jpeg`}
                             alt={ad?.title || 'preview'}
                             fill={true}
                             className="object-cover transition-all duration-300 group-hover:scale-105"
@@ -397,12 +393,8 @@ export default function FavoritesPage() {
                           <div className="relative w-full h-full">
                             {/* storage-backed preview */}
                             <StorageImage
-                              bucket={
-                                ad.display_format === 'VIDEO'
-                                  ? 'test10public_preview'
-                                  : 'test9bucket_photo'
-                              }
-                              path={`${ad.ad_archive_id}.jpeg`}
+                              bucket="creatives"
+                              path={ad.storage_path || `business-unknown/${ad.ad_archive_id}.jpeg`}
                               alt={ad?.title || 'preview'}
                               fill={true}
                               className="object-cover"

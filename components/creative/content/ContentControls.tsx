@@ -52,7 +52,8 @@ export default function ContentControls({ ad }: Props) {
     if (!ad.ad_archive_id) return;
     setIsLoading(true);
     try {
-      const url = await fetchSignedUrl('test10public_preview', `${ad.ad_archive_id}.jpeg`);
+      const path = ad.storage_path || `business-unknown/${ad.ad_archive_id}.jpeg`;
+      const url = await fetchSignedUrl('creatives', path);
       if (!url) return;
       await downloadFromUrl(url, `${ad.title + ad.ad_archive_id || 'preview'}.jpeg`);
     } catch (_) {
@@ -66,7 +67,9 @@ export default function ContentControls({ ad }: Props) {
     if (!ad.ad_archive_id) return;
     setIsLoading(true);
     try {
-      const url = await fetchSignedUrl('test8public', `${ad.ad_archive_id}.mp4`);
+      const path =
+        ad.video_storage_path || ad.storage_path || `business-unknown/${ad.ad_archive_id}.mp4`;
+      const url = await fetchSignedUrl('creatives', path);
       if (!url) return;
       await downloadFromUrl(url, `${ad.title + ad.ad_archive_id || 'video'}.mp4`);
     } catch (_) {
@@ -80,7 +83,8 @@ export default function ContentControls({ ad }: Props) {
     if (!ad.ad_archive_id) return;
     setIsLoading(true);
     try {
-      const url = await fetchSignedUrl('test9bucket_photo', `${ad.ad_archive_id}.jpeg`);
+      const path = ad.storage_path || `business-unknown/${ad.ad_archive_id}.jpeg`;
+      const url = await fetchSignedUrl('creatives', path);
       if (!url) return;
       await downloadFromUrl(url, `${ad.title + ad.ad_archive_id || 'image'}.jpeg`);
     } catch (_) {

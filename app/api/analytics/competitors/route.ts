@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
 
     try {
       const result = await supabase
-        .from('ads_library')
+        .from('ads')
         .select('*')
         .in('page_name', competitors)
         .order('created_at', { ascending: false });
