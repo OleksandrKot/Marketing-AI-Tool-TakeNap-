@@ -134,7 +134,7 @@ function calculateAnalytics(ads: Ad[], selectedCompetitors: string[]): Competito
   // Mechanic distribution (mock - based on hook/realisation)
   const mechanicCounts = new Map<string, number>();
   ads.forEach((ad) => {
-    const mechanic = ad.hook || ad.realisation || 'Standard';
+    const mechanic = ad.hook || ad.realization || 'Standard';
     mechanicCounts.set(mechanic, (mechanicCounts.get(mechanic) || 0) + 1);
   });
 

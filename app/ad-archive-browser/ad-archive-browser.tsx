@@ -71,6 +71,8 @@ export function AdArchiveBrowser({
     importTotalCreatives,
     userSortMode,
     setUserSortMode,
+    selectedBusinessId,
+    setSelectedBusinessId,
   } = state;
 
   // Default sort on main archive to ascending variations (least -> most)
@@ -125,7 +127,12 @@ export function AdArchiveBrowser({
         requestLogs={state.requestLogs}
         clearRequestLogs={state.clearRequestLogs}
         businesses={businesses}
-        selectedBusiness={selectedBusiness}
+        selectedBusiness={selectedBusinessId || selectedBusiness}
+        onBusinessChange={(id: string) => {
+          try {
+            setSelectedBusinessId(id);
+          } catch {}
+        }}
       />
 
       <div className="flex items-center justify-between w-full gap-4 mb-8">

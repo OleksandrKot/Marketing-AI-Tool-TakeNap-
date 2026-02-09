@@ -135,30 +135,28 @@ export default function PromptEditor({ ad }: { ad: Ad }) {
         </div>
 
         <div className="p-6 space-y-4">
-          <p className="text-sm text-slate-500">
-            Редагуйте параметри промпта по полям або прямо JSON.
-          </p>
+          <p className="text-sm text-slate-500">Edit prompt parameters via fields or raw JSON.</p>
 
           <div className="grid grid-cols-1 gap-3">
             <Input
               value={fields.persona}
               onChange={(e) => updateField('persona', e.target.value)}
-              placeholder="Persona (персонаж)"
+              placeholder="Persona"
             />
             <Input
               value={fields.size}
               onChange={(e) => updateField('size', e.target.value)}
-              placeholder="Size (розмір креативу) — наприклад 1080x1080"
+              placeholder="Size — e.g., 1080x1080"
             />
             <Input
               value={fields.format}
               onChange={(e) => updateField('format', e.target.value)}
-              placeholder="Format (формат) — Image / Video / Stories"
+              placeholder="Format — Image / Video / Stories"
             />
             <Textarea
               value={fields.appearance}
               onChange={(e) => updateField('appearance', e.target.value)}
-              placeholder="Appearance / Вигляд креативу"
+              placeholder="Appearance"
             />
           </div>
 

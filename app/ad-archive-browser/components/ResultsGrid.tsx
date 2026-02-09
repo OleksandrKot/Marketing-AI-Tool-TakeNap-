@@ -26,6 +26,7 @@ type Props = {
   selectionMode?: boolean;
   selectedIds?: Record<string, boolean>;
   onToggleSelect?: (id: string) => void;
+  defaultCardsExpanded?: boolean;
 };
 
 function ResultsGrid({
@@ -43,6 +44,7 @@ function ResultsGrid({
   selectionMode,
   selectedIds,
   onToggleSelect,
+  defaultCardsExpanded,
 }: Props) {
   return (
     <>
@@ -76,11 +78,12 @@ function ResultsGrid({
 
             return (
               <AdCard
-                key={adKey}
+                key={`${adKey}-${idx}`}
                 ad={ad}
                 relatedAds={relatedAds}
                 relatedCount={relatedCount}
                 index={idx + 1}
+                defaultCardsExpanded={defaultCardsExpanded}
                 selectionMode={selectionMode}
                 // Check selection by ad_archive_id
                 selected={selectedIds ? Boolean(selectedIds[adKey]) : false}

@@ -70,27 +70,35 @@ async function generateThumbnailsFromUrl(
   }
 
   return new Promise((resolve, reject) => {
+    console.log('[generateThumbnails] Creating video element with src:', url.substring(0, 100));
     const video = document.createElement('video');
     video.src = url;
     video.crossOrigin = 'anonymous';
-    video.preload = 'auto';
+    video.preload = 'metadata';
     video.muted = true;
     video.playsInline = true;
 
     const cleanup = () => {
+      console.log('[generateThumbnails] Cleaning up');
       video.removeEventListener('loadedmetadata', onLoadedMetadata);
       video.removeEventListener('error', onError);
       video.src = '';
     };
 
     const onError = () => {
+      console.error(
+        '[generateThumbnails] Video load error:',
+        video.error?.message,
+        video.error?.code
+      );
       cleanup();
-      reject(new Error('Failed to load video for thumbnails'));
+      reject(new Error(`Video load failed: ${video.error?.message || 'Unknown error'}`));
     };
 
     const onLoadedMetadata = async () => {
       try {
         const duration = video.duration;
+        console.log('[generateThumbnails] Duration:', duration);
         if (!duration || Number.isNaN(duration)) {
           cleanup();
           return reject(new Error('Invalid video duration'));
@@ -98,6 +106,7 @@ async function generateThumbnailsFromUrl(
 
         const totalSeconds = Math.floor(duration);
         const framesToRender = Math.min(totalSeconds, maxFrames);
+        console.log('[generateThumbnails] Rendering frames:', framesToRender);
 
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
@@ -111,6 +120,13 @@ async function generateThumbnailsFromUrl(
           video.videoWidth && video.videoHeight ? video.videoHeight / video.videoWidth : 9 / 16;
         const targetHeight = Math.floor(targetWidth * ratio);
 
+        console.log('[generateThumbnails] Video dimensions:', {
+          videoWidth: video.videoWidth,
+          videoHeight: video.videoHeight,
+          targetWidth,
+          targetHeight,
+        });
+
         canvas.width = targetWidth;
         canvas.height = targetHeight;
 
@@ -121,29 +137,46 @@ async function generateThumbnailsFromUrl(
           new Promise<void>((res, rej) => {
             const onSeeked = () => {
               video.removeEventListener('seeked', onSeeked);
+              video.removeEventListener('error', onSeekError);
               res();
             };
             const onSeekError = () => {
+              video.removeEventListener('seeked', onSeeked);
               video.removeEventListener('error', onSeekError);
-              rej(new Error('Error seeking video for thumbnail'));
+              console.error('[generateThumbnails] Seek error at time:', time, video.error);
+              rej(
+                new Error(`Error seeking video to ${time}s for thumbnail: ${video.error?.message}`)
+              );
             };
             video.addEventListener('seeked', onSeeked);
             video.addEventListener('error', onSeekError, { once: true });
-            video.currentTime = time;
+            try {
+              video.currentTime = time;
+            } catch (e) {
+              console.error('[generateThumbnails] currentTime set error:', e);
+              onSeekError();
+            }
           });
 
         // Generate one frame per second
         for (let second = 0; second < framesToRender; second++) {
-          // eslint-disable-next-line no-await-in-loop
-          await seekTo(second);
-          ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
-          const dataUrl = canvas.toDataURL('image/jpeg');
-          thumbnails.push(dataUrl);
+          try {
+            // eslint-disable-next-line no-await-in-loop
+            await seekTo(second);
+            ctx.drawImage(video, 0, 0, targetWidth, targetHeight);
+            const dataUrl = canvas.toDataURL('image/jpeg');
+            thumbnails.push(dataUrl);
+          } catch (seekErr) {
+            console.error('[generateThumbnails] Error at frame', second, ':', seekErr);
+            throw seekErr;
+          }
         }
 
+        console.log('[generateThumbnails] Successfully generated', thumbnails.length, 'thumbnails');
         cleanup();
         resolve({ thumbnails, duration });
       } catch (err) {
+        console.error('[generateThumbnails] Error in onLoadedMetadata:', err);
         cleanup();
         reject(err);
       }
@@ -363,7 +396,7 @@ const PromptEditorModal = ({ ad, isOpen, onClose }: PromptEditorModalProps) => {
         id: 'tags',
         key: 'tags',
         label: 'Tags',
-        value: Array.isArray(ad.tags) ? ad.tags.join(', ') : '',
+        value: Array.isArray(A.tags) ? (A.tags as string[]).join(', ') : '',
         isAdditional: true,
       },
     ];
@@ -384,11 +417,11 @@ const PromptEditorModal = ({ ad, isOpen, onClose }: PromptEditorModalProps) => {
     }
   }, [isOpen, initialParams]);
 
-  const isVideo = ad.display_format === 'VIDEO';
+  const isVideo = ['VIDEO', 'DCO'].includes(String(ad.display_format).toUpperCase());
 
   // Initialize video duration from script (fallback if metadata is not available)
   useEffect(() => {
-    if (isOpen && isVideo) {
+    if (isOpen && isVideo && ad.video_storage_path) {
       let totalSec = 0;
       if (ad.video_script) {
         const timeMatches = ad.video_script.match(/\d{1,2}:\d{2}/g);
@@ -425,7 +458,7 @@ const PromptEditorModal = ({ ad, isOpen, onClose }: PromptEditorModalProps) => {
 
   // Load full video URL (signed) for preview and thumbnails
   useEffect(() => {
-    if (!isOpen || !isVideo || !ad.ad_archive_id) {
+    if (!isOpen || !isVideo || !ad.ad_archive_id || !ad.video_storage_path) {
       setVideoUrl(null);
       return;
     }
@@ -435,6 +468,11 @@ const PromptEditorModal = ({ ad, isOpen, onClose }: PromptEditorModalProps) => {
 
     async function loadVideo() {
       try {
+        console.log('[loadVideo] Loading video:', {
+          video_storage_path: ad.video_storage_path,
+          ad_archive_id: ad.ad_archive_id,
+        });
+
         const response = await fetch('/api/storage/signed-url', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -451,9 +489,13 @@ const PromptEditorModal = ({ ad, isOpen, onClose }: PromptEditorModalProps) => {
         const data = await response.json().catch(() => null);
         if (!mounted) return;
 
+        console.log('[loadVideo] Response:', data);
+
         if (data?.url) {
+          console.log('[loadVideo] Setting videoUrl:', data.url.substring(0, 100));
           setVideoUrl(data.url);
         } else {
+          console.log('[loadVideo] No URL in response');
           setVideoUrl(null);
         }
         setVideoLoading(false);
@@ -476,10 +518,17 @@ const PromptEditorModal = ({ ad, isOpen, onClose }: PromptEditorModalProps) => {
   // Generate thumbnails once we have a video URL (YouTube-like timeline)
   useEffect(() => {
     if (!isOpen || !isVideo || !videoUrl) {
+      console.log('[thumbnails] Skipping thumbnails:', {
+        isOpen,
+        isVideo,
+        videoUrl: videoUrl ? 'yes' : 'no',
+      });
       setThumbnails([]);
       setThumbsError(null);
       return;
     }
+
+    console.log('[thumbnails] Starting generation for:', videoUrl.substring(0, 100));
 
     let cancelled = false;
 
@@ -494,6 +543,8 @@ const PromptEditorModal = ({ ad, isOpen, onClose }: PromptEditorModalProps) => {
         );
         if (cancelled) return;
 
+        console.log('[thumbnails] Generated:', thumbs.length, 'duration:', duration);
+
         setThumbnails(thumbs);
 
         // If metadata duration from thumbnails is more reliable, sync it
@@ -503,7 +554,10 @@ const PromptEditorModal = ({ ad, isOpen, onClose }: PromptEditorModalProps) => {
       } catch (err) {
         console.error('Failed to generate thumbnails:', err);
         if (!cancelled) {
-          setThumbsError('Failed to generate thumbnails preview');
+          const errorMsg =
+            err instanceof Error ? err.message : 'Failed to generate thumbnails preview';
+          console.error('Error message:', errorMsg);
+          setThumbsError(errorMsg);
         }
       } finally {
         if (!cancelled) {

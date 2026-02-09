@@ -1,6 +1,8 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useMutation } from '@tanstack/react-query';
+import { postJSON } from '@/lib/api/client';
 
 export default function RequestAccessPage() {
   const router = useRouter();
@@ -8,28 +10,33 @@ export default function RequestAccessPage() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  async function handleRequest(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
-    setMessage(null);
-    try {
-      const res = await fetch('/api/access-requests', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email }),
-      });
-      const payload = await res.json();
-      if (!res.ok) {
-        setMessage(payload?.error || 'Failed to send request');
+  const requestMutation = useMutation<
+    { ok?: boolean; error?: string },
+    { message?: string },
+    { email: string }
+  >({
+    mutationFn: (vars) => postJSON('/api/access-requests', vars),
+    onMutate: () => {
+      setLoading(true);
+      setMessage(null);
+    },
+    onSuccess: (payload) => {
+      if (payload?.error) {
+        setMessage(payload.error || 'Failed to send request');
       } else {
         setMessage('Request submitted. Redirecting to status page...');
         router.push(`/awaiting-approval?email=${encodeURIComponent(email)}`);
       }
-    } catch (err) {
-      setMessage((err as Error).message || 'Network error');
-    } finally {
-      setLoading(false);
-    }
+    },
+    onError: (err) => {
+      setMessage(err?.message || 'Network error');
+    },
+    onSettled: () => setLoading(false),
+  });
+
+  function handleRequest(e: React.FormEvent) {
+    e.preventDefault();
+    requestMutation.mutate({ email });
   }
 
   return (

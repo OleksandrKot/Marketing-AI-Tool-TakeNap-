@@ -32,11 +32,11 @@ export const isStorageUrl = (url: string) => {
 };
 
 /**
- * Построить путь к файлу в бакете creatives
- * @param businessSlug - slug бизнеса из таблицы businesses
- * @param adArchiveId - ad_archive_id объявления
- * @param ext - расширение файла (jpg, mp4, png, и т.д.)
- * @returns путь вида "businessSlug/adArchiveId.ext"
+ * Build path to file in creatives bucket
+ * @param businessSlug - business slug from businesses table
+ * @param adArchiveId - ad_archive_id of the ad
+ * @param ext - file extension (jpg, mp4, png, etc.)
+ * @returns path like "businessSlug/adArchiveId.ext"
  */
 export const buildCreativePath = (businessSlug: string, adArchiveId: string, ext: string) => {
   return `${businessSlug}/${adArchiveId}.${ext}`;
@@ -44,10 +44,10 @@ export const buildCreativePath = (businessSlug: string, adArchiveId: string, ext
 
 /**
  * Get full storage URL for creative
- * @param businessSlug - slug бизнеса
+ * @param businessSlug - business slug
  * @param adArchiveId - ad_archive_id
- * @param ext - расширение файла
- * @returns полный URL вида "https://.../storage/v1/object/public/creatives/slug/id.ext"
+ * @param ext - file extension
+ * @returns full URL like "https://.../storage/v1/object/public/creatives/slug/id.ext"
  */
 export const getCreativeUrl = (businessSlug: string, adArchiveId: string, ext: string) => {
   const bucket = process.env.NEXT_PUBLIC_AD_BUCKET || 'creatives';
@@ -57,10 +57,10 @@ export const getCreativeUrl = (businessSlug: string, adArchiveId: string, ext: s
 
 /**
  * Try to find media with different extensions
- * @param businessSlug - slug бизнеса
+ * @param businessSlug - business slug
  * @param adArchiveId - ad_archive_id
- * @param preferVideo - предпочитать видео если true
- * @returns объект с путями для разных форматов
+ * @param preferVideo - prefer video if true
+ * @returns object with paths for different formats
  */
 export const getCreativeMediaPaths = (
   businessSlug: string,

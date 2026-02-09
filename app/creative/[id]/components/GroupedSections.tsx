@@ -205,9 +205,12 @@ export const GroupedSections = ({
   onCopy?: (text: string, field: string) => Promise<boolean> | boolean | void;
   copiedField?: string | null;
 }) => {
+  // Filter out empty sections
+  const filteredSections = sections.filter((s) => s && s.text && String(s.text).trim().length > 0);
+
   return (
     <div className="space-y-4">
-      {sections.map((s, idx) => (
+      {filteredSections.map((s, idx) => (
         <SectionItem key={idx} section={s} onCopy={onCopy} copiedField={copiedField} />
       ))}
     </div>

@@ -1,8 +1,10 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/core/supabase';
 import { useToast } from '@/components/ui/toast';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { fetchJSON, postJSON } from '@/lib/api/client';
 
 export default function AwaitingApprovalPage() {
   const search = useSearchParams();
@@ -14,57 +16,63 @@ export default function AwaitingApprovalPage() {
   const { showToast } = useToast();
 
   useEffect(() => {
-    async function check() {
-      setChecking(true);
-      try {
-        // If an email query param exists, use it. Otherwise try to get signed-in user.
-        let emailToCheck = email;
-        if (!emailToCheck) {
-          const { data } = await supabase.auth.getSession();
-          const sessionData = (data as unknown) || (await supabase.auth.getSession()).data;
-          const user =
-            (sessionData as Record<string, unknown> | undefined)?.user ??
-            (await supabase.auth.getUser()).data?.user ??
-            null;
-          const emailVal = (user && (user as Record<string, unknown>)['email']) as
-            | string
-            | undefined;
-          emailToCheck = emailVal || '';
-          setUserEmail(emailToCheck || null);
-        } else {
-          setUserEmail(email);
-        }
+    (async () => {
+      const { data } = await supabase.auth.getSession();
+      const sessionData = (data as unknown) || (await supabase.auth.getSession()).data;
+      const user =
+        (sessionData as Record<string, unknown> | undefined)?.user ??
+        (await supabase.auth.getUser()).data?.user ??
+        null;
+      const emailVal = (user && (user as Record<string, unknown>)['email']) as string | undefined;
+      const emailToUse = email || emailVal || '';
+      setUserEmail(emailVal || null);
+      setChecking(false);
+      if (!emailToUse) setApproved(null);
+    })();
+  }, [email]);
 
-        if (!emailToCheck) {
-          setApproved(null);
-          setChecking(false);
-          return;
-        }
+  const emailToCheck = useMemo(() => userEmail || email || '', [userEmail, email]);
 
-        const res = await fetch(
-          `/api/access-requests/check?email=${encodeURIComponent(emailToCheck)}`
-        );
-        const pj = await res.json();
-        if (res.ok) {
-          setApproved(Boolean(pj?.approved));
-          // If approved, navigate to root so user can access site
-          if (pj?.approved) {
-            router.push('/');
-            return;
-          }
-        } else {
-          setApproved(false);
-        }
-      } catch (e) {
-        setApproved(false);
-      } finally {
-        setChecking(false);
-      }
+  const statusQuery = useQuery<{ approved?: boolean }>({
+    queryKey: ['access', 'status', emailToCheck],
+    queryFn: () =>
+      fetchJSON(`/api/access-requests/check?email=${encodeURIComponent(emailToCheck)}`),
+    enabled: !!emailToCheck,
+    refetchInterval: 30_000,
+  });
+
+  useEffect(() => {
+    if (statusQuery.data) {
+      setApproved(Boolean(statusQuery.data?.approved));
+      if (statusQuery.data?.approved) router.push('/');
     }
-    check();
-  }, [email, router]);
+    if (statusQuery.isError) {
+      setApproved(false);
+    }
+  }, [statusQuery.data, statusQuery.isError, router]);
 
   const [reqLoading, setReqLoading] = useState(false);
+
+  const requestMutation = useMutation<
+    { ok?: boolean; error?: string },
+    { message?: string },
+    { email: string }
+  >({
+    mutationFn: (vars) => postJSON('/api/access-requests', vars),
+    onMutate: () => setReqLoading(true),
+    onSuccess: (payload) => {
+      if (payload?.error) {
+        showToast({ message: payload.error || 'Failed to send request', type: 'error' });
+      } else {
+        showToast({
+          message: 'Request submitted. We will contact you when approved.',
+          type: 'success',
+        });
+      }
+    },
+    onError: () => showToast({ message: 'Failed to send request', type: 'error' }),
+    onSettled: () => setReqLoading(false),
+  });
 
   const handleRequestAccess = async () => {
     const emailToSend = userEmail || email || '';
@@ -72,28 +80,7 @@ export default function AwaitingApprovalPage() {
       showToast({ message: 'No email available to request access for.', type: 'error' });
       return;
     }
-
-    setReqLoading(true);
-    try {
-      const res = await fetch('/api/access-requests', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: emailToSend }),
-      });
-      const payload = await res.json();
-      if (!res.ok) {
-        showToast({ message: payload?.error || 'Failed to send request', type: 'error' });
-      } else {
-        showToast({
-          message: 'Request submitted. We will contact you when approved.',
-          type: 'success',
-        });
-      }
-    } catch (e) {
-      showToast({ message: 'Failed to send request', type: 'error' });
-    } finally {
-      setReqLoading(false);
-    }
+    requestMutation.mutate({ email: emailToSend });
   };
 
   const handleSignOut = async () => {

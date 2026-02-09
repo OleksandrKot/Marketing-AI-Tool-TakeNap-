@@ -21,8 +21,10 @@ export const createServerSupabaseClient = () => {
   log.info('🔧 Supabase Key:', key ? '✅ Set' : '❌ Missing');
 
   if (!url || !key) {
-    log.error('❌ Missing Supabase environment variables! Returning a stubbed client.');
-    return createClient(url || '', key || '');
+    log.error('❌ Missing Supabase environment variables!');
+    throw new Error(
+      'Missing server Supabase environment variables SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY'
+    );
   }
 
   return createClient(url, key);

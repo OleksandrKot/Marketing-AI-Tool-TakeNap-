@@ -166,6 +166,128 @@ function DropdownMulti({
   );
 }
 
+function BusinessDropdown({
+  label,
+  businesses,
+  selectedId,
+  onChange,
+}: {
+  label: string;
+  businesses: Array<{ id: string; name: string; slug: string }>;
+  selectedId?: string;
+  onChange: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (
+        open &&
+        wrapRef.current &&
+        !wrapRef.current.contains(t) &&
+        btnRef.current &&
+        !btnRef.current.contains(t)
+      )
+        setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const selectedName = (() => {
+    if (!selectedId) return '';
+    const b = businesses.find((x) => String(x.id) === String(selectedId));
+    return b?.name || '';
+  })();
+
+  const summary = selectedName ? selectedName : 'Select business';
+
+  const filtered = businesses
+    .filter((b) => (query.trim() ? b.name.toLowerCase().includes(query.toLowerCase()) : true))
+    .slice(0, 500);
+
+  return (
+    <div className="relative" ref={wrapRef}>
+      <div className="block text-sm font-medium text-slate-700 mb-2">{label}</div>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-3 py-2 border border-slate-300 rounded-md text-left focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span className="text-slate-900 truncate">{summary}</span>
+        <svg
+          className={`ml-2 h-4 w-4 text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`}
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          aria-hidden
+        >
+          <path
+            fillRule="evenodd"
+            d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.25a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
+            clipRule="evenodd"
+          />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute z-20 mt-2 w-full bg-white border border-slate-200 rounded-md shadow-lg p-3">
+          <input
+            type="text"
+            aria-label={`Search ${label}`}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={`Search ${label.toLowerCase()}...`}
+            className="w-full mb-3 px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder-slate-400"
+          />
+
+          <div className="max-h-56 overflow-auto rounded-md" role="listbox" aria-label={label}>
+            {filtered.map((b) => {
+              const sel = String(b.id) === String(selectedId || '');
+              return (
+                <button
+                  key={b.id}
+                  type="button"
+                  role="option"
+                  aria-selected={sel}
+                  onClick={() => {
+                    onChange(String(b.id));
+                    setOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between py-1.5 px-2 text-left hover:bg-slate-50 rounded ${
+                    sel ? 'bg-violet-50' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <input type="radio" checked={sel} readOnly className="h-4 w-4" />
+                    <span className="text-sm text-slate-700 truncate">{b.name}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-3 flex items-center justify-end">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="text-sm px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 interface FilterOptions {
   pageName?: string;
   pageNames?: string[]; // multi-select
@@ -191,6 +313,7 @@ interface FilterOptions {
   variationCounts?: string[];
   dateRanges?: string[];
   funnels?: string[];
+  businessId?: string;
 }
 
 interface FilterPanelProps {
@@ -208,11 +331,25 @@ interface FilterPanelProps {
     variationBuckets: string[];
     dateRangeOptions: string[];
     funnels: string[];
+    businesses: Array<{ id: string; name: string; slug: string }>;
   };
   initialPageName?: string;
   initialPageNames?: string[];
   initialTopic?: string;
+  initialTopics?: string[];
   initialHook?: string;
+  initialHooks?: string[];
+  initialFunnels?: string[];
+  initialDateRanges?: string[];
+  initialBusinessId?: string;
+  initialDisplayFormats?: string[];
+  initialCtaTypes?: string[];
+  initialConcepts?: string[];
+  initialRealizations?: string[];
+  initialCharacters?: string[];
+  initialPlatforms?: string[];
+  initialSearchQuery?: string;
+  initialVariationCounts?: string[];
   counts?: {
     pageNames: Record<string, number>;
     publisherPlatforms: Record<string, number>;
@@ -235,35 +372,65 @@ function FilterPanelComponent({
   initialPageName = '',
   initialPageNames = [],
   initialTopic = '',
+  initialTopics = [],
   initialHook = '',
+  initialHooks = [],
+  initialFunnels = [],
+  initialDateRanges = [],
+  initialBusinessId = '',
+  initialDisplayFormats = [],
+  initialCtaTypes = [],
+  initialConcepts = [],
+  initialRealizations = [],
+  initialCharacters = [],
+  initialPlatforms = [],
+  initialSearchQuery = '',
+  initialVariationCounts = [],
   counts,
 }: FilterPanelProps) {
   const [filters, setFilters] = useState<FilterOptions>({
     pageName: '',
-    pageNames: [],
+    pageNames: initialPageNames,
     publisherPlatform: '',
-    publisherPlatforms: [],
+    publisherPlatforms: initialPlatforms,
     ctaType: '',
-    ctaTypes: [],
+    ctaTypes: initialCtaTypes,
     displayFormat: '',
-    displayFormats: [],
-    searchQuery: '',
+    displayFormats: initialDisplayFormats,
+    searchQuery: initialSearchQuery,
     conceptFormat: '',
-    conceptFormats: [],
+    conceptFormats: initialConcepts,
     realizationFormat: '',
-    realizationFormats: [],
+    realizationFormats: initialRealizations,
     topicFormat: '',
-    topicFormats: [],
+    topicFormats: initialTopics,
     hookFormat: '',
-    hookFormats: [],
+    hookFormats: initialHooks,
     characterFormat: '',
-    characterFormats: [],
+    characterFormats: initialCharacters,
     variationCount: '',
-    variationCounts: [],
+    variationCounts: initialVariationCounts,
     dateRange: '',
-    dateRanges: [],
-    funnels: [],
+    dateRanges: initialDateRanges,
+    funnels: initialFunnels,
+    businessId: initialBusinessId,
   });
+
+  // Note: Do not auto-prune selections during facets refresh to avoid accidental resets.
+  // Default-select the first available business when none is chosen
+  useEffect(() => {
+    if (
+      !filters.businessId &&
+      Array.isArray(availableOptions.businesses) &&
+      availableOptions.businesses.length > 0
+    ) {
+      const firstId = availableOptions.businesses[0].id;
+      const nf = { ...filters, businessId: String(firstId) };
+      setFilters(nf);
+      onFiltersChange(nf);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availableOptions.businesses]);
   // counts is provided from props
 
   // Initialize pageName from prop when component mounts
@@ -302,10 +469,33 @@ function FilterPanelComponent({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialHook]);
-  const handleFilterChange = (key: keyof FilterOptions, value: string) => {
-    const newFilters = { ...filters, [key]: value };
-    setFilters(newFilters);
-    onFiltersChange(newFilters);
+
+  // Initialize funnels/dateRanges from props on mount
+  useEffect(() => {
+    const nf: FilterOptions = { ...filters };
+    let changed = false;
+    if (Array.isArray(initialFunnels) && initialFunnels.length > 0) {
+      nf.funnels = initialFunnels;
+      changed = true;
+    }
+    if (Array.isArray(initialDateRanges) && initialDateRanges.length > 0) {
+      nf.dateRanges = initialDateRanges;
+      nf.dateRange = '';
+      changed = true;
+    }
+    if (changed) {
+      setFilters(nf);
+      onFiltersChange(nf);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const handleFilterChange = <K extends keyof FilterOptions>(key: K, value: FilterOptions[K]) => {
+    setFilters((prev) => {
+      const next = { ...prev, [key]: value } as FilterOptions;
+      // Propagate changes to parent immediately (e.g., search, business)
+      onFiltersChange(next);
+      return next;
+    });
   };
 
   const togglePageName = (name: string) => {
@@ -345,20 +535,35 @@ function FilterPanelComponent({
   };
 
   const clearFilters = () => {
-    const clearedFilters = {
+    const clearedFilters: FilterOptions = {
       pageName: '',
       pageNames: [],
       publisherPlatform: '',
+      publisherPlatforms: [],
       ctaType: '',
+      ctaTypes: [],
       displayFormat: '',
+      displayFormats: [],
       dateRange: '',
+      dateRanges: [],
       searchQuery: '',
       conceptFormat: '',
+      conceptFormats: [],
       realizationFormat: '',
+      realizationFormats: [],
       topicFormat: '',
+      topicFormats: [],
       hookFormat: '',
+      hookFormats: [],
       characterFormat: '',
+      characterFormats: [],
       variationCount: '',
+      variationCounts: [],
+      funnels: [],
+      businessId:
+        Array.isArray(availableOptions.businesses) && availableOptions.businesses.length > 0
+          ? String(availableOptions.businesses[0].id)
+          : '',
     };
     setFilters(clearedFilters);
     onFiltersChange(clearedFilters);
@@ -368,14 +573,45 @@ function FilterPanelComponent({
     <div className="bg-white rounded-lg shadow-md p-6 mb-6 border border-slate-200">
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-semibold text-slate-900">Filters</h2>
-        <button
-          onClick={clearFilters}
-          aria-label="Clear all filters"
-          title="Clear all filters"
-          className="text-sm text-slate-600 hover:text-slate-800 underline focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        >
-          Clear all
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => {
+              try {
+                const href = window.location.href;
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                  navigator.clipboard.writeText(href).catch(() => {});
+                }
+                // Fallback: open in new tab if copy fails
+                else {
+                  window.open(href, '_blank');
+                }
+              } catch (e) {
+                // noop
+              }
+            }}
+            aria-label="Copy link to current filters"
+            title="Copy link to current filters"
+            className="text-sm px-3 py-1.5 rounded-md bg-slate-100 text-slate-900 hover:bg-slate-200 border border-slate-200"
+          >
+            Export via link
+          </button>
+          <button
+            disabled
+            aria-disabled
+            title="WIP: JSON export will be available soon"
+            className="text-sm px-3 py-1.5 rounded-md bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed"
+          >
+            Export JSON (WIP)
+          </button>
+          <button
+            onClick={clearFilters}
+            aria-label="Clear all filters"
+            title="Clear all filters"
+            className="text-sm text-slate-600 hover:text-slate-800 underline focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          >
+            Clear all
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -412,10 +648,7 @@ function FilterPanelComponent({
           options={availableOptions.publisherPlatforms}
           selected={filters.publisherPlatforms || []}
           counts={counts?.publisherPlatforms}
-          onToggle={(val) => {
-            const v = val.toLowerCase();
-            makeToggle('publisherPlatforms', 'publisherPlatform')(v);
-          }}
+          onToggle={makeToggle('publisherPlatforms', 'publisherPlatform')}
           onClear={makeClear('publisherPlatforms', 'publisherPlatform')}
         />
 
@@ -488,7 +721,7 @@ function FilterPanelComponent({
         {/* Variations */}
         <DropdownMulti
           label="Variations"
-          options={availableOptions.variationBuckets.map((b) => {
+          options={(availableOptions?.variationBuckets || []).map((b) => {
             const labelMap: Record<string, string> = {
               more_than_10: 'More than 10',
               '5_10': '5–10',
@@ -523,7 +756,7 @@ function FilterPanelComponent({
         {/* Date Ranges */}
         <DropdownMulti
           label="Creation Period"
-          options={availableOptions.dateRangeOptions.map((d) => {
+          options={(availableOptions?.dateRangeOptions || []).map((d) => {
             const labelMap: Record<string, string> = {
               today: 'Today',
               week: 'Last week',
@@ -563,6 +796,14 @@ function FilterPanelComponent({
           counts={counts?.funnels}
           onToggle={makeToggle('funnels')}
           onClear={makeClear('funnels')}
+        />
+
+        {/* Business */}
+        <BusinessDropdown
+          label="Business"
+          businesses={availableOptions.businesses}
+          selectedId={filters.businessId}
+          onChange={(id) => handleFilterChange('businessId', id)}
         />
       </div>
     </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, memo } from 'react';
+import { useState, useCallback, memo, useEffect, useMemo } from 'react';
 // favorites handled by HeartButton component
 import { useRouter, useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
@@ -19,7 +19,7 @@ import { Button } from '@/components/ui/button';
 import { ProfileDropdown } from '@/app/login-auth/components/profile-dropdown';
 import { CreativeTabs } from '@/components/creative/tabs/CreativeTabs';
 import ContentTab from './content-tab.client';
-import { InfoTab } from './info-tab';
+import { AdDetailsSkeleton } from './ad-details-skeleton';
 // tag manager removed from header for simplified detail view
 import type { Ad } from '@/lib/core/types';
 import { buildUnifiedAd } from './utils/adData';
@@ -30,27 +30,39 @@ const ShareModal = dynamic(() => import('./share-modal'), {
   ssr: false,
 });
 
+// Lazy-load InfoTab to defer non-critical content
+const InfoTab = dynamic(() => import('./info-tab').then((m) => m.InfoTab), {
+  loading: () => <div className="min-h-64 animate-pulse bg-slate-100 rounded-2xl" />,
+  ssr: false,
+});
+
 interface AdDetailsProps {
   ad: Ad;
   relatedAds?: Ad[] | null;
-  // precomputed server-side values
-  groupedSections?: { title: string; text: string }[];
-  visualMainParagraphs?: string[];
-  visualDerivedFromVideo?: boolean;
-  metaAnalysis?: Record<string, unknown>;
-  // adaptationScenarios removed with Adaptations feature
 }
 
 const AdDetails = memo(function AdDetails({ ad, relatedAds }: AdDetailsProps) {
+  const [isReady, setIsReady] = useState(false);
   const router = useRouter();
   // Normalize creative id to string to avoid mismatches (some ads have numeric ad_archive_id)
   const creativeId = String(ad.ad_archive_id ?? ad.id);
   const [showShareModal, setShowShareModal] = useState(false);
   const [showCollectionsModal, setShowCollectionsModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'content' | 'info'>('content');
-  // copiedAdId state removed because not used in UI
+
+  // Pre-compute unified ads (top level, not conditional)
+  const adUnified = useMemo(() => buildUnifiedAd(ad), [ad]);
+  const relatedUnified = useMemo(
+    () => (relatedAds ? relatedAds.map((a) => buildUnifiedAd(a)) : relatedAds),
+    [relatedAds]
+  );
 
   const searchParams = useSearchParams();
+
+  // Mark as ready immediately on client
+  useEffect(() => {
+    setIsReady(true);
+  }, []);
 
   const handleBack = useCallback(() => {
     try {
@@ -78,6 +90,11 @@ const AdDetails = memo(function AdDetails({ ad, relatedAds }: AdDetailsProps) {
   // copy-to-clipboard removed — not used in UI right now
 
   // tags update handler removed; folder/tag editing happens elsewhere
+
+  // Show skeleton while component initializes
+  if (!isReady) {
+    return <AdDetailsSkeleton />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -155,15 +172,7 @@ const AdDetails = memo(function AdDetails({ ad, relatedAds }: AdDetailsProps) {
         {/* Adaptations feature removed */}
 
         {/* Tab Content */}
-        {activeTab === 'content' && (
-          <>
-            {console.debug('Rendering ContentTab with ad:', buildUnifiedAd(ad))}
-            <ContentTab
-              ad={buildUnifiedAd(ad)}
-              relatedAds={relatedAds ? relatedAds.map((a) => buildUnifiedAd(a)) : relatedAds}
-            />
-          </>
-        )}
+        {activeTab === 'content' && <ContentTab ad={adUnified} relatedAds={relatedUnified} />}
         {activeTab === 'info' && <InfoTab ad={ad} />}
 
         {/* Share Modal */}

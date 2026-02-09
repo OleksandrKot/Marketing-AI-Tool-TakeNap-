@@ -435,7 +435,10 @@ export default function DashboardClient({ initialCompetitors }: DashboardClientP
                               if (selectedPages.length > 0) {
                                 params.set(
                                   'page',
-                                  selectedPages.map((p) => encodeURIComponent(p)).join(',')
+                                  selectedPages
+                                    .filter((p): p is string => Boolean(p))
+                                    .map((p) => encodeURIComponent(p))
+                                    .join(',')
                                 );
                               }
                               router.push(`/advance-filter?${params.toString()}`);
@@ -496,7 +499,10 @@ export default function DashboardClient({ initialCompetitors }: DashboardClientP
                               if (selectedPages.length > 0) {
                                 params.set(
                                   'page',
-                                  selectedPages.map((p) => encodeURIComponent(p)).join(',')
+                                  selectedPages
+                                    .filter((p): p is string => Boolean(p))
+                                    .map((p) => encodeURIComponent(p))
+                                    .join(',')
                                 );
                               }
                               router.push(`/advance-filter?${params.toString()}`);

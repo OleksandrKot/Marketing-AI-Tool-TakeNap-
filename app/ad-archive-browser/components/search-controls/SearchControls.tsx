@@ -64,6 +64,7 @@ type Props = {
   clearRequestLogs?: () => void;
   businesses?: { id: string; name: string; slug: string }[];
   selectedBusiness?: string;
+  onBusinessChange?: (id: string) => void;
 };
 
 const PERSISTENCE_KEY = 'ad_archive_show_logs';
@@ -132,6 +133,7 @@ export function SearchControls({
   clearRequestLogs = () => {},
   businesses = [],
   selectedBusiness,
+  onBusinessChange,
 }: Props) {
   const router = useRouter();
   const [showLogs, setShowLogs] = useState(false);
@@ -608,34 +610,22 @@ export function SearchControls({
       {/* Business Selector */}
       {businesses && businesses.length > 0 && (
         <div className="mb-6">
-          <label
-            htmlFor="business-selector"
-            className="block text-sm font-medium text-slate-700 mb-2"
-          >
-            Filter by Business
-          </label>
-          <select
-            id="business-selector"
-            value={selectedBusiness || ''}
-            onChange={(e) => {
-              const value = e.target.value;
+          <BusinessDropdown
+            label="Filter by Business"
+            businesses={businesses}
+            selectedId={selectedBusiness || businesses[0]?.id}
+            onChange={(value) => {
+              try {
+                onBusinessChange?.(value);
+              } catch {}
               const params = new URLSearchParams(window.location.search);
-              if (value) {
-                params.set('business', value);
-              } else {
-                params.delete('business');
-              }
-              router.push(`/?${params.toString()}`);
+              params.set('business', value);
+              try {
+                const url = `/?${params.toString()}`;
+                window.history.replaceState(null, '', url);
+              } catch {}
             }}
-            className="w-full px-4 py-2 border border-slate-300 rounded-md shadow-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="">All Businesses</option>
-            {businesses.map((business) => (
-              <option key={business.id} value={business.id}>
-                {business.name}
-              </option>
-            ))}
-          </select>
+          />
         </div>
       )}
 
@@ -700,9 +690,9 @@ export function SearchControls({
           <button
             type="button"
             onClick={triggerFilePicker}
-            disabled={uploading}
+            disabled={true} // {uploading}
             className="w-full px-4 py-2 rounded-md border border-slate-300 bg-white text-slate-800 shadow-sm hover:bg-slate-50 disabled:opacity-60 disabled:cursor-not-allowed text-sm"
-            title="Upload a JSON file with ads data to import into the database"
+            title="Disabled: upload a JSON file to import ads into the database"
           >
             {uploading ? '⏳ Importing ads…' : '📤 Upload JSON to import'}
           </button>
@@ -906,5 +896,127 @@ export function SearchControls({
 
       {showLogin ? <LoginModal onClose={closeLogin} /> : null}
     </>
+  );
+}
+
+function BusinessDropdown({
+  label,
+  businesses,
+  selectedId,
+  onChange,
+}: {
+  label: string;
+  businesses: Array<{ id: string; name: string; slug: string }>;
+  selectedId?: string;
+  onChange: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const btnRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (
+        open &&
+        wrapRef.current &&
+        !wrapRef.current.contains(t) &&
+        btnRef.current &&
+        !btnRef.current.contains(t)
+      )
+        setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const selectedName = (() => {
+    if (!selectedId) return '';
+    const b = businesses.find((x) => String(x.id) === String(selectedId));
+    return b?.name || '';
+  })();
+
+  const summary = selectedName ? selectedName : 'Select business';
+
+  const filtered = businesses
+    .filter((b) => (query.trim() ? b.name.toLowerCase().includes(query.toLowerCase()) : true))
+    .slice(0, 500);
+
+  return (
+    <div className="relative" ref={wrapRef}>
+      <div className="block text-sm font-medium text-slate-700 mb-2">{label}</div>
+      <button
+        ref={btnRef}
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-3 py-2 border border-slate-300 rounded-md text-left focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        <span className="text-slate-900 truncate">{summary}</span>
+        <svg
+          className={`ml-2 h-4 w-4 text-slate-500 transition-transform ${open ? 'rotate-180' : ''}`}
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          aria-hidden
+        >
+          <path
+            fillRule="evenodd"
+            d="M5.23 7.21a.75.75 0 011.06.02L10 10.94l3.71-3.71a.75.75 0 111.06 1.06l-4.24 4.25a.75.75 0 01-1.06 0L5.21 8.29a.75.75 0 01.02-1.08z"
+            clipRule="evenodd"
+          />
+        </svg>
+      </button>
+
+      {open && (
+        <div className="absolute z-20 mt-2 w-full bg-white border border-slate-200 rounded-md shadow-lg p-3">
+          <input
+            type="text"
+            aria-label={`Search ${label}`}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={`Search ${label.toLowerCase()}...`}
+            className="w-full mb-3 px-3 py-2 border border-slate-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-slate-900 placeholder-slate-400"
+          />
+
+          <div className="max-h-56 overflow-auto rounded-md" role="listbox" aria-label={label}>
+            {filtered.map((b) => {
+              const sel = String(b.id) === String(selectedId || '');
+              return (
+                <button
+                  key={b.id}
+                  type="button"
+                  role="option"
+                  aria-selected={sel}
+                  onClick={() => {
+                    onChange(String(b.id));
+                    setOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between py-1.5 px-2 text-left hover:bg-slate-50 rounded ${
+                    sel ? 'bg-violet-50' : ''
+                  }`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <input type="radio" checked={sel} readOnly className="h-4 w-4" />
+                    <span className="text-sm text-slate-700 truncate">{b.name}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-3 flex items-center justify-end">
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="text-sm px-3 py-1.5 rounded-md bg-blue-600 text-white hover:bg-blue-700"
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

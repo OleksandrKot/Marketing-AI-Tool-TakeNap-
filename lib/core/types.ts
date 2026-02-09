@@ -31,6 +31,8 @@ export interface Ad {
   video_hd_url?: string | null;
   video_preview_image_url?: string | null;
   publisher_platform?: string;
+  start_date_formatted?: string;
+  end_date_formatted?: string;
 
   // JSON field for parsing
   raw_json?: Record<string, unknown>;
@@ -42,17 +44,13 @@ export interface Ad {
   image_url?: string | null;
   image_description?: string | null;
   signed_image_url?: string | null;
-  new_scenario?: string | null;
-  tags?: string[] | null;
 
   // Duplicates
-  duplicates_ad_text?: string | null;
-  duplicates_links?: string | null;
-  duplicates_preview_image?: string | null;
+  duplicates_count?: number | null;
 
   // Extended fields
   concept?: string | null;
-  realisation?: string | null;
+  realization?: string | null;
   topic?: string | null;
   hook?: string | null;
   character?: string | null;

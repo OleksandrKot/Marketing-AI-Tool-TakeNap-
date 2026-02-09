@@ -21,6 +21,8 @@ export function SearchButton({ label, onClick, showSignInTip }: SearchButtonProp
 
         <Button
           onClick={onClick}
+          disabled={true}
+          title={showSignInTip ? 'Disabled' : 'Disabled'}
           className="h-10 px-4 bg-slate-800 hover:bg-slate-900 text-white rounded w-full text-center"
         >
           <Search className="h-4 w-4 mr-2 inline" />

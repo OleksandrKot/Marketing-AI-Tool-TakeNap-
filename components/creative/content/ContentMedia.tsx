@@ -11,7 +11,7 @@ interface Props {
 }
 
 export default function ContentMedia({ ad }: Props) {
-  const isVideo = ad.display_format === 'VIDEO';
+  const isVideo = ad.display_format === 'VIDEO' || ad.display_format === 'DCO';
   const [videoLoaded, setVideoLoaded] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
 

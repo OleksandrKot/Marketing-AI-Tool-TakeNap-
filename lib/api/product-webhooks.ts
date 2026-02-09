@@ -72,7 +72,7 @@ export function detectProductFromUrl(url: string): {
 }
 
 /**
- * 🎯 Отримує webhook URL для продукту і типу креативу
+ * 🎯 Gets webhook URL for product and creative type
  */
 export function getWebhookUrl(
   productKey: string,

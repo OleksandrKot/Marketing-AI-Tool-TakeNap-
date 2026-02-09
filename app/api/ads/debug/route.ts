@@ -1,6 +1,8 @@
 import { createServerSupabaseClient } from '@/lib/core/supabase';
 import { NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 type AdRow = {
   id: number | string;
   ad_archive_id?: string | null;

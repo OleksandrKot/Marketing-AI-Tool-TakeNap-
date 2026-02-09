@@ -1,1124 +1,565 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { extractDataArray } from '@/lib/core/utils';
-import { useToast } from '@/components/ui/toast';
-import ResultsGrid from '@/app/ad-archive-browser/components/ResultsGrid';
-import type { ViewMode } from '@/lib/core/types';
+import React, { useMemo, useCallback, useEffect, useRef } from 'react';
+import { useRouter, usePathname, useSearchParams } from 'next/navigation';
+import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import FilterPanel from '@/app/filter-bar/components/FilterPanel';
-import { getAds } from '@/app/actions';
+import ResultsGrid from '@/app/ad-archive-browser/components/ResultsGrid';
+import { fetchAds, fetchFacets, Facets, FetchAdsParams } from '@/lib/api/ads';
 import type { Ad } from '@/lib/core/types';
 
-interface FilterOptions {
-  pageName?: string;
-  pageNames?: string[]; // multi-select
-  publisherPlatform: string;
-  publisherPlatforms?: string[];
-  ctaType: string;
-  ctaTypes?: string[];
-  displayFormat: string;
-  displayFormats?: string[];
-  searchQuery: string;
-  conceptFormat: string;
-  conceptFormats?: string[];
-  realizationFormat: string;
-  realizationFormats?: string[];
-  topicFormat: string;
-  topicFormats?: string[];
-  hookFormat: string;
-  hookFormats?: string[];
-  characterFormat: string;
-  characterFormats?: string[];
-  variationCount?: string;
-  variationCounts?: string[];
-  dateRange: string;
-  dateRanges?: string[];
-  funnels?: string[]; // multi-select
-}
+// Page response type for ads infinite query
+type AdsPage = {
+  data: Ad[];
+  hasMore: boolean;
+  limit: number;
+  offset: number;
+  groupSizes?: Record<string, number>;
+  groupAdsMap?: Record<string, string[]>;
+  groupAdsDetailsMap?: Record<string, Ad[]>;
+};
 
-interface FilteredContainerProps {
-  initialPageName?: string;
-  initialPageNames?: string[];
-  initialFunnels?: string[];
-  initialTopic?: string;
-  initialHook?: string;
-}
-
-type SortMode = 'auto' | 'most_variations' | 'least_variations' | 'newest';
-type FunnelsMap = Record<string, string[]>;
-
-/** -----------------------------
- *  Helpers (pure functions)
- *  ---------------------------- */
-
-function normalizePlatforms(raw?: string | null) {
-  return (raw || '')
-    .split(',')
-    .map((p) => p.trim().toLowerCase())
+// Helper to safely parse lists from URL (supports repeated params and legacy CSV)
+const parseList = (params: URLSearchParams, key: string): string[] => {
+  const all = params
+    .getAll(key)
+    .map((s) => s.trim())
     .filter(Boolean);
-}
-
-function applyDateRangeFilter(ads: Ad[], dateRange: string) {
-  if (!dateRange) return ads;
-
-  const now = new Date();
-  let startDate: Date;
-
-  switch (dateRange) {
-    case 'today':
-      startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      break;
-    case 'week':
-      startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      break;
-    case 'month':
-      startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      break;
-    case 'quarter':
-      startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-      break;
-    default:
-      startDate = new Date(0);
-  }
-
-  return ads.filter((ad) => new Date(ad.created_at) >= startDate);
-}
-
-function applyDateRangesFilter(ads: Ad[], dateRanges: string[]) {
-  if (!dateRanges || dateRanges.length === 0) return ads;
-
-  const now = new Date();
-  const dateFilters = dateRanges.map((range) => {
-    switch (range) {
-      case 'today':
-        return new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      case 'week':
-        return new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-      case 'month':
-        return new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-      case 'quarter':
-        return new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
-      default:
-        return new Date(0);
-    }
-  });
-
-  // OR logic: match if ad is within ANY selected date range
-  const mostRecentStart = new Date(Math.max(...dateFilters.map((d) => d.getTime())));
-  return ads.filter((ad) => new Date(ad.created_at) >= mostRecentStart);
-}
-
-/**
- * Apply all non-variation filters.
- * IMPORTANT: funnels filter applies only when funnels.length > 0 (fix for "all zeros").
- */
-function applyFilters(sourceAds: Ad[], filters: FilterOptions, adIdToFunnels: FunnelsMap): Ad[] {
-  let out = sourceAds;
-
-  // Search
-  if (filters.searchQuery) {
-    const q = filters.searchQuery.toLowerCase();
-    out = out.filter(
-      (ad) =>
-        ad.title?.toLowerCase().includes(q) ||
-        ad.text?.toLowerCase().includes(q) ||
-        ad.page_name?.toLowerCase().includes(q)
-    );
-  }
-
-  // Page names (multi-select takes precedence)
-  if (filters.pageNames && Array.isArray(filters.pageNames) && filters.pageNames.length > 0) {
-    const set = new Set(filters.pageNames);
-    out = out.filter((ad) => (ad.page_name ? set.has(ad.page_name) : false));
-  } else if (filters.pageName) {
-    out = out.filter((ad) => ad.page_name === filters.pageName);
-  }
-
-  // Publisher platform (multi-select OR)
-  if (filters.publisherPlatforms && filters.publisherPlatforms.length > 0) {
-    const wanted = new Set(filters.publisherPlatforms.map((s) => s.toLowerCase()));
-    out = out.filter((ad) => {
-      const norms = normalizePlatforms(ad.publisher_platform);
-      return norms.some((p) => wanted.has(p));
-    });
-  } else if (filters.publisherPlatform) {
-    const wanted = filters.publisherPlatform.toLowerCase();
-    out = out.filter((ad) => normalizePlatforms(ad.publisher_platform).includes(wanted));
-  }
-
-  // Simple equals filters with multi-select OR
-  if (filters.ctaTypes && filters.ctaTypes.length > 0) {
-    const set = new Set(filters.ctaTypes);
-    out = out.filter((ad) => (ad.cta_type ? set.has(ad.cta_type) : false));
-  } else if (filters.ctaType) {
-    out = out.filter((ad) => ad.cta_type === filters.ctaType);
-  }
-
-  if (filters.displayFormats && filters.displayFormats.length > 0) {
-    const set = new Set(filters.displayFormats);
-    out = out.filter((ad) => (ad.display_format ? set.has(ad.display_format) : false));
-  } else if (filters.displayFormat) {
-    out = out.filter((ad) => ad.display_format === filters.displayFormat);
-  }
-
-  if (filters.conceptFormats && filters.conceptFormats.length > 0) {
-    const set = new Set(filters.conceptFormats);
-    out = out.filter((ad) => (ad.concept ? set.has(ad.concept) : false));
-  } else if (filters.conceptFormat) {
-    out = out.filter((ad) => ad.concept === filters.conceptFormat);
-  }
-
-  if (filters.realizationFormats && filters.realizationFormats.length > 0) {
-    const set = new Set(filters.realizationFormats);
-    out = out.filter((ad) => (ad.realisation ? set.has(ad.realisation) : false));
-  } else if (filters.realizationFormat) {
-    out = out.filter((ad) => ad.realisation === filters.realizationFormat);
-  }
-
-  if (filters.topicFormats && filters.topicFormats.length > 0) {
-    const set = new Set(filters.topicFormats);
-    out = out.filter((ad) => (ad.topic ? set.has(ad.topic) : false));
-  } else if (filters.topicFormat) {
-    out = out.filter((ad) => ad.topic === filters.topicFormat);
-  }
-
-  if (filters.hookFormats && filters.hookFormats.length > 0) {
-    const set = new Set(filters.hookFormats);
-    out = out.filter((ad) => (ad.hook ? set.has(ad.hook) : false));
-  } else if (filters.hookFormat) {
-    out = out.filter((ad) => ad.hook === filters.hookFormat);
-  }
-
-  if (filters.characterFormats && filters.characterFormats.length > 0) {
-    const set = new Set(filters.characterFormats);
-    out = out.filter((ad) => (ad.character ? set.has(ad.character) : false));
-  } else if (filters.characterFormat) {
-    out = out.filter((ad) => ad.character === filters.characterFormat);
-  }
-
-  // Date ranges (multi-select OR)
-  if (filters.dateRanges && filters.dateRanges.length > 0) {
-    out = applyDateRangesFilter(out, filters.dateRanges);
-  } else if (filters.dateRange) {
-    out = applyDateRangeFilter(out, filters.dateRange);
-  }
-
-  // Funnels (OR multi-select) — FIX: only when length > 0
-  if (filters.funnels && Array.isArray(filters.funnels) && filters.funnels.length > 0) {
-    const sels = filters.funnels.map((s) => String(s).toLowerCase());
-    out = out.filter((ad) => {
-      const adFunnels = adIdToFunnels[String(ad.id)] || [];
-      return sels.some((sv) =>
-        adFunnels.some(
-          (af) => String(af).toLowerCase().includes(sv) || sv.includes(String(af).toLowerCase())
-        )
-      );
-    });
-  }
-
-  return out;
-}
-
-/**
- * Build DSU duplicate groups from subset using duplicates_links + id/ad_archive_id resolution.
- * Returns groups of ads.
- */
-function buildDuplicateGroups(subset: Ad[]): Ad[][] {
-  const n = subset.length;
-  if (n === 0) return [];
-
-  const idToIndex = new Map<number, number>();
-  const archiveIdToIndex = new Map<string, number>();
-
-  for (let i = 0; i < n; i++) {
-    const a = subset[i];
-    idToIndex.set(Number(a.id), i);
-    if (a.ad_archive_id) archiveIdToIndex.set(String(a.ad_archive_id), i);
-  }
-
-  const parent = new Array<number>(n).fill(0).map((_, i) => i);
-  const find = (i: number): number => (parent[i] === i ? i : (parent[i] = find(parent[i])));
-  const union = (a: number, b: number) => {
-    const ra = find(a);
-    const rb = find(b);
-    if (ra !== rb) parent[rb] = ra;
-  };
-
-  const tryResolveTokenToIndex = (token: string): number | null => {
-    const t = String(token).trim();
-    if (!t) return null;
-
-    const asNum = Number(t);
-    if (Number.isFinite(asNum) && idToIndex.has(asNum)) return idToIndex.get(asNum) ?? null;
-
-    if (archiveIdToIndex.has(t)) return archiveIdToIndex.get(t) ?? null;
-
-    // fallback: token contains archiveId
-    for (const [aid, idx] of archiveIdToIndex.entries()) {
-      if (t.includes(aid)) return idx;
-    }
-    return null;
-  };
-
-  for (let i = 0; i < n; i++) {
-    const a = subset[i];
-    const raw = a.duplicates_links ?? '';
-    if (!raw || typeof raw !== 'string') continue;
-
-    const parts = raw
-      .split(/[,\n\s]+/)
-      .map((s) => s.trim())
-      .filter(Boolean);
-
-    for (const p of parts) {
-      const otherIdx = tryResolveTokenToIndex(p);
-      if (otherIdx !== null && otherIdx !== undefined) union(i, otherIdx);
-    }
-  }
-
-  const repToGroupIndex = new Map<number, number>();
-  const groups: Ad[][] = [];
-
-  for (let i = 0; i < n; i++) {
-    const r = find(i);
-    const gi = repToGroupIndex.get(r) ?? groups.length;
-    if (!repToGroupIndex.has(r)) repToGroupIndex.set(r, gi);
-    const arr = groups[gi] ?? [];
-    arr.push(subset[i]);
-    groups[gi] = arr;
-  }
-
-  return groups;
-}
-
-function matchesVariationBucket(groupSize: number, bucket: string) {
-  const related = Math.max(0, groupSize - 1);
-  switch (bucket) {
-    case 'more_than_10':
-      return related >= 11;
-    case '5_10':
-      return related >= 5 && related <= 10;
-    case '3_5':
-      return related >= 3 && related <= 5;
-    case 'less_than_3':
-      return related === 1 || related === 2;
-    default:
-      return false;
-  }
-}
-
-function filterByVariationBucket(subset: Ad[], bucket: string): Ad[] {
-  if (!bucket) return subset;
-  const groups = buildDuplicateGroups(subset);
-  const keepIds = new Set<number>();
-
-  for (const g of groups) {
-    if (matchesVariationBucket(g.length, bucket)) {
-      for (const a of g) keepIds.add(Number(a.id));
-    }
-  }
-
-  return subset.filter((ad) => keepIds.has(Number(ad.id)));
-}
-
-/**
- * Funnels extraction (from multiple ad fields)
- */
-function extractFunnelsFromAd(ad: Ad): string[] {
-  const set: Set<string> = new Set();
-
-  const addUrl = (raw?: string | null) => {
-    if (!raw) return;
-    const str = String(raw);
-
-    try {
-      const urlRe = /https?:\/\/[\w\-._~:\/?#\[\]@!$&'()*+,;=%]+/gi;
-      const matches = str.match(urlRe) || (str.includes('/') ? [str] : []);
-
-      for (const m of matches) {
-        try {
-          const u = new URL(m);
-          const hostAndPath = (u.host + u.pathname).replace(/\/+$/, '').toLowerCase();
-          set.add(hostAndPath);
-          if (u.pathname && u.pathname !== '/') set.add(u.pathname.toLowerCase());
-        } catch {
-          const cleaned = String(m).replace(/^\/+/, '').replace(/\/+$/, '').toLowerCase();
-          if (cleaned) set.add('/' + cleaned);
-        }
-      }
-    } catch {
-      // noop
-    }
-  };
-
-  addUrl(ad.link_url);
-  addUrl(ad.meta_ad_url as string | undefined);
-  const dupLinks = (ad as unknown as { duplicates_links?: string }).duplicates_links;
-  if (dupLinks) addUrl(dupLinks);
-  if (ad.text) addUrl(ad.text);
-
-  return Array.from(set);
-}
-
-/** -----------------------------
- *  Component
- *  ---------------------------- */
+  if (all.length) return all;
+  const val = params.get(key);
+  return val
+    ? val
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : [];
+};
 
 export default function FilteredContainer({
-  initialPageName = '',
-  initialPageNames,
-  initialFunnels,
-  initialTopic,
-  initialHook,
-}: FilteredContainerProps) {
+  showRepresentativesOnly = true,
+}: {
+  showRepresentativesOnly?: boolean;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [ads, setAds] = useState<Ad[]>([]);
-  const [filteredAds, setFilteredAds] = useState<Ad[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const restorationAttempted = useRef(false);
+  const [restorationComplete, setRestorationComplete] = React.useState(false);
 
-  const [availableOptions, setAvailableOptions] = useState({
-    pageNames: [] as string[],
-    publisherPlatforms: [] as string[],
-    ctaTypes: [] as string[],
-    displayFormats: [] as string[],
-    conceptFormats: [] as string[],
-    realizationFormats: [] as string[],
-    topicFormats: [] as string[],
-    hookFormats: [] as string[],
-    characterFormats: [] as string[],
-    variationBuckets: [] as string[],
-    dateRangeOptions: [] as string[],
-    funnels: [] as string[],
-  });
+  // --- 0. Restore filters from sessionStorage when URL is empty ---
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
 
-  const [availableCounts, setAvailableCounts] = useState(() => ({
-    pageNames: {} as Record<string, number>,
-    publisherPlatforms: {} as Record<string, number>,
-    ctaTypes: {} as Record<string, number>,
-    displayFormats: {} as Record<string, number>,
-    conceptFormats: {} as Record<string, number>,
-    realizationFormats: {} as Record<string, number>,
-    topicFormats: {} as Record<string, number>,
-    hookFormats: {} as Record<string, number>,
-    characterFormats: {} as Record<string, number>,
-    variationCounts: {} as Record<string, number>,
-    dateRanges: {} as Record<string, number>,
-    funnels: {} as Record<string, number>,
-  }));
+    const currentUrl = searchParams.toString();
+    console.log('[FilteredContainer] 🔄 Mount/Update - Current URL:', currentUrl);
+    console.log('[FilteredContainer] 🔄 Pathname:', pathname);
+    console.log('[FilteredContainer] 🔄 Restoration attempted flag:', restorationAttempted.current);
 
-  const [adIdToFunnels, setAdIdToFunnels] = useState<FunnelsMap>({});
-  const [currentFilters, setCurrentFilters] = useState<FilterOptions | null>(null);
+    // Check if URL has any filter params
+    const hasUrlFilters = Array.from(searchParams.entries()).some(([key]) =>
+      [
+        'businessId',
+        'pageNames',
+        'displayFormats',
+        'ctaTypes',
+        'concepts',
+        'realizations',
+        'topics',
+        'hooks',
+        'characters',
+        'platforms',
+        'search',
+        'funnels',
+        'variationCounts',
+        'dateRanges',
+      ].includes(key)
+    );
 
-  // Default sort: most_variations
-  const [userSortMode, setUserSortMode] = useState<SortMode>('most_variations');
-
-  const [selectionMode, setSelectionMode] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<Record<string, boolean>>({});
-  const [resetFlash, setResetFlash] = useState(false);
-  const { showToast } = useToast();
-
-  const toggleSelectId = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = { ...(prev || {}) };
-      if (next[id]) delete next[id];
-      else next[id] = true;
-      return next;
-    });
-  };
-
-  const downloadSelected = () => {
-    const ids = Object.keys(selectedIds || {});
-    if (!ids.length) {
-      try {
-        showToast({ message: 'Please select at least one creative to export.', type: 'error' });
-      } catch {}
+    if (hasUrlFilters) {
+      console.log(
+        '[FilteredContainer] URL already has filters:',
+        Array.from(searchParams.entries())
+      );
+      restorationAttempted.current = false; // Reset for next time
+      setRestorationComplete(true); // Mark as complete so auto-select can proceed
       return;
     }
 
-    (async () => {
-      try {
-        const res = await fetch('/api/ads/export-csv', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ids }),
-        });
+    // If URL is empty and we haven't tried restoration yet
+    if (!currentUrl && !restorationAttempted.current) {
+      console.log('[FilteredContainer] Empty URL detected, attempting restoration...');
+      restorationAttempted.current = true;
 
-        if (!res.ok) {
-          let errMsg = 'Failed to export CSV';
-          try {
-            const j = await res.json();
-            if (j?.error) errMsg = String(j.error);
-          } catch {}
-          try {
-            showToast({ message: errMsg, type: 'error' });
-          } catch {}
+      try {
+        const saved = sessionStorage.getItem('advanceFilterState');
+
+        if (saved) {
+          const savedFilters = JSON.parse(saved);
+          console.log('[FilteredContainer] Found saved filters in sessionStorage:', savedFilters);
+
+          // Check if saved filters have any actual content
+          const hasContent =
+            savedFilters.businessId ||
+            savedFilters.pageNames?.length > 0 ||
+            savedFilters.displayFormats?.length > 0 ||
+            savedFilters.ctaTypes?.length > 0 ||
+            savedFilters.concepts?.length > 0 ||
+            savedFilters.topics?.length > 0 ||
+            savedFilters.hooks?.length > 0 ||
+            savedFilters.searchQuery;
+
+          if (hasContent) {
+            const params = new URLSearchParams();
+
+            // Reconstruct URL from saved filters
+            if (savedFilters.businessId) params.set('businessId', savedFilters.businessId);
+            if (savedFilters.pageNames?.length)
+              savedFilters.pageNames.forEach((v: string) => params.append('pageNames', v));
+            if (savedFilters.displayFormats?.length)
+              savedFilters.displayFormats.forEach((v: string) =>
+                params.append('displayFormats', v)
+              );
+            if (savedFilters.ctaTypes?.length)
+              savedFilters.ctaTypes.forEach((v: string) => params.append('ctaTypes', v));
+            if (savedFilters.concepts?.length)
+              savedFilters.concepts.forEach((v: string) => params.append('concepts', v));
+            if (savedFilters.realizations?.length)
+              savedFilters.realizations.forEach((v: string) => params.append('realizations', v));
+            if (savedFilters.topics?.length)
+              savedFilters.topics.forEach((v: string) => params.append('topics', v));
+            if (savedFilters.hooks?.length)
+              savedFilters.hooks.forEach((v: string) => params.append('hooks', v));
+            if (savedFilters.characters?.length)
+              savedFilters.characters.forEach((v: string) => params.append('characters', v));
+            if (savedFilters.platforms?.length)
+              savedFilters.platforms.forEach((v: string) => params.append('platforms', v));
+            if (savedFilters.searchQuery) params.set('search', savedFilters.searchQuery);
+            if (savedFilters.funnels?.length)
+              savedFilters.funnels.forEach((v: string) => params.append('funnels', v));
+            if (savedFilters.variationCounts?.length)
+              savedFilters.variationCounts.forEach((v: string) =>
+                params.append('variationCounts', v)
+              );
+            if (savedFilters.dateRanges?.length)
+              savedFilters.dateRanges.forEach((v: string) => params.append('dateRanges', v));
+
+            const queryString = params.toString();
+            const newUrl = `${pathname}?${queryString}`;
+            console.log('[FilteredContainer] ✅ RESTORING filters to URL:', newUrl);
+
+            // Use push instead of replace to ensure navigation happens
+            router.push(newUrl);
+            // Mark restoration complete after navigation
+            setTimeout(() => setRestorationComplete(true), 100);
+          } else {
+            console.log('[FilteredContainer] Saved filters are empty, skipping restoration');
+            setRestorationComplete(true);
+          }
+        } else {
+          console.log('[FilteredContainer] No saved filters found in sessionStorage');
+          setRestorationComplete(true);
+        }
+      } catch (e) {
+        console.error('[FilteredContainer] ❌ Failed to restore filters:', e);
+        setRestorationComplete(true);
+      }
+    } else {
+      // URL not empty but also not triggering restoration - mark complete
+      if (!restorationAttempted.current) {
+        setRestorationComplete(true);
+      }
+    }
+  }, [pathname, router, searchParams]);
+
+  // --- 1. Source of Truth: URL Search Params ---
+  // We derive the entire state from the URL. This ensures persistence on reload.
+  const filters = useMemo(() => {
+    const p = searchParams;
+    return {
+      businessId: p.get('businessId') || '',
+      pageNames: parseList(p, 'pageNames'),
+      displayFormats: parseList(p, 'displayFormats'),
+      ctaTypes: parseList(p, 'ctaTypes'),
+      concepts: parseList(p, 'concepts'),
+      realizations: parseList(p, 'realizations'),
+      topics: parseList(p, 'topics'),
+      hooks: parseList(p, 'hooks'),
+      characters: parseList(p, 'characters'),
+      platforms: parseList(p, 'platforms'),
+      searchQuery: p.get('search') || '',
+      funnels: parseList(p, 'funnels'),
+      variationCounts: parseList(p, 'variationCounts'),
+      dateRanges: parseList(p, 'dateRanges'),
+    };
+  }, [searchParams]);
+
+  // --- 1.5. Save filters to sessionStorage whenever they change ---
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        // Always save if businessId exists (even if other filters are empty)
+        if (filters.businessId) {
+          console.log('[FilteredContainer] 💾 Saving filters to sessionStorage:', filters);
+          sessionStorage.setItem('advanceFilterState', JSON.stringify(filters));
+        } else {
+          console.log('[FilteredContainer] No businessId, not saving');
+        }
+      } catch (e) {
+        console.error('Failed to save filters to sessionStorage:', e);
+      }
+    }
+  }, [filters]);
+
+  // --- 2. Prepare API Params ---
+  const apiParams: Omit<FetchAdsParams, 'limit' | 'offset'> = useMemo(
+    () => ({
+      businessId: filters.businessId,
+      pageNames: filters.pageNames,
+      displayFormats: filters.displayFormats,
+      ctaTypes: filters.ctaTypes,
+      concepts: filters.concepts,
+      realizations: filters.realizations,
+      topics: filters.topics,
+      hooks: filters.hooks,
+      characters: filters.characters,
+      platforms: filters.platforms,
+      search: filters.searchQuery,
+      funnels: filters.funnels,
+      variationCounts: filters.variationCounts,
+      dateRanges: filters.dateRanges,
+      representativesOnly: showRepresentativesOnly,
+    }),
+    [filters, showRepresentativesOnly]
+  );
+
+  // --- 3. Fetch Facets (Dropdown Data) ---
+  const { data: facetsData } = useQuery<Facets>({
+    queryKey: ['facets', apiParams],
+    queryFn: () => fetchFacets(apiParams),
+    staleTime: 1000 * 30, // Cache for 30s
+  });
+
+  // --- 4. Fetch Ads (Infinite List) ---
+  const pageSize = 36;
+  const {
+    data: adsData,
+    fetchNextPage,
+    hasNextPage,
+    isFetching: isAdsLoading,
+    isLoading: isAdsInitialLoading,
+  } = useInfiniteQuery<AdsPage, Error>({
+    queryKey: ['ads', apiParams, showRepresentativesOnly],
+    queryFn: ({ pageParam = 0 }) =>
+      // Ensure fetchAds is implemented to handle the logic of finding representatives
+      fetchAds({ ...apiParams, limit: pageSize, offset: pageParam as number }),
+    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.offset + pageSize : undefined),
+    initialPageParam: 0,
+    refetchOnWindowFocus: false,
+  });
+
+  const ads = useMemo(() => adsData?.pages.flatMap((p) => p.data) || [], [adsData]);
+
+  // Build adIdToRelatedCount from groupSizes (items count) returned by API
+  const adIdToRelatedCount = useMemo(() => {
+    const counts: Record<string, number> = {};
+    if (!adsData?.pages) return counts;
+
+    adsData.pages.forEach((page) => {
+      if (page.groupSizes) {
+        Object.entries(page.groupSizes).forEach(([repId, variationsCount]) => {
+          // variationsCount is the length of items array from ads_groups_test
+          counts[repId] = variationsCount;
+        });
+      }
+    });
+
+    return counts;
+  }, [adsData]);
+
+  // Build adIdToGroupMap - map each rep to all ads in its group (for cards)
+  const adIdToGroupMap = useMemo(() => {
+    const groupMap: Record<string, Ad[]> = {};
+    if (!adsData?.pages) return groupMap;
+
+    // Prefer full group ads from API when available
+    let hasDetails = false;
+    adsData.pages.forEach((page) => {
+      if (page.groupAdsDetailsMap) {
+        hasDetails = true;
+        Object.entries(page.groupAdsDetailsMap).forEach(([repId, groupAds]) => {
+          groupMap[repId] = (groupAds || []).filter(
+            (ad) => ad && String(ad.ad_archive_id) !== repId
+          ) as Ad[];
+        });
+      }
+    });
+
+    if (hasDetails) return groupMap;
+
+    // Fallback: map IDs to ads in current page only
+    const adsById: Record<string, Ad> = {};
+    ads.forEach((ad) => {
+      adsById[String(ad.ad_archive_id)] = ad;
+    });
+
+    adsData.pages.forEach((page) => {
+      if (page.groupAdsMap) {
+        Object.entries(page.groupAdsMap).forEach(([repId, adIds]) => {
+          const groupAds = adIds
+            .filter((id) => id !== repId)
+            .map((id) => adsById[id])
+            .filter((ad) => ad != null);
+          groupMap[repId] = groupAds;
+        });
+      }
+    });
+
+    return groupMap;
+  }, [adsData, ads]);
+
+  // --- 5. Filter Update Handler ---
+  // Updates the URL, triggering a re-render of the component and re-fetch of queries
+  const handleFiltersChange = useCallback(
+    (newFilters: Partial<typeof filters>) => {
+      console.log('[FilteredContainer] handleFiltersChange called with:', newFilters);
+      console.log('[FilteredContainer] Current filters:', filters);
+
+      // Start with current URL params to preserve existing filters
+      const params = new URLSearchParams(searchParams.toString());
+
+      const update = (key: string, val: string | string[] | undefined) => {
+        if (!val || (Array.isArray(val) && val.length === 0) || val === '') {
+          params.delete(key);
           return;
         }
-
-        const blob = await res.blob();
-        const date = new Date().toISOString().slice(0, 10);
-
-        const filters = currentFilters;
-        const filtersEmpty =
-          !filters ||
-          Object.entries(filters).every(([k, v]) => {
-            if (k === 'funnels') return !v || (Array.isArray(v) && v.length === 0);
-            return v === '' || v === undefined || v === null;
+        params.delete(key);
+        if (Array.isArray(val)) {
+          val.forEach((item) => {
+            if (item) params.append(key, item);
           });
-
-        const filename = filtersEmpty
-          ? `creo_data_export_${date}.csv`
-          : `creo_data_filtered_${date}.csv`;
-
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(url);
-
-        try {
-          showToast({ message: 'Selected creatives exported', type: 'success' });
-        } catch {}
-
-        setSelectionMode(false);
-        setSelectedIds({});
-      } catch {
-        try {
-          showToast({ message: 'Export failed', type: 'error' });
-        } catch {}
-      }
-    })();
-  };
-
-  // Compute counts for UI options (single source of truth)
-  const computeCountsForOptions = (
-    opts: typeof availableOptions,
-    filters: FilterOptions,
-    sourceAds: Ad[],
-    funnelsMap: FunnelsMap
-  ) => {
-    const countFor = (
-      values: string[],
-      key:
-        | keyof FilterOptions
-        | 'variationCount'
-        | 'funnels'
-        | 'pageNames'
-        | 'publisherPlatforms'
-        | 'ctaTypes'
-        | 'displayFormats'
-        | 'conceptFormats'
-        | 'realizationFormats'
-        | 'topicFormats'
-        | 'hookFormats'
-        | 'characterFormats'
-        | 'dateRanges'
-        | 'variationCounts'
-    ) => {
-      const out: Record<string, number> = {};
-
-      for (const v of values) {
-        const candidate: FilterOptions = { ...filters };
-
-        if (key === 'funnels') {
-          // count as if user selected ONLY this funnel (keeping other filters)
-          candidate.funnels = [v];
-        } else if (key === 'pageNames') {
-          // count as if user selected ONLY this page (keeping other filters)
-          candidate.pageNames = [v];
-          candidate.pageName = '';
-        } else if (key === 'publisherPlatforms') {
-          candidate.publisherPlatforms = [v];
-          candidate.publisherPlatform = '';
-        } else if (key === 'ctaTypes') {
-          candidate.ctaTypes = [v];
-          candidate.ctaType = '';
-        } else if (key === 'displayFormats') {
-          candidate.displayFormats = [v];
-          candidate.displayFormat = '';
-        } else if (key === 'conceptFormats') {
-          candidate.conceptFormats = [v];
-          candidate.conceptFormat = '';
-        } else if (key === 'realizationFormats') {
-          candidate.realizationFormats = [v];
-          candidate.realizationFormat = '';
-        } else if (key === 'topicFormats') {
-          candidate.topicFormats = [v];
-          candidate.topicFormat = '';
-        } else if (key === 'hookFormats') {
-          candidate.hookFormats = [v];
-          candidate.hookFormat = '';
-        } else if (key === 'characterFormats') {
-          candidate.characterFormats = [v];
-          candidate.characterFormat = '';
-        } else if (key === 'dateRanges') {
-          candidate.dateRanges = [v];
-          candidate.dateRange = '';
-        } else if (key === 'variationCounts') {
-          candidate.variationCounts = [v];
-          candidate.variationCount = '';
-        } else if (key === 'variationCount') {
-          candidate.variationCount = v;
         } else {
-          (candidate as unknown as Record<string, unknown>)[key as string] = v;
+          params.set(key, val);
         }
+      };
 
-        // 1) Apply all filters except variationCount/variationCounts
-        const base = applyFilters(sourceAds, candidate, funnelsMap);
+      // Update all filters normally (only if they're provided in newFilters)
+      if ('businessId' in newFilters) update('businessId', newFilters.businessId);
+      if ('pageNames' in newFilters) update('pageNames', newFilters.pageNames);
+      if ('displayFormats' in newFilters) update('displayFormats', newFilters.displayFormats);
+      if ('ctaTypes' in newFilters) update('ctaTypes', newFilters.ctaTypes);
+      if ('conceptFormats' in newFilters)
+        update(
+          'concepts',
+          (newFilters as Record<string, string | string[] | undefined>).conceptFormats
+        );
+      if ('realizationFormats' in newFilters)
+        update(
+          'realizations',
+          (newFilters as Record<string, string | string[] | undefined>).realizationFormats
+        );
+      if ('topicFormats' in newFilters)
+        update(
+          'topics',
+          (newFilters as Record<string, string | string[] | undefined>).topicFormats
+        );
+      if ('hookFormats' in newFilters)
+        update('hooks', (newFilters as Record<string, string | string[] | undefined>).hookFormats);
+      if ('characterFormats' in newFilters)
+        update(
+          'characters',
+          (newFilters as Record<string, string | string[] | undefined>).characterFormats
+        );
+      if ('publisherPlatforms' in newFilters)
+        update(
+          'platforms',
+          (newFilters as Record<string, string | string[] | undefined>).publisherPlatforms
+        );
+      if ('searchQuery' in newFilters) update('search', newFilters.searchQuery);
+      if ('funnels' in newFilters) update('funnels', newFilters.funnels);
+      if ('variationCounts' in newFilters) update('variationCounts', newFilters.variationCounts);
+      if ('dateRanges' in newFilters) update('dateRanges', newFilters.dateRanges);
 
-        // 2) Apply variation bucket if needed
-        const final =
-          candidate.variationCounts &&
-          candidate.variationCounts.length > 0 &&
-          key !== 'variationCounts'
-            ? candidate.variationCounts.reduce((acc, bucket) => {
-                const g = buildDuplicateGroups(base);
-                const ids = new Set<number>();
-                for (const grp of g) {
-                  if (matchesVariationBucket(grp.length, bucket)) {
-                    for (const a of grp) ids.add(Number(a.id));
-                  }
-                }
-                return base.filter((ad) => ids.has(Number(ad.id)));
-              }, base)
-            : candidate.variationCount && key !== 'variationCount' && key !== 'variationCounts'
-            ? filterByVariationBucket(base, String(candidate.variationCount))
-            : key === 'variationCounts'
-            ? filterByVariationBucket(base, String(v))
-            : key === 'variationCount'
-            ? filterByVariationBucket(base, String(v))
-            : base;
+      const newUrl = `${pathname}?${params.toString()}`;
+      console.log('[FilteredContainer] Updating URL to:', newUrl);
 
-        out[v] = final.length;
-      }
+      // Using replace so we don't clutter browser history with every checkbox click
+      router.replace(newUrl, { scroll: false });
+    },
+    [searchParams, router, pathname, filters]
+  );
 
-      return out;
-    };
-
-    return {
-      pageNames: countFor(opts.pageNames, 'pageNames'),
-      publisherPlatforms: countFor(opts.publisherPlatforms, 'publisherPlatforms'),
-      ctaTypes: countFor(opts.ctaTypes, 'ctaTypes'),
-      displayFormats: countFor(opts.displayFormats, 'displayFormats'),
-      conceptFormats: countFor(opts.conceptFormats, 'conceptFormats'),
-      realizationFormats: countFor(opts.realizationFormats, 'realizationFormats'),
-      topicFormats: countFor(opts.topicFormats, 'topicFormats'),
-      hookFormats: countFor(opts.hookFormats, 'hookFormats'),
-      characterFormats: countFor(opts.characterFormats, 'characterFormats'),
-      variationCounts: countFor(opts.variationBuckets as string[], 'variationCounts'),
-      dateRanges: countFor(opts.dateRangeOptions as string[], 'dateRanges'),
-      funnels: countFor(opts.funnels as string[], 'funnels'),
-    };
+  // --- 6. Defaults & Auto-selection ---
+  const panelOptions: Facets = facetsData || {
+    pageNames: [],
+    publisherPlatforms: [],
+    ctaTypes: [],
+    displayFormats: [],
+    conceptFormats: [],
+    realizationFormats: [],
+    topicFormats: [],
+    hookFormats: [],
+    characterFormats: [],
+    variationBuckets: [],
+    dateRangeOptions: [],
+    funnels: [],
+    businesses: [],
+    counts: {},
   };
 
+  const normalizedCounts = {
+    pageNames: panelOptions.counts?.pageNames ?? {},
+    publisherPlatforms: panelOptions.counts?.publisherPlatforms ?? {},
+    ctaTypes: panelOptions.counts?.ctaTypes ?? {},
+    displayFormats: panelOptions.counts?.displayFormats ?? {},
+    conceptFormats: panelOptions.counts?.conceptFormats ?? {},
+    realizationFormats: panelOptions.counts?.realizationFormats ?? {},
+    topicFormats: panelOptions.counts?.topicFormats ?? {},
+    hookFormats: panelOptions.counts?.hookFormats ?? {},
+    characterFormats: panelOptions.counts?.characterFormats ?? {},
+    variationCounts: panelOptions.counts?.variationCounts ?? {},
+    dateRanges: panelOptions.counts?.dateRanges ?? {},
+    funnels: panelOptions.counts?.funnels ?? {},
+  };
+
+  // Auto-select first business if none selected and no saved filters exist
   useEffect(() => {
-    const loadAds = async () => {
+    // CRITICAL: Wait for restoration to complete before auto-selecting
+    if (!restorationComplete) {
+      console.log(
+        '[FilteredContainer] ⏸️ Auto-select blocked - waiting for restoration to complete'
+      );
+      return;
+    }
+
+    // Don't auto-select if URL already has filters
+    const hasExistingFilters = Array.from(searchParams.entries()).length > 0;
+
+    if (!filters.businessId && panelOptions.businesses.length > 0 && !hasExistingFilters) {
+      // Check if there are saved filters in sessionStorage first
       try {
-        const raw = await getAds();
-        const allAds: Ad[] = extractDataArray<Ad>(raw);
-
-        setAds(allAds);
-
-        // Build options
-        const pageNames = Array.from(
-          new Set(allAds.map((ad) => ad.page_name).filter(Boolean))
-        ).sort();
-
-        const publisherPlatforms = Array.from(
-          new Set(allAds.flatMap((ad) => normalizePlatforms(ad.publisher_platform)))
-        ).sort();
-
-        const ctaTypes = Array.from(
-          new Set(allAds.map((ad) => ad.cta_type).filter(Boolean))
-        ).sort();
-        const displayFormats = Array.from(
-          new Set(allAds.map((ad) => ad.display_format).filter(Boolean))
-        ).sort();
-
-        const conceptFormats = Array.from(
-          new Set(
-            allAds
-              .map((ad) => ad.concept)
-              .filter((x): x is string => x !== null && x !== undefined && x !== '')
-          )
-        ).sort();
-
-        const realizationFormats = Array.from(
-          new Set(
-            allAds
-              .map((ad) => ad.realisation)
-              .filter((x): x is string => x !== null && x !== undefined && x !== '')
-          )
-        ).sort();
-
-        const topicFormats = Array.from(
-          new Set(
-            allAds
-              .map((ad) => ad.topic)
-              .filter((x): x is string => x !== null && x !== undefined && x !== '')
-          )
-        ).sort();
-
-        const hookFormats = Array.from(
-          new Set(
-            allAds
-              .map((ad) => ad.hook)
-              .filter((x): x is string => x !== null && x !== undefined && x !== '')
-          )
-        ).sort();
-
-        const characterFormats = Array.from(
-          new Set(
-            allAds
-              .map((ad) => ad.character)
-              .filter((x): x is string => x !== null && x !== undefined && x !== '')
-          )
-        ).sort();
-
-        const variationBuckets = ['more_than_10', '5_10', '3_5', 'less_than_3'];
-        const dateRangeOptions = ['today', 'week', 'month', 'quarter'];
-
-        // Funnels: extract per ad
-        const funnelsSet = new Set<string>();
-        const adIdToFunnelsMap: FunnelsMap = {};
-        for (const ad of allAds) {
-          try {
-            const fls = extractFunnelsFromAd(ad);
-            adIdToFunnelsMap[String(ad.id)] = fls;
-            for (const f of fls) funnelsSet.add(f);
-          } catch {
-            adIdToFunnelsMap[String(ad.id)] = [];
+        const saved = sessionStorage.getItem('advanceFilterState');
+        if (saved) {
+          const savedFilters = JSON.parse(saved);
+          if (savedFilters.businessId) {
+            console.log(
+              '[FilteredContainer] ⏭️ Skipping auto-select, sessionStorage has saved businessId'
+            );
+            return; // Don't auto-select, let restoration handle it
           }
         }
-        const funnels = Array.from(funnelsSet).sort();
-
-        const opts = {
-          pageNames,
-          publisherPlatforms,
-          ctaTypes,
-          displayFormats,
-          conceptFormats,
-          realizationFormats,
-          topicFormats,
-          hookFormats,
-          characterFormats,
-          variationBuckets,
-          dateRangeOptions,
-          funnels,
-        };
-
-        setAvailableOptions(opts);
-        setAdIdToFunnels(adIdToFunnelsMap);
-
-        // Initial filtered ads
-        const baseFiltered = initialPageName
-          ? allAds.filter((ad) => ad.page_name === initialPageName)
-          : allAds;
-
-        setFilteredAds(baseFiltered);
-
-        // Initial counts (IMPORTANT: funnels: [] must NOT filter everything)
-        const emptyFilters: FilterOptions = {
-          pageName: '',
-          pageNames: [],
-          publisherPlatform: '',
-          publisherPlatforms: [],
-          ctaType: '',
-          ctaTypes: [],
-          displayFormat: '',
-          displayFormats: [],
-          dateRange: '',
-          dateRanges: [],
-          searchQuery: '',
-          conceptFormat: '',
-          conceptFormats: [],
-          realizationFormat: '',
-          realizationFormats: [],
-          topicFormat: '',
-          topicFormats: [],
-          hookFormat: '',
-          hookFormats: [],
-          characterFormat: '',
-          characterFormats: [],
-          variationCount: '',
-          variationCounts: [],
-          funnels: [],
-        };
-
-        const initialCounts = computeCountsForOptions(opts, emptyFilters, allAds, adIdToFunnelsMap);
-        setAvailableCounts(initialCounts);
-
-        // Apply initialPageNames/initialPageName, initialFunnels, initialTopic, and/or initialHook if provided
-        const shouldApplyFilters =
-          (Array.isArray(initialPageNames) && initialPageNames.length > 0) ||
-          initialPageName ||
-          (Array.isArray(initialFunnels) && initialFunnels.length > 0) ||
-          initialTopic ||
-          initialHook;
-
-        if (shouldApplyFilters) {
-          // Prefer initialPageNames if provided, otherwise use initialPageName
-          const pagesToApply =
-            Array.isArray(initialPageNames) && initialPageNames.length > 0
-              ? initialPageNames
-              : initialPageName
-              ? [initialPageName]
-              : [];
-
-          const preset: FilterOptions = {
-            ...emptyFilters,
-            pageName: '',
-            pageNames: pagesToApply,
-            funnels:
-              Array.isArray(initialFunnels) && initialFunnels.length > 0 ? initialFunnels : [],
-            topicFormat: initialTopic || '',
-            hookFormat: initialHook || '',
-          };
-          handleFiltersChange(preset, allAds, opts, adIdToFunnelsMap);
-        }
-      } catch (error) {
-        console.error('Error loading ads:', error);
-      } finally {
-        setIsLoading(false);
+      } catch (e) {
+        console.error('Failed to check sessionStorage:', e);
       }
-    };
 
-    loadAds();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  /**
-   * handleFiltersChange now uses the same applyFilters pipeline.
-   * Optional params let us call it during initial load before state settles.
-   */
-  const handleFiltersChange = (
-    filters: FilterOptions,
-    adsArg: Ad[] = ads,
-    optsArg: typeof availableOptions = availableOptions,
-    funnelsMapArg: FunnelsMap = adIdToFunnels
-  ) => {
-    setCurrentFilters(filters);
-
-    // counts for dropdowns
-    try {
-      const countsObj = computeCountsForOptions(optsArg, filters, adsArg, funnelsMapArg);
-      setAvailableCounts(countsObj);
-    } catch (e) {
-      console.debug('Failed to compute availableCounts', e);
-    }
-
-    // apply filters
-    let next = applyFilters(adsArg, filters, funnelsMapArg);
-
-    // variation bucket filter (multi-select OR)
-    if (filters.variationCounts && filters.variationCounts.length > 0) {
-      const allGroups = buildDuplicateGroups(next);
-      const keepIds = new Set<number>();
-      for (const bucket of filters.variationCounts) {
-        for (const g of allGroups) {
-          if (matchesVariationBucket(g.length, bucket)) {
-            for (const a of g) keepIds.add(Number(a.id));
-          }
-        }
-      }
-      next = next.filter((ad) => keepIds.has(Number(ad.id)));
-    } else if (filters.variationCount) {
-      next = filterByVariationBucket(next, String(filters.variationCount));
-    }
-
-    // enforce auto sort
-    setUserSortMode('most_variations');
-
-    setFilteredAds(next);
-  };
-
-  // Deep-linking: keep ?page= in sync with selections
-  useEffect(() => {
-    if (!searchParams) return;
-    const selectedPages =
-      currentFilters?.pageNames && currentFilters.pageNames.length > 0
-        ? currentFilters.pageNames
-        : currentFilters?.pageName
-        ? [currentFilters.pageName]
-        : [];
-
-    const params = new URLSearchParams(searchParams.toString());
-    const existing = params.get('page');
-    const nextVal = selectedPages.length > 0 ? selectedPages.join(',') : '';
-
-    if (nextVal) {
-      // Only update if changed
-      if (existing !== nextVal) {
-        params.set('page', nextVal);
-        router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-      }
-    } else if (existing) {
-      params.delete('page');
+      console.log('[FilteredContainer] 🎯 Auto-selecting first business');
+      const firstBizId = String(panelOptions.businesses[0].id);
+      const params = new URLSearchParams(searchParams.toString());
+      params.set('businessId', firstBizId);
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentFilters?.pageNames, currentFilters?.pageName]);
-
-  // Grouping / dedupe for Advanced Filter results (based only on duplicates_links)
-  const {
-    dedupedAds: groupedDedupedAds,
-    adIdToGroupMap: groupedAdIdToGroupMap,
-    adIdToRelatedCount: groupedAdIdToRelatedCount,
-  } = useMemo(() => {
-    const subset = filteredAds;
-
-    const groups = buildDuplicateGroups(subset);
-
-    // map adId -> group
-    const adIdToGroup: Record<string, Ad[]> = {};
-    for (const g of groups) {
-      for (const a of g) adIdToGroup[String(a.id)] = g;
-    }
-
-    // representative list: for groups >1 take newest; otherwise include itself
-    const reps: Ad[] = [];
-    const seenRep = new Set<string>();
-
-    for (const g of groups) {
-      if (g.length > 1) {
-        const rep = g
-          .slice()
-          .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0];
-        const key = String(rep?.id ?? '');
-        if (key && !seenRep.has(key)) {
-          reps.push(rep);
-          seenRep.add(key);
-        }
-      } else {
-        const only = g[0];
-        const key = String(only?.id ?? '');
-        if (key && !seenRep.has(key)) {
-          reps.push(only);
-          seenRep.add(key);
-        }
-      }
-    }
-
-    // related counts
-    const relatedCount: Record<string, number> = {};
-    for (const a of subset) {
-      const size = adIdToGroup[String(a.id)]?.length ?? 1;
-      relatedCount[String(a.id)] = Math.max(0, size - 1);
-    }
-
-    return {
-      dedupedAds: reps,
-      adIdToGroupMap: adIdToGroup,
-      adIdToRelatedCount: relatedCount,
-    };
-  }, [filteredAds]);
-
-  const sortedGroupedDedupedAds = useMemo(() => {
-    const arr = [...groupedDedupedAds];
-    const mode = userSortMode === 'auto' ? 'most_variations' : userSortMode;
-
-    if (mode === 'most_variations') {
-      return arr.sort((a, b) => {
-        const na = groupedAdIdToRelatedCount[String(a.id)] ?? 0;
-        const nb = groupedAdIdToRelatedCount[String(b.id)] ?? 0;
-        if (nb !== na) return nb - na;
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      });
-    }
-
-    if (mode === 'least_variations') {
-      return arr.sort((a, b) => {
-        const na = groupedAdIdToRelatedCount[String(a.id)] ?? 0;
-        const nb = groupedAdIdToRelatedCount[String(b.id)] ?? 0;
-        if (na !== nb) return na - nb;
-        return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
-      });
-    }
-
-    // newest
-    return arr.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-  }, [groupedDedupedAds, groupedAdIdToRelatedCount, userSortMode]);
-
-  if (isLoading) {
-    return (
-      <div className="flex justify-center items-center h-64">
-        <div className="relative">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
-          <div className="absolute inset-0 rounded-full border-2 border-slate-200"></div>
-        </div>
-      </div>
-    );
-  }
+  }, [
+    filters.businessId,
+    panelOptions.businesses,
+    pathname,
+    router,
+    searchParams,
+    restorationComplete,
+  ]);
 
   return (
     <div className="space-y-6">
       <FilterPanel
         onFiltersChange={handleFiltersChange}
-        availableOptions={availableOptions}
-        initialPageName={initialPageName}
-        initialPageNames={initialPageNames}
-        initialHook={initialHook}
-        initialTopic={initialTopic}
-        counts={availableCounts}
+        availableOptions={panelOptions}
+        counts={normalizedCounts}
+        // Pass current state to panel so checkboxes are checked
+        initialBusinessId={filters.businessId}
+        initialPageNames={filters.pageNames}
+        initialDisplayFormats={filters.displayFormats}
+        initialCtaTypes={filters.ctaTypes}
+        initialConcepts={filters.concepts}
+        initialRealizations={filters.realizations}
+        initialTopics={filters.topics}
+        initialTopic={filters.topics[0]}
+        initialHooks={filters.hooks}
+        initialHook={filters.hooks[0]}
+        initialCharacters={filters.characters}
+        initialPlatforms={filters.platforms}
+        initialSearchQuery={filters.searchQuery}
+        initialFunnels={filters.funnels}
+        initialVariationCounts={filters.variationCounts}
+        initialDateRanges={filters.dateRanges}
       />
 
-      <div className="bg-white rounded-lg shadow-md p-6">
-        <div className="totalAds mb-6">
-          <h3 className="text-lg font-semibold text-slate-900 mb-2">Search Results</h3>
-          <p className="text-slate-600">
-            Found: <span className="font-semibold text-slate-900">{filteredAds.length}</span> ads
-          </p>
-          {selectionMode && (
-            <div className="mt-2 text-sm text-slate-700">
-              Selected:{' '}
-              <span className="font-semibold text-slate-900">
-                {Object.keys(selectedIds).length}
-              </span>
-            </div>
-          )}
-        </div>
-
-        <div
-          className={`flex items-center justify-between mb-4 ${
-            resetFlash ? 'opacity-70 transition-opacity duration-300' : ''
-          }`}
-        >
-          <div />
-          <div className="flex items-center gap-3">
-            <label htmlFor="filtered-sort" className="text-sm text-slate-600 mr-2">
-              Sort:
-            </label>
-            <select
-              id="filtered-sort"
-              value={userSortMode}
-              onChange={(e) => setUserSortMode(e.target.value as SortMode)}
-              className="px-3 py-2 border border-slate-200 rounded-md text-sm"
-            >
-              <option value="least_variations">Least variations</option>
-              <option value="most_variations">Most variations</option>
-              <option value="newest">Newest</option>
-            </select>
-
-            <div className="ml-3">
-              <div className="flex items-center gap-2">
-                {!selectionMode ? (
-                  <button
-                    type="button"
-                    onClick={() => setSelectionMode(true)}
-                    className="px-3 py-2 text-sm rounded-md border border-slate-200"
-                    title="Enable selection mode"
-                  >
-                    Select to download creo data
-                  </button>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (Object.keys(selectedIds).length > 0) downloadSelected();
-                        else {
-                          try {
-                            showToast({
-                              message: 'Please select at least one creative to export.',
-                              type: 'error',
-                            });
-                          } catch {}
-                        }
-                      }}
-                      disabled={Object.keys(selectedIds).length === 0}
-                      className={`px-3 py-2 text-sm rounded-md border ${
-                        Object.keys(selectedIds).length === 0
-                          ? 'bg-slate-100 text-slate-400 cursor-not-allowed border-slate-200'
-                          : 'bg-blue-600 text-white border-blue-600'
-                      }`}
-                    >
-                      Download selected
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectedIds({});
-                        try {
-                          showToast({ message: 'Selection cleared', type: 'success' });
-                        } catch {}
-                        setResetFlash(true);
-                        setTimeout(() => setResetFlash(false), 260);
-                      }}
-                      className="px-3 py-2 text-sm rounded-md border bg-white text-slate-700 border-slate-200"
-                    >
-                      Reset selection
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const filters = currentFilters;
-                        const filtersEmpty =
-                          !filters ||
-                          Object.entries(filters).every(([k, v]) => {
-                            if (k === 'funnels') return !v || (Array.isArray(v) && v.length === 0);
-                            return v === '' || v === undefined || v === null;
-                          });
-
-                        const targetAds = filtersEmpty ? ads : filteredAds;
-                        const next: Record<string, boolean> = {};
-                        for (const a of targetAds) next[String(a.id)] = true;
-                        setSelectedIds(next);
-
-                        try {
-                          showToast({
-                            message: `Selected ${Object.keys(next).length} creatives`,
-                            type: 'success',
-                          });
-                        } catch {}
-                      }}
-                      className="px-3 py-2 text-sm rounded-md border bg-slate-50 hover:bg-slate-100 border-slate-200"
-                    >
-                      Select All
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setSelectionMode(false);
-                        setSelectedIds({});
-                        try {
-                          showToast({ message: 'Exited selection mode', type: 'success' });
-                        } catch {}
-                      }}
-                      className="px-3 py-2 text-sm rounded-md border bg-white text-slate-700 border-slate-200"
-                    >
-                      Exit selection
-                    </button>
-                  </>
-                )}
-              </div>
-            </div>
+      <div className="min-h-[400px]">
+        {/* Loading State */}
+        {isAdsInitialLoading || (isAdsLoading && ads.length === 0) ? (
+          <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mb-4"></div>
+            <p>Loading representatives...</p>
           </div>
-        </div>
+        ) : ads.length === 0 ? (
+          /* Empty State */
+          <div className="p-8 bg-slate-50 border border-slate-200 rounded-lg text-center">
+            <h3 className="text-lg font-medium text-slate-900">No ads found</h3>
+            <p className="text-slate-500 mt-1">
+              Try adjusting your filters. We are showing representatives for business ID:{' '}
+              {filters.businessId}
+            </p>
+            <button
+              onClick={() => {
+                // Clear sessionStorage when clearing all filters
+                if (typeof window !== 'undefined') {
+                  sessionStorage.removeItem('advanceFilterState');
+                  console.log('[FilteredContainer] Cleared sessionStorage filters');
+                }
+                router.push(pathname);
+              }}
+              className="mt-4 text-blue-600 hover:underline"
+            >
+              Clear all filters
+            </button>
+          </div>
+        ) : (
+          /* Results */
+          <>
+            <div className="flex items-center justify-between mb-4 px-2">
+              <span className="text-sm font-medium text-slate-500">
+                Found {ads.length} representatives
+              </span>
+              {isAdsLoading && (
+                <span className="text-xs text-blue-600 animate-pulse">Updating...</span>
+              )}
+            </div>
 
-        <ResultsGrid
-          isLoading={isLoading}
-          showAINewsModal={false}
-          processingMessage={''}
-          viewMode={'grid' as ViewMode}
-          currentPageAds={sortedGroupedDedupedAds}
-          adIdToGroupMap={groupedAdIdToGroupMap}
-          adIdToRelatedCount={groupedAdIdToRelatedCount}
-          filteredAdsByType={filteredAds}
-          selectedCreativeType={'all'}
-          processingDone={false}
-          selectionMode={selectionMode}
-          selectedIds={selectedIds}
-          onToggleSelect={toggleSelectId}
-        />
+            <ResultsGrid
+              isLoading={isAdsLoading && ads.length > 0}
+              currentPageAds={ads}
+              adIdToGroupMap={adIdToGroupMap}
+              adIdToRelatedCount={adIdToRelatedCount}
+              filteredAdsByType={ads}
+              selectionMode={false}
+              selectedIds={{}}
+              onToggleSelect={() => {}}
+              showAINewsModal={false}
+              processingMessage=""
+              selectedCreativeType="all"
+              viewMode="grid"
+            />
+
+            {hasNextPage && (
+              <div className="mt-8 flex justify-center pb-8">
+                <button
+                  onClick={() => fetchNextPage()}
+                  disabled={isAdsLoading}
+                  className="bg-white border border-slate-300 text-slate-700 font-medium px-6 py-2 rounded-full hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 transition-colors shadow-sm"
+                >
+                  {isAdsLoading ? 'Loading...' : 'Load More Groups'}
+                </button>
+              </div>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

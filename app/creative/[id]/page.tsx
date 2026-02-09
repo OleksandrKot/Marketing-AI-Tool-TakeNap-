@@ -4,15 +4,9 @@ import { notFound } from 'next/navigation';
 import { Suspense } from 'react';
 import { AdDetailsSkeleton } from './ad-details-skeleton';
 import type { Metadata } from 'next';
-import type { Ad, AdaptationScenario } from '@/lib/core/types';
-import {
-  parseScenarios,
-  sanitizeScenarios,
-  getVisualParagraphs,
-  buildMetaAnalysis,
-  buildGroupedSections,
-  buildUnifiedAd,
-} from './utils/adData';
+import type { Ad } from '@/lib/core/types';
+
+export const dynamic = 'force-dynamic';
 
 async function getAdById(archiveId: string): Promise<Ad | null> {
   const supabase = createServerSupabaseClient();
@@ -50,7 +44,7 @@ async function getAdById(archiveId: string): Promise<Ad | null> {
 }
 
 /**
- * Related ads по группе (бизнес + векторная группа)
+ * Related ads by group (business + vector group)
  */
 async function getRelatedAdsByGroup(ad: Ad): Promise<Ad[] | null> {
   if (!ad.business_id || ad.vector_group === null) return null;
@@ -58,18 +52,38 @@ async function getRelatedAdsByGroup(ad: Ad): Promise<Ad[] | null> {
   const supabase = createServerSupabaseClient();
   const { data, error } = await supabase
     .from('ads')
-    .select('ad_archive_id, title, storage_path, display_format, page_name, created_at')
+    .select(
+      'ad_archive_id, title, storage_path, video_storage_path, display_format, page_name, created_at, businesses ( slug )'
+    )
     .eq('business_id', ad.business_id)
     .eq('vector_group', ad.vector_group)
     .neq('ad_archive_id', ad.ad_archive_id)
     .limit(12);
 
   if (error) return null;
-  return (data || []).map((a) => ({ ...a, id: a.ad_archive_id })) as Ad[];
+
+  return (data || []).map((a) => {
+    const business = Array.isArray(a.businesses) ? a.businesses[0] : a.businesses;
+    const slug = business?.slug;
+
+    const ensureSlugInPath = (p: string | null) => {
+      if (!p || !slug) return p;
+      const cleanP = p.trim().replace(/^\/+/, '');
+      if (cleanP.startsWith(`${slug}/`)) return cleanP;
+      return `${slug}/${cleanP}`;
+    };
+
+    return {
+      ...a,
+      id: a.ad_archive_id,
+      storage_path: ensureSlugInPath(a.storage_path),
+      video_storage_path: ensureSlugInPath(a.video_storage_path),
+    };
+  }) as Ad[];
 }
 
 /**
- * Метаданные (SEO)
+ * Metadata (SEO)
  */
 export async function generateMetadata({ params }: { params: { id: string } }): Promise<Metadata> {
   const ad = await getAdById(params.id);
@@ -82,12 +96,18 @@ export async function generateMetadata({ params }: { params: { id: string } }): 
 }
 
 /**
- * Static params для ad_archive_id
+ * Static params for ad_archive_id
  */
 export async function generateStaticParams() {
   const supabase = createServerSupabaseClient();
   const { data } = await supabase.from('ads').select('ad_archive_id').limit(20);
   return data?.map((ad) => ({ id: ad.ad_archive_id })) || [];
+}
+
+function AdDetailsContent({ ad, relatedAds }: { ad: Ad; relatedAds: Ad[] | null }) {
+  // Don't process here - move to client component
+  // Let AdDetails handle all the heavy lifting with client-side processing
+  return <AdDetails ad={ad} relatedAds={relatedAds} />;
 }
 
 export default async function CreativePage({
@@ -97,47 +117,51 @@ export default async function CreativePage({
   params: { id: string };
   searchParams: { related?: string };
 }) {
-  // Load main creative (params.id is ad_archive_id)
+  // Load main ad first (required)
   const ad = await getAdById(params.id);
 
   if (!ad) notFound();
 
-  // Logic for getting related ads
-  let relatedAds: Ad[] = [];
-  if (searchParams.related) {
-    const { data } = await createServerSupabaseClient()
-      .from('ads')
-      .select('ad_archive_id, title, storage_path, display_format')
-      .in('ad_archive_id', searchParams.related.split(','));
-    relatedAds = (data || []).map((a) => ({ ...a, id: a.ad_archive_id })) as Ad[];
-  } else {
-    const groupAds = await getRelatedAdsByGroup(ad);
-    relatedAds = groupAds || [];
+  // Load related ads (don't block main content)
+  let relatedAds: Ad[] | null = null;
+  try {
+    if (searchParams.related) {
+      const result = await createServerSupabaseClient()
+        .from('ads')
+        .select(
+          'ad_archive_id, title, storage_path, video_storage_path, display_format, businesses ( slug )'
+        )
+        .in('ad_archive_id', searchParams.related.split(','));
+
+      relatedAds = (result.data || []).map((a) => {
+        const business = Array.isArray(a.businesses) ? a.businesses[0] : a.businesses;
+        const slug = business?.slug;
+
+        const ensureSlugInPath = (p: string | null) => {
+          if (!p || !slug) return p;
+          const cleanP = p.trim().replace(/^\/+/, '');
+          if (cleanP.startsWith(`${slug}/`)) return cleanP;
+          return `${slug}/${cleanP}`;
+        };
+
+        return {
+          ...a,
+          id: a.ad_archive_id,
+          storage_path: ensureSlugInPath(a.storage_path),
+          video_storage_path: ensureSlugInPath(a.video_storage_path),
+        };
+      }) as Ad[];
+    } else {
+      relatedAds = await getRelatedAdsByGroup(ad);
+    }
+  } catch (error) {
+    console.error('Failed to load related ads:', error);
+    relatedAds = null;
   }
-
-  // Helper functions (utils) now work with clean object from schema
-  const { visualMainParagraphs, visualDerivedFromVideo } = getVisualParagraphs(ad);
-  const metaAnalysis = buildMetaAnalysis(ad, visualMainParagraphs);
-
-  // cards_json is now passed directly from the ad object
-  const adaptationScenarios = sanitizeScenarios(parseScenarios(ad));
-  const groupedSections = buildGroupedSections(
-    ad,
-    metaAnalysis,
-    adaptationScenarios as AdaptationScenario[]
-  );
-  const adUnified = buildUnifiedAd(ad);
 
   return (
     <Suspense fallback={<AdDetailsSkeleton />}>
-      <AdDetails
-        ad={adUnified}
-        relatedAds={relatedAds}
-        groupedSections={groupedSections}
-        visualMainParagraphs={visualMainParagraphs}
-        visualDerivedFromVideo={visualDerivedFromVideo}
-        metaAnalysis={metaAnalysis}
-      />
+      <AdDetailsContent ad={ad} relatedAds={relatedAds} />
     </Suspense>
   );
 }

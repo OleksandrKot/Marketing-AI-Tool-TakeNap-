@@ -99,10 +99,4 @@ select {
     -ms-touch-action: none !important;
     height: 100% !important;
   }
-
-  html.no-scroll *,
-  body.no-scroll * {
-    pointer-events: none !important;
-    user-select: none !important;
-  }
 }

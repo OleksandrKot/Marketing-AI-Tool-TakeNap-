@@ -16,6 +16,42 @@ import type { Ad } from '@/lib/core/types';
 
 export const dynamic = 'force-dynamic';
 
+// Helper to fetch all records from Supabase (handles 1000 record limit)
+const fetchAllRecords = async (
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  supabase: any,
+  table: string,
+  select: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  filterFn?: (query: any) => any
+) => {
+  const pageSize = 1000;
+  let offset = 0;
+  const allRecords: Array<Record<string, unknown>> = [];
+
+  while (true) {
+    let query = supabase
+      .from(table)
+      .select(select)
+      .range(offset, offset + pageSize - 1);
+
+    if (filterFn) {
+      query = filterFn(query);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    if (!data || data.length === 0) break;
+    allRecords.push(...data);
+
+    if (data.length < pageSize) break;
+    offset += pageSize;
+  }
+
+  return allRecords;
+};
+
 interface CompetitorAnalyticsRequest {
   competitors: string[];
 }
@@ -169,18 +205,13 @@ export async function POST(request: NextRequest) {
     let error: Error | null = null;
 
     try {
-      const result = await supabase
-        .from('ads')
-        .select('*')
-        .in('page_name', competitors)
-        .order('created_at', { ascending: false });
-
-      if (result.error) {
-        error = new Error(result.error.message || 'Database query failed');
-        console.error('[Competitor Analytics] Supabase error:', result.error);
-      } else {
-        ads = result.data;
-      }
+      ads = await fetchAllRecords(
+        supabase,
+        'ads',
+        '*',
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (query: any) => query.in('page_name', competitors).order('created_at', { ascending: false })
+      );
     } catch (err) {
       error = err instanceof Error ? err : new Error('Database connection failed');
       console.error('[Competitor Analytics] Query error:', err);

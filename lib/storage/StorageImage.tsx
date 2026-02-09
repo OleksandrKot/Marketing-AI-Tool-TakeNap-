@@ -6,6 +6,9 @@ import { getPublicImageUrl } from '@/lib/storage/helpers';
 // Note: dynamically import storage-url-cache inside the effect to avoid
 // static resolution issues in the TS build environment.
 
+// Cache signed URLs to avoid repeated API calls
+const urlCache = new Map<string, { url: string; expires: number }>();
+
 interface StorageImageProps {
   bucket: string;
   path: string; // relative path or filename inside bucket
@@ -37,16 +40,23 @@ export default function StorageImage({
 
     async function fetchSigned() {
       try {
+        // Check cache first
+        const cacheKey = `${bucket}:${cleanPath}`;
+        const cached = urlCache.get(cacheKey);
+        if (cached && cached.expires > Date.now()) {
+          if (mounted) setSrc(cached.url);
+          return;
+        }
+
         console.log('[StorageImage] Fetching:', { bucket, path: cleanPath });
 
-        // Check the in-memory cache first
         // Query the server helper to get a signed URL for the specific path.
         // This avoids importing the shared storage cache module which caused
         // TS resolution problems in some environments.
         const res = await fetch('/api/storage/signed-url', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ bucket, path: cleanPath, expires: 60 }),
+          body: JSON.stringify({ bucket, path: cleanPath, expires: 3600 }), // 1 hour instead of 60 seconds
         });
         let j: unknown = null;
         try {
@@ -68,6 +78,8 @@ export default function StorageImage({
         // in that case we don't set a storage URL so the parent component can fallback to
         // its own preview (or StorageImage will render a placeholder when src is empty).
         if (url) {
+          // Cache for 50 minutes (before expiration)
+          urlCache.set(cacheKey, { url, expires: Date.now() + 50 * 60 * 1000 });
           setSrc(url);
         } else {
           // leave src empty to trigger placeholder

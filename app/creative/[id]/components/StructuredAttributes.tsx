@@ -14,12 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Copy, Trash2 } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 
-import {
-  prettifyKey,
-  stringifyValue,
-  tryParseJson,
-  flattenJsonToProps,
-} from '@/lib/creative/structured-attributes';
+import { prettifyKey, stringifyValue, tryParseJson } from '@/lib/creative/structured-attributes';
 
 type Block = { id: string; label: string; value: string; included: boolean };
 type PropItem = { key: string; label: string; value: string };
@@ -58,65 +53,77 @@ function normalizeKey(input: string | undefined | null): string {
     .replace(/[^a-zA-Z0-9\u0400-\u04FF]+/g, '');
 }
 
-// Strict mapping for known prompt-related fields from creative_concepts
+// Strict mapping for known prompt-related fields from raw_json structure
 const PROMPT_FIELDS: { jsonKey: string; label: string; outKey: string }[] = [
+  // creative_concepts fields
   { jsonKey: 'Hook', label: 'Hook', outKey: 'Hook' },
   { jsonKey: 'Topic', label: 'Topic', outKey: 'Topic' },
   { jsonKey: 'Concept', label: 'Concept', outKey: 'Concept' },
   { jsonKey: 'Realisation', label: 'Realisation', outKey: 'Realisation' },
-  { jsonKey: 'Character', label: 'Character', outKey: 'Character' },
   { jsonKey: 'Persona', label: 'Persona', outKey: 'Persona' },
-  { jsonKey: 'Primary_Subject', label: 'Primary Subject', outKey: 'Primary_Subject' },
-  { jsonKey: 'Text', label: 'Text', outKey: 'Text' },
-  { jsonKey: 'Mood', label: 'Mood', outKey: 'Mood' },
-  { jsonKey: 'Style', label: 'Style', outKey: 'Style' },
-  { jsonKey: 'Visual_Focus', label: 'Visual Focus', outKey: 'Visual_Focus' },
-  { jsonKey: 'Color_Palette', label: 'Color Palette', outKey: 'Color_Palette' },
-  { jsonKey: 'Lighting', label: 'Lighting', outKey: 'Lighting' },
-  { jsonKey: 'Camera_Style', label: 'Camera Style', outKey: 'Camera_Style' },
-  { jsonKey: 'Composition', label: 'Composition', outKey: 'Composition' },
-  { jsonKey: 'Environment', label: 'Environment', outKey: 'Environment' },
-  { jsonKey: 'Secondary_Elements', label: 'Secondary Elements', outKey: 'Secondary_Elements' },
-  { jsonKey: 'Background_Elements', label: 'Background Elements', outKey: 'Background_Elements' },
-  { jsonKey: 'Symbolism', label: 'Symbolism', outKey: 'Symbolism' },
-  { jsonKey: 'Call_To_Action', label: 'Call To Action', outKey: 'Call_To_Action' },
+  // Description and metadata
+  { jsonKey: 'ai_description', label: 'AI Description', outKey: 'ai_description' },
+  { jsonKey: 'audio_script', label: 'Audio Script', outKey: 'audio_script' },
+  { jsonKey: 'video_script', label: 'Video Script', outKey: 'video_script' },
+  // visual_details.style fields
+  { jsonKey: 'aesthetics', label: 'Aesthetics', outKey: 'aesthetics' },
+  { jsonKey: 'dominant_color', label: 'Dominant Color', outKey: 'dominant_color' },
+  // visual_details.overlays fields
+  { jsonKey: 'has_text', label: 'Has Text', outKey: 'has_text' },
+  { jsonKey: 'cta_button', label: 'CTA Button', outKey: 'cta_button' },
+  { jsonKey: 'text_content', label: 'Text Content', outKey: 'text_content' },
+  // visual_details.subjects fields
+  { jsonKey: 'subject_count', label: 'Subject Count', outKey: 'subject_count' },
+  { jsonKey: 'gender', label: 'Gender', outKey: 'gender' },
+  { jsonKey: 'emotion', label: 'Emotion', outKey: 'emotion' },
+  { jsonKey: 'age_group', label: 'Age Group', outKey: 'age_group' },
+  { jsonKey: 'appearance', label: 'Appearance', outKey: 'appearance' },
+  // visual_details.environment fields
+  { jsonKey: 'setting_type', label: 'Setting Type', outKey: 'setting_type' },
+  { jsonKey: 'lighting', label: 'Lighting', outKey: 'lighting' },
 ];
 
 // Fallback section titles used when JSON / strict fields are not available
-// Aligned with creative_concepts structure
-const INITIAL_KEYS = ['Hook', 'Topic', 'Concept', 'Character', 'Mood', 'Style', 'Environment'];
+// Aligned with raw_json creative_concepts structure
+const INITIAL_KEYS = ['Hook', 'Topic', 'Concept', 'Realisation', 'Persona'];
 
 // Default blocks that must exist in the main list (UI + final prompt)
-// Aligned with creative_concepts from raw_json
+// Aligned with raw_json structure (creative_concepts + visual_details)
 const DEFAULT_FIELDS: { label: string; value: string }[] = [
+  // Creative concepts
   { label: 'Hook', value: '' },
   { label: 'Topic', value: '' },
   { label: 'Concept', value: '' },
   { label: 'Realisation', value: '' },
-  { label: 'Character', value: '' },
   { label: 'Persona', value: '' },
-  { label: 'Primary_Subject', value: '' },
-  { label: 'Text', value: '' },
-  { label: 'Mood', value: '' },
-  { label: 'Style', value: '' },
-  { label: 'Visual_Focus', value: '' },
-  { label: 'Color_Palette', value: '' },
+  // Descriptions
+  { label: 'AI Description', value: '' },
+  { label: 'Audio Script', value: '' },
+  { label: 'Video Script', value: '' },
+  // Visual details - style
+  { label: 'Aesthetics', value: '' },
+  { label: 'Dominant Color', value: '' },
+  // Visual details - overlays
+  { label: 'Has Text', value: '' },
+  { label: 'CTA Button', value: '' },
+  { label: 'Text Content', value: '' },
+  // Visual details - subjects
+  { label: 'Subject Count', value: '' },
+  { label: 'Gender', value: '' },
+  { label: 'Emotion', value: '' },
+  { label: 'Age Group', value: '' },
+  { label: 'Appearance', value: '' },
+  // Visual details - environment
+  { label: 'Setting Type', value: '' },
   { label: 'Lighting', value: '' },
-  { label: 'Camera_Style', value: '' },
-  { label: 'Composition', value: '' },
-  { label: 'Environment', value: '' },
-  { label: 'Secondary_Elements', value: '' },
-  { label: 'Background_Elements', value: '' },
-  { label: 'Symbolism', value: '' },
-  { label: 'Call_To_Action', value: '' },
 ];
 
 // Default props for Available Properties (derived from DEFAULT_FIELDS → no duplication)
-const DEFAULT_PROP_ITEMS: PropItem[] = DEFAULT_FIELDS.map((f) => ({
-  key: normalizeKey(f.label) || f.label,
-  label: f.label,
-  value: f.value,
-}));
+// const DEFAULT_PROP_ITEMS: PropItem[] = DEFAULT_FIELDS.map((f) => ({
+//   key: normalizeKey(f.label) || f.label,
+//   label: f.label,
+//   value: f.value,
+// }));
 
 // Short label overrides for clarity in the Available Properties pills
 const SHORT_LABELS: Record<string, string> = {
@@ -124,37 +131,34 @@ const SHORT_LABELS: Record<string, string> = {
   'Created At': 'Created',
   'Ad Archive Id': 'Archive Id',
   'Page Name': 'Page',
-  Text: 'Text',
-  Caption: 'Caption',
   'Cta Text': 'CTA',
-  'Cta Type': 'CTA Type',
   'Display Format': 'Format',
   'Link Url': 'Link',
-  Title: 'Title',
   'Publisher Platform': 'Platform',
   'Meta Ad Url': 'Meta URL',
-  'Image Url': 'Image',
-  'Image Description': 'Image Desc',
   // creative_concepts fields
   Hook: 'Hook',
   Topic: 'Topic',
   Concept: 'Concept',
   Realisation: 'Realisation',
-  Character: 'Character',
   Persona: 'Persona',
-  Primary_Subject: 'Primary Subject',
-  Mood: 'Mood',
-  Style: 'Style',
-  Visual_Focus: 'Visual Focus',
-  Color_Palette: 'Color Palette',
+  // Descriptions
+  'AI Description': 'AI Desc',
+  'Audio Script': 'Audio',
+  'Video Script': 'Video',
+  // Visual details
+  Aesthetics: 'Aesthetics',
+  'Dominant Color': 'Main Color',
+  'Has Text': 'Has Text',
+  'CTA Button': 'CTA Button',
+  'Text Content': 'Text',
+  'Subject Count': 'Subjects',
+  Gender: 'Gender',
+  Emotion: 'Emotion',
+  'Age Group': 'Age',
+  Appearance: 'Appearance',
+  'Setting Type': 'Setting',
   Lighting: 'Lighting',
-  Camera_Style: 'Camera Style',
-  Composition: 'Composition',
-  Environment: 'Environment',
-  Secondary_Elements: 'Secondary Elements',
-  Background_Elements: 'Background Elements',
-  Symbolism: 'Symbolism',
-  Call_To_Action: 'Call To Action',
 };
 
 const MAX_PILL_LABEL_LEN = 26;
@@ -222,7 +226,7 @@ const StructuredAttributes = (
     const addPromptField = (cfg: { jsonKey: string; label: string; outKey: string }) => {
       let raw: unknown;
 
-      // First, try to read from raw_json.creative_concepts
+      // First, try to read from raw_json (supporting nested paths)
       if (ad && ad.raw_json) {
         try {
           let rawJson: Record<string, unknown> | null = null;
@@ -232,14 +236,60 @@ const StructuredAttributes = (
             rawJson = ad.raw_json as Record<string, unknown>;
           }
 
-          if (rawJson && rawJson.creative_concepts) {
-            const creativeConcepts = rawJson.creative_concepts as Record<string, unknown>;
-            if (Object.prototype.hasOwnProperty.call(creativeConcepts, cfg.jsonKey)) {
-              raw = creativeConcepts[cfg.jsonKey];
+          if (rawJson) {
+            // Try creative_concepts first
+            if (rawJson.creative_concepts) {
+              const creativeConcepts = rawJson.creative_concepts as Record<string, unknown>;
+              if (Object.prototype.hasOwnProperty.call(creativeConcepts, cfg.jsonKey)) {
+                raw = creativeConcepts[cfg.jsonKey];
+              }
+            }
+
+            // Try top-level (ai_description, audio_script, video_script)
+            if (raw === undefined && Object.prototype.hasOwnProperty.call(rawJson, cfg.jsonKey)) {
+              raw = rawJson[cfg.jsonKey];
+            }
+
+            // Try visual_details nested paths
+            if (raw === undefined && rawJson.visual_details) {
+              const visualDetails = rawJson.visual_details as Record<string, unknown>;
+
+              // Check nested paths: visual_details.style, visual_details.overlays, etc.
+              const nestedPaths: Record<string, string> = {
+                aesthetics: 'style.aesthetics',
+                dominant_color: 'style.dominant_color',
+                has_text: 'overlays.has_text',
+                cta_button: 'overlays.cta_button',
+                text_content: 'overlays.text_content',
+                subject_count: 'subjects.count',
+                gender: 'subjects.gender',
+                emotion: 'subjects.emotion',
+                age_group: 'subjects.age_group',
+                appearance: 'subjects.appearance',
+                setting_type: 'environment.setting_type',
+              };
+
+              const path = nestedPaths[cfg.jsonKey];
+              if (path) {
+                const parts = path.split('.');
+                let current: unknown = visualDetails;
+                for (const part of parts) {
+                  if (current && typeof current === 'object' && part in current) {
+                    current = (current as Record<string, unknown>)[part];
+                  } else {
+                    current = undefined;
+                    break;
+                  }
+                }
+                raw = current;
+              } else {
+                // Direct property in visual_details
+                raw = visualDetails[cfg.jsonKey];
+              }
             }
           }
         } catch (e) {
-          console.error('Error parsing raw_json.creative_concepts:', e);
+          console.error('Error parsing raw_json:', e);
         }
       }
 
@@ -254,7 +304,18 @@ const StructuredAttributes = (
       }
 
       if (raw === null || raw === undefined) return;
-      const val = String(raw).trim();
+
+      // Handle arrays (like color_palette, background_elements) - join with commas
+      let val: string;
+      if (Array.isArray(raw)) {
+        val = raw
+          .map((item) => String(item))
+          .join(', ')
+          .trim();
+      } else {
+        val = String(raw).trim();
+      }
+
       if (!val) return;
 
       // Avoid duplicates (same label + same value)
@@ -316,7 +377,10 @@ const StructuredAttributes = (
     for (const def of DEFAULT_FIELDS) {
       const exists = out.some((b) => normalizeKey(b.label) === normalizeKey(def.label));
       if (!exists) {
-        out.push({ id: uid(), label: def.label, value: def.value, included: true });
+        // Only add if it has a value, skip empty fields
+        if (def.value && String(def.value).trim().length > 0) {
+          out.push({ id: uid(), label: def.label, value: def.value, included: true });
+        }
       }
     }
 
@@ -374,145 +438,129 @@ const StructuredAttributes = (
 
   /**
    * Build a pool of available properties:
-   *  - flat ad properties
-   *  - nested JSON properties inside ad (flattened)
-   *  - JSON from "Image / Visual Description" (flattened)
-   *  - DEFAULT_PROP_ITEMS (for prompt-friendly fields)
+   *  - ONLY fields from raw_json structure (creative_concepts + visual_details + ai_description)
+   *  - Add "N/A" for empty fields instead of hiding them
    */
   const allProps = useMemo(() => {
     const result: PropItem[] = [];
     const seen = new Set<string>();
-    const excludePatterns = [
-      'image',
-      'description',
-      'new_scenario',
-      'scenario',
-      'scene',
-      'emotions',
-      'style',
-      'embedding',
-      'vec',
-      'business',
-      'date',
-      'created',
-      'updated',
-    ];
-    const isExcluded = (key: string) => {
-      const low = key.toLowerCase();
-      // Special case: never exclude raw_json
-      if (low === 'raw_json') return false;
-      return excludePatterns.some((p) => low.includes(p));
-    };
 
     console.log('[StructuredAttributes] ad object:', ad);
     console.log('[StructuredAttributes] ad.raw_json:', ad?.raw_json);
 
-    if (ad) {
-      // First: extract creative_concepts from raw_json and add them to available properties
-      if (ad.raw_json) {
-        try {
-          let rawJson: Record<string, unknown> | null = null;
-          if (typeof ad.raw_json === 'string') {
-            rawJson = JSON.parse(ad.raw_json as string);
-          } else if (typeof ad.raw_json === 'object' && ad.raw_json !== null) {
-            rawJson = ad.raw_json as Record<string, unknown>;
-          }
+    if (ad && ad.raw_json) {
+      try {
+        let rawJson: Record<string, unknown> | null = null;
+        if (typeof ad.raw_json === 'string') {
+          rawJson = JSON.parse(ad.raw_json as string);
+        } else if (typeof ad.raw_json === 'object' && ad.raw_json !== null) {
+          rawJson = ad.raw_json as Record<string, unknown>;
+        }
 
-          console.log('[StructuredAttributes] Parsed rawJson:', rawJson);
+        console.log('[StructuredAttributes] Parsed rawJson:', rawJson);
 
-          if (rawJson && rawJson.creative_concepts) {
-            const creativeConcepts = rawJson.creative_concepts as Record<string, string>;
-            console.log(
-              '[StructuredAttributes] Found creative_concepts:',
-              Object.keys(creativeConcepts)
-            );
+        if (rawJson) {
+          // Helper to extract value from raw_json with nested path support
+          const extractValue = (cfg: { jsonKey: string; label: string }) => {
+            let raw: unknown;
 
-            // Add each creative_concepts field to available properties
-            for (const [key, value] of Object.entries(creativeConcepts)) {
-              if (value && String(value).trim()) {
-                const normalizedKey = normalizeKey(key);
-                if (!seen.has(normalizedKey)) {
-                  // Find matching label from PROMPT_FIELDS
-                  const promptField = PROMPT_FIELDS.find((f) => f.jsonKey === key);
-                  const label = promptField ? promptField.label : key.replace(/_/g, ' ');
-
-                  result.push({
-                    key: normalizedKey,
-                    label: label,
-                    value: String(value).trim(),
-                  });
-                  seen.add(normalizedKey);
-                }
+            // Try creative_concepts first
+            if (rawJson!.creative_concepts) {
+              const creativeConcepts = rawJson!.creative_concepts as Record<string, unknown>;
+              if (Object.prototype.hasOwnProperty.call(creativeConcepts, cfg.jsonKey)) {
+                raw = creativeConcepts[cfg.jsonKey];
               }
             }
+
+            // Try top-level (ai_description, audio_script, video_script)
+            if (raw === undefined && Object.prototype.hasOwnProperty.call(rawJson!, cfg.jsonKey)) {
+              raw = rawJson![cfg.jsonKey];
+            }
+
+            // Try visual_details nested paths
+            if (raw === undefined && rawJson!.visual_details) {
+              const visualDetails = rawJson!.visual_details as Record<string, unknown>;
+
+              const nestedPaths: Record<string, string> = {
+                aesthetics: 'style.aesthetics',
+                dominant_color: 'style.dominant_color',
+                has_text: 'overlays.has_text',
+                cta_button: 'overlays.cta_button',
+                text_content: 'overlays.text_content',
+                subject_count: 'subjects.count',
+                gender: 'subjects.gender',
+                emotion: 'subjects.emotion',
+                age_group: 'subjects.age_group',
+                appearance: 'subjects.appearance',
+                setting_type: 'environment.setting_type',
+                lighting: 'environment.lighting',
+              };
+
+              const path = nestedPaths[cfg.jsonKey];
+              if (path) {
+                const parts = path.split('.');
+                let current: unknown = visualDetails;
+                for (const part of parts) {
+                  if (current && typeof current === 'object' && part in current) {
+                    current = (current as Record<string, unknown>)[part];
+                  } else {
+                    current = undefined;
+                    break;
+                  }
+                }
+                raw = current;
+              }
+            }
+
+            // Convert to string, handle arrays
+            let val: string;
+            if (raw === null || raw === undefined || raw === '') {
+              val = 'N/A';
+            } else if (Array.isArray(raw)) {
+              val = raw.length > 0 ? raw.map((item) => String(item)).join(', ') : 'N/A';
+            } else {
+              val = String(raw).trim() || 'N/A';
+            }
+
+            return val;
+          };
+
+          // Extract all PROMPT_FIELDS from raw_json
+          for (const cfg of PROMPT_FIELDS) {
+            const normalizedKey = normalizeKey(cfg.label);
+            if (!seen.has(normalizedKey)) {
+              const value = extractValue(cfg);
+              result.push({
+                key: normalizedKey,
+                label: cfg.label,
+                value: value,
+              });
+              seen.add(normalizedKey);
+            }
           }
-        } catch (e) {
-          console.error('[StructuredAttributes] Error parsing raw_json:', e);
         }
-      }
-
-      // Special case: add raw_json itself if exists
-      if (ad.raw_json !== undefined && ad.raw_json !== null) {
-        const rawJsonValue =
-          typeof ad.raw_json === 'string' ? ad.raw_json : JSON.stringify(ad.raw_json, null, 2);
-
-        console.log('[StructuredAttributes] Adding raw_json:', rawJsonValue.substring(0, 100));
-
-        if (!seen.has('raw_json')) {
-          result.push({
-            key: 'raw_json',
-            label: 'Raw JSON',
-            value: rawJsonValue,
-          });
-          seen.add('raw_json');
-        }
-      } else {
-        console.log('[StructuredAttributes] raw_json not found or empty');
-      }
-
-      // 1) top-level ad fields
-      Object.entries(ad)
-        .filter(([k, v]) => v !== null && v !== undefined && v !== '' && !isExcluded(k))
-        .forEach(([k, v]) => {
-          const key = k;
-          const label = prettifyKey(k);
-          const value = stringifyValue(v);
-          if (!value) return;
-          if (seen.has(key)) return;
-          seen.add(key);
-          result.push({ key, label, value });
-        });
-
-      // 2) nested JSON inside string fields
-      const nested: PropItem[] = [];
-      for (const [k, v] of Object.entries(ad)) {
-        if (typeof v !== 'string') continue;
-        const parsed = tryParseJson(v);
-        if (!parsed) continue;
-        const buf: PropItem[] = [];
-        flattenJsonToProps(buf, parsed, k);
-        nested.push(...buf);
-      }
-
-      for (const item of nested) {
-        const val = item.value?.trim();
-        if (!val) continue;
-        if (isExcluded(item.key)) continue;
-        if (seen.has(item.key)) continue;
-        seen.add(item.key);
-        result.push({ ...item, value: val });
+      } catch (e) {
+        console.error('[StructuredAttributes] Error parsing raw_json:', e);
       }
     }
 
-    // 4) default prompt-related props
-    for (const def of DEFAULT_PROP_ITEMS) {
-      if (seen.has(def.key)) continue;
-      seen.add(def.key);
-      result.push(def);
+    // If no raw_json, add all PROMPT_FIELDS with N/A
+    if (result.length === 0) {
+      for (const cfg of PROMPT_FIELDS) {
+        const normalizedKey = normalizeKey(cfg.label);
+        if (!seen.has(normalizedKey)) {
+          result.push({
+            key: normalizedKey,
+            label: cfg.label,
+            value: 'N/A',
+          });
+          seen.add(normalizedKey);
+        }
+      }
     }
 
     return result;
-  }, [ad, groupedSections]);
+  }, [ad]);
 
   /**
    * Autosave blocks to localStorage (per pathname).
@@ -720,14 +768,14 @@ const StructuredAttributes = (
           )}
 
           {/* Inline attributes form: compact grid */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 gap-4">
             {blocks
               .filter((b) => b.value && b.value.trim())
               .map((b) => {
                 const isTextarea = b.value && b.value.length > 50;
                 return (
-                  <div key={b.id} className="flex flex-col gap-1">
-                    <label className="text-xs font-medium text-slate-700">{b.label}</label>
+                  <div key={b.id} className="flex flex-col gap-2">
+                    <label className="text-sm font-bold text-black">{b.label}</label>
                     {isTextarea ? (
                       <Textarea
                         value={b.value}
@@ -738,7 +786,7 @@ const StructuredAttributes = (
                             )
                           )
                         }
-                        className="text-xs h-16 p-2"
+                        className="text-sm h-20 p-2"
                       />
                     ) : (
                       <Input
@@ -750,14 +798,14 @@ const StructuredAttributes = (
                             )
                           )
                         }
-                        className="text-xs h-8"
+                        className="text-sm h-9"
                       />
                     )}
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => removeBlock(b.id)}
-                      className="h-6 text-xs"
+                      className="h-7 text-xs"
                     >
                       <Trash2 className="h-3 w-3 mr-1" /> Remove
                     </Button>

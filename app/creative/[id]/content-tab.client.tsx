@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo, memo } from 'react';
 import dynamic from 'next/dynamic';
 import { supabase } from '@/lib/core/supabase';
 import { useRouter } from 'next/navigation';
@@ -22,27 +22,154 @@ import cleanAndSplit from './utils/cleanAndSplit';
 import CollapsiblePanel from './components/CollapsiblePanel';
 import GroupedSections from './components/GroupedSections';
 
-// IMPORTANT: Use the unified shape.
-// If your import path differs, adjust it.
 import type { UnifiedAd } from './utils/adData.ts';
 import type { Ad } from '@/lib/core/types';
 
 type SupabaseSessionLike = { session?: { user?: Record<string, unknown> } };
 
 interface ContentTabClientProps {
-  ad: UnifiedAd; // unified
+  ad: UnifiedAd;
   relatedAds?: UnifiedAd[] | null;
 }
 
-export default function ContentTabClient({ ad, relatedAds }: ContentTabClientProps) {
+// Memoized Related Ads component
+interface RelatedAdsSectionProps {
+  relatedAds: UnifiedAd[] | null | undefined;
+  currentAdId: string | number;
+  currentAdData: UnifiedAd;
+}
+
+const RelatedAdsSectionMemo = memo(function RelatedAdsSection({
+  relatedAds,
+  currentAdData,
+}: RelatedAdsSectionProps) {
   const router = useRouter();
+  const { showToast } = useToast();
+  const [autoRefresh, setAutoRefresh] = useState(false);
+
+  const scraperRelated = (relatedAds || []).filter((it) =>
+    Boolean(it && (typeof it.id === 'string' || typeof it.id === 'number'))
+  );
+
+  const relatedTotal = scraperRelated.length;
+
+  const handleRefresh = useCallback(() => {
+    try {
+      router.refresh();
+      showToast({ message: 'Refreshed related ads', type: 'success' });
+    } catch {
+      showToast({ message: 'Refresh failed', type: 'error' });
+    }
+  }, [router, showToast]);
+
+  const handleAdClick = useCallback(
+    (relatedAd: UnifiedAd) => {
+      try {
+        const allRelatedIds = [currentAdData.id, ...scraperRelated.map((ra) => ra.id)].filter(
+          (id) => id !== relatedAd.id
+        );
+        const relatedParam = allRelatedIds.length ? `?related=${allRelatedIds.join(',')}` : '';
+        router.push(`/creative/${relatedAd.id}${relatedParam}`);
+      } catch {
+        // ignore
+      }
+    },
+    [currentAdData.id, scraperRelated, router]
+  );
+
+  if (relatedTotal === 0) {
+    return (
+      <Card className="border-slate-200 rounded-2xl">
+        <CardContent className="p-6">
+          <div className="text-center py-8 text-slate-500">No related ads detected</div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <Card className="border-slate-200 rounded-2xl">
+      <CardContent className="p-0">
+        <div className="bg-blue-50 p-6 border-b border-slate-200">
+          <div className="flex items-center justify-between">
+            <h2 className="text-xl font-semibold text-slate-900">Related Ads ({relatedTotal})</h2>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" onClick={handleRefresh}>
+                Refresh
+              </Button>
+              <Button
+                variant={autoRefresh ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setAutoRefresh((s) => !s)}
+              >
+                {autoRefresh ? 'Auto: On' : 'Auto: Off'}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        <div className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {scraperRelated.map((relatedAd) => (
+              <button
+                key={relatedAd?.id ?? JSON.stringify(relatedAd)}
+                onClick={() => handleAdClick(relatedAd)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    handleAdClick(relatedAd);
+                  }
+                }}
+                className="bg-white border border-slate-200 rounded-xl p-4 hover:border-blue-200 hover:shadow-lg transition-all duration-300 cursor-pointer text-left"
+              >
+                <div className="aspect-video bg-slate-100 rounded-lg overflow-hidden mb-3">
+                  {relatedAd.ad_archive_id ? (
+                    <StorageImage
+                      bucket="creatives"
+                      path={
+                        relatedAd.storage_path || `business-unknown/${relatedAd.ad_archive_id}.jpeg`
+                      }
+                      alt={relatedAd.title || 'Related ad'}
+                      fill={true}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : relatedAd.image_url ? (
+                    <img
+                      src={relatedAd.image_url}
+                      alt={relatedAd.title || 'Related ad'}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : null}
+                </div>
+
+                <h3 className="font-medium text-slate-900 mb-1 line-clamp-2">
+                  {relatedAd.title || 'Untitled Ad'}
+                </h3>
+                <p className="text-sm text-slate-500 mb-2">{relatedAd.page_name}</p>
+
+                {String(relatedAd.display_format).toUpperCase() === 'VIDEO' && (
+                  <span className="inline-block bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded-full">
+                    📹 Video
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+});
+
+// Use memoized component directly (Suspense will handle lazy loading)
+export default memo(function ContentTabClient({ ad, relatedAds }: ContentTabClientProps) {
   const leftColRef = useRef<HTMLDivElement | null>(null);
   const { showToast } = useToast();
 
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [showLogin, setShowLogin] = useState(false);
   const [showPromptEditor, setShowPromptEditor] = useState(false);
-  const [autoRefresh, setAutoRefresh] = useState(false);
+  const [showAttributesEditor, setShowAttributesEditor] = useState(false);
 
   const LoginModal = dynamic(() => import('@/app/login-auth/LoginModal'), {
     ssr: false,
@@ -59,65 +186,46 @@ export default function ContentTabClient({ ad, relatedAds }: ContentTabClientPro
     { ssr: false, loading: () => null }
   );
 
-  // UI reads from unified ad
   const adData = ad;
 
   const groupedSections = adData.groupedSections || [];
 
-  // Visual description paragraphs for copy button (from JSON section if exists)
   const visualMainParagraphs = useMemo(() => {
     const vis = groupedSections.find(
       (s) => s.title === 'Image / Visual Description' || s.title === 'Visual Description'
     )?.text;
 
-    // If JSON exists, keep it as a single block for copy,
-    // otherwise fallback to empty.
     return vis ? [vis] : [];
   }, [groupedSections]);
 
-  // Local state so user can edit structured attributes and see updated section
   const [localGroupedSections, setLocalGroupedSections] = useState(groupedSections);
   useEffect(() => setLocalGroupedSections(groupedSections), [groupedSections]);
 
-  const applyAttributesToVisual = (obj: Record<string, unknown>) => {
-    try {
-      const json = JSON.stringify(obj, null, 2);
-      const idx = localGroupedSections.findIndex(
-        (g) => g.title === 'Image / Visual Description' || g.title === 'Visual Description'
-      );
+  // const applyAttributesToVisual = (obj: Record<string, unknown>) => {
+  //   try {
+  //     const json = JSON.stringify(obj, null, 2);
+  //     const idx = localGroupedSections.findIndex(
+  //       (g) => g.title === 'Image / Visual Description' || g.title === 'Visual Description'
+  //     );
+  //
+  //     let updated = [...localGroupedSections];
+  //     if (idx >= 0) updated[idx] = { ...updated[idx], text: json };
+  //     else updated = [{ title: 'Image / Visual Description', text: json }, ...updated];
+  //
+  //     setLocalGroupedSections(updated);
+  //   } catch {
+  //     // ignore
+  //   }
+  // };
 
-      let updated = [...localGroupedSections];
-      if (idx >= 0) updated[idx] = { ...updated[idx], text: json };
-      else updated = [{ title: 'Image / Visual Description', text: json }, ...updated];
-
-      setLocalGroupedSections(updated);
-    } catch {
-      // ignore
-    }
-  };
-
-  // Related ads come from scraper JSON only
   const scraperRelated = Array.isArray(relatedAds)
     ? relatedAds.filter((it) =>
         Boolean(it && (typeof it.id === 'string' || typeof it.id === 'number'))
       )
     : [];
 
-  useEffect(() => {
-    if (!autoRefresh) return;
-    const iv = setInterval(() => {
-      try {
-        router.refresh();
-      } catch {
-        // ignore
-      }
-    }, 60000);
-    return () => clearInterval(iv);
-  }, [autoRefresh, router]);
-
   const handleCopyToClipboard = useCallback(async (text: string, fieldName: string) => {
     try {
-      // Require auth to copy
       try {
         const { data: sessionData } = await supabase.auth.getSession();
         const sessionUser = (sessionData as unknown as SupabaseSessionLike).session?.user;
@@ -140,8 +248,11 @@ export default function ContentTabClient({ ad, relatedAds }: ContentTabClientPro
     }
   }, []);
 
-  const relatedTotal = scraperRelated.length;
-  const isVideo = String(adData.display_format).toUpperCase() === 'VIDEO';
+  // const relatedTotal = scraperRelated.length;
+  // Video if: display_format is VIDEO, OR (display_format is DCO AND has video_storage_path)
+  const isVideo =
+    String(adData.display_format).toUpperCase() === 'VIDEO' ||
+    (String(adData.display_format).toUpperCase() === 'DCO' && Boolean(adData.video_storage_path));
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -149,7 +260,6 @@ export default function ContentTabClient({ ad, relatedAds }: ContentTabClientPro
         <Card className="overflow-hidden border-slate-200 rounded-2xl">
           <CardContent className="p-0">
             <div className="bg-slate-100 flex items-center justify-center h-[360px] md:h-[480px] overflow-hidden">
-              {/** Cast unified to core Ad for media/control components */}
               <ContentMedia ad={adData as unknown as Ad} />
             </div>
           </CardContent>
@@ -247,7 +357,6 @@ export default function ContentTabClient({ ad, relatedAds }: ContentTabClientPro
           )}
         </div>
 
-        {/* Export CSV (unchanged logic, UI-only) */}
         <div className="mt-3">
           <Button
             variant="outline"
@@ -272,24 +381,16 @@ export default function ContentTabClient({ ad, relatedAds }: ContentTabClientPro
                   'link_url',
                   'meta_ad_url',
                   'image_url',
-                  'tags',
-                  'duplicates_ad_text',
-                  'duplicates_links',
-                  'duplicates_preview_image',
                   'created_at',
                   'publisher_platform',
                   'audio_script',
                   'video_script',
                   'concept',
-                  'realisation',
+                  'realization',
                   'topic',
                   'hook',
                   'character',
                 ];
-
-                const tagsValue = Array.isArray(adData.tags)
-                  ? adData.tags.join(',')
-                  : String(adData.tags || '');
 
                 const row = [
                   adData.id,
@@ -304,16 +405,12 @@ export default function ContentTabClient({ ad, relatedAds }: ContentTabClientPro
                   adData.link_url ?? '',
                   adData.meta_ad_url ?? '',
                   adData.image_url ?? '',
-                  tagsValue,
-                  adData.duplicates_ad_text ?? '',
-                  adData.duplicates_links ?? '',
-                  adData.duplicates_preview_image ?? '',
                   adData.created_at ?? '',
                   adData.publisher_platform ?? '',
                   adData.audio_script ?? '',
                   adData.video_script ?? '',
                   adData.concept ?? '',
-                  adData.realisation ?? '',
+                  adData.realization ?? '',
                   adData.topic ?? '',
                   adData.hook ?? '',
                   adData.character ?? '',
@@ -347,121 +444,12 @@ export default function ContentTabClient({ ad, relatedAds }: ContentTabClientPro
           </Button>
         </div>
 
-        {/* Related Ads */}
-        <Card className="border-slate-200 rounded-2xl">
-          <CardContent className="p-0">
-            <div className="bg-blue-50 p-6 border-b border-slate-200">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-slate-900">
-                  Related Ads ({relatedTotal})
-                </h2>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      try {
-                        router.refresh();
-                        showToast({ message: 'Refreshed related ads', type: 'success' });
-                      } catch {
-                        showToast({ message: 'Refresh failed', type: 'error' });
-                      }
-                    }}
-                  >
-                    Refresh
-                  </Button>
-                  <Button
-                    variant={autoRefresh ? 'default' : 'outline'}
-                    size="sm"
-                    onClick={() => setAutoRefresh((s) => !s)}
-                  >
-                    {autoRefresh ? 'Auto: On' : 'Auto: Off'}
-                  </Button>
-                </div>
-              </div>
-            </div>
+        <RelatedAdsSectionMemo
+          relatedAds={scraperRelated}
+          currentAdId={adData.id ?? ''}
+          currentAdData={adData}
+        />
 
-            <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {scraperRelated.length === 0 ? (
-                  <div className="col-span-full text-center py-8 text-slate-500">
-                    No related ads detected
-                  </div>
-                ) : (
-                  scraperRelated.map((relatedAd) => (
-                    <div
-                      key={relatedAd?.id ?? JSON.stringify(relatedAd)}
-                      role="button"
-                      tabIndex={0}
-                      className="bg-white border border-slate-200 rounded-xl p-4 hover:border-blue-200 hover:shadow-lg transition-all duration-300 cursor-pointer"
-                      onClick={() => {
-                        try {
-                          const allRelatedIds = [
-                            adData.id,
-                            ...scraperRelated.map((ra) => ra.id),
-                          ].filter((id) => id !== relatedAd.id);
-                          const relatedParam = allRelatedIds.length
-                            ? `?related=${allRelatedIds.join(',')}`
-                            : '';
-                          router.push(`/creative/${relatedAd.id}${relatedParam}`);
-                        } catch {
-                          // ignore
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          const allRelatedIds = [
-                            adData.id,
-                            ...scraperRelated.map((ra) => ra.id),
-                          ].filter((id) => id !== relatedAd.id);
-                          const relatedParam = allRelatedIds.length
-                            ? `?related=${allRelatedIds.join(',')}`
-                            : '';
-                          router.push(`/creative/${relatedAd.id}${relatedParam}`);
-                        }
-                      }}
-                    >
-                      <div className="aspect-video bg-slate-100 rounded-lg overflow-hidden mb-3">
-                        {relatedAd.ad_archive_id ? (
-                          <StorageImage
-                            bucket="creatives"
-                            path={
-                              relatedAd.storage_path ||
-                              `business-unknown/${relatedAd.ad_archive_id}.jpeg`
-                            }
-                            alt={relatedAd.title || 'Related ad'}
-                            fill={true}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : relatedAd.image_url ? (
-                          <img
-                            src={relatedAd.image_url}
-                            alt={relatedAd.title || 'Related ad'}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : null}
-                      </div>
-
-                      <h3 className="font-medium text-slate-900 mb-1 line-clamp-2">
-                        {relatedAd.title || 'Untitled Ad'}
-                      </h3>
-                      <p className="text-sm text-slate-500 mb-2">{relatedAd.page_name}</p>
-
-                      {String(relatedAd.display_format).toUpperCase() === 'VIDEO' && (
-                        <span className="inline-block bg-blue-50 text-blue-700 text-xs px-2 py-1 rounded-full">
-                          📹 Video
-                        </span>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Common text blocks */}
         {adData.text && (
           <Card className="border-slate-200 rounded-2xl">
             <CardContent className="p-0">
@@ -486,42 +474,6 @@ export default function ContentTabClient({ ad, relatedAds }: ContentTabClientPro
               </div>
               <div className="p-6">
                 {cleanAndSplit(adData.text).map((p, i) => (
-                  <p key={i} className="text-slate-700 leading-relaxed mb-3 whitespace-pre-line">
-                    {p}
-                  </p>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {adData.duplicates_ad_text && (
-          <Card className="border-slate-200 rounded-2xl">
-            <CardContent className="p-0">
-              <div className="bg-blue-50 p-6 border-b border-slate-200">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold text-slate-900">Duplicate Ad Text</h2>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() =>
-                      handleCopyToClipboard(
-                        cleanAndSplit(adData.duplicates_ad_text).join('\n\n'),
-                        'duplicates_ad_text'
-                      )
-                    }
-                    className="text-slate-500 hover:text-slate-700"
-                  >
-                    {copiedField === 'duplicates_ad_text' ? (
-                      <Check className="h-4 w-4" />
-                    ) : (
-                      <Copy className="h-4 w-4" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-              <div className="p-6">
-                {cleanAndSplit(adData.duplicates_ad_text).map((p, i) => (
                   <p key={i} className="text-slate-700 leading-relaxed mb-3 whitespace-pre-line">
                     {p}
                   </p>
@@ -586,7 +538,6 @@ export default function ContentTabClient({ ad, relatedAds }: ContentTabClientPro
         )}
       </div>
 
-      {/* Right column */}
       <div className="space-y-6">
         <div className="mb-6">
           <CollapsiblePanel
@@ -615,16 +566,13 @@ export default function ContentTabClient({ ad, relatedAds }: ContentTabClientPro
               <div className="space-y-3">
                 {!isVideo && (
                   <div className="mb-2">
-                    <DynamicStructuredAttributesModal
-                      groupedSections={localGroupedSections}
-                      ad={
-                        {
-                          ...adData,
-                          raw_json: ad.raw_json, // Ensure raw_json is passed
-                        } as unknown as Record<string, unknown>
-                      }
-                      onApply={applyAttributesToVisual}
-                    />
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowAttributesEditor(true)}
+                      className="w-full text-blue-600 border-blue-200 hover:bg-blue-50 font-medium"
+                    >
+                      Edit Attributes
+                    </Button>
                   </div>
                 )}
 
@@ -635,7 +583,7 @@ export default function ContentTabClient({ ad, relatedAds }: ContentTabClientPro
                       onClick={() => setShowPromptEditor(true)}
                       className="w-full text-blue-600 border-blue-200 hover:bg-blue-50 font-medium"
                     >
-                      Edit prompt
+                      Edit Attributes
                     </Button>
                   </div>
                 )}
@@ -649,21 +597,40 @@ export default function ContentTabClient({ ad, relatedAds }: ContentTabClientPro
                   copiedField={copiedField}
                 />
 
-                {/* Format & Creative Concepts summary */}
                 {(() => {
                   const fccSection = localGroupedSections.find(
                     (s) => s.title === 'Formats & Creative Concepts'
                   );
                   if (!fccSection) return null;
 
+                  const lines = fccSection.text.split('\n').filter((line) => line.trim());
+
                   return (
-                    <div className="mt-3 text-sm text-slate-700">
-                      <div className="font-medium text-slate-900 mb-2">
+                    <div className="mt-4 pt-4 border-t border-slate-200 text-sm text-slate-700 space-y-3">
+                      <div className="font-bold text-black mb-3 text-base">
                         Format & Creative Concepts:
                       </div>
-                      <pre className="whitespace-pre-wrap break-words text-sm">
-                        {fccSection.text}
-                      </pre>
+                      <div className="space-y-2">
+                        {lines.map((line, idx) => {
+                          const colonIndex = line.indexOf(':');
+                          if (colonIndex === -1)
+                            return (
+                              <div key={idx} className="whitespace-pre-wrap break-words">
+                                {line}
+                              </div>
+                            );
+
+                          const label = line.substring(0, colonIndex + 1);
+                          const value = line.substring(colonIndex + 1);
+
+                          return (
+                            <div key={idx} className="whitespace-pre-wrap break-words">
+                              <span className="text-black">{label}</span>
+                              {value}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   );
                 })()}
@@ -674,7 +641,6 @@ export default function ContentTabClient({ ad, relatedAds }: ContentTabClientPro
 
         <div className="mb-6">
           <CollapsiblePanel title="Additional content" defaultOpen={false}>
-            {/* Filter and show selected sections only (UI list) */}
             {(() => {
               const baseTitles = [
                 'Title',
@@ -706,13 +672,37 @@ export default function ContentTabClient({ ad, relatedAds }: ContentTabClientPro
 
       {showLogin ? <LoginModal onClose={() => setShowLogin(false)} /> : null}
 
+      {showAttributesEditor && (
+        <DynamicStructuredAttributesModal
+          groupedSections={localGroupedSections}
+          ad={
+            {
+              ...adData,
+              raw_json: adData.raw_json,
+            } as unknown as Record<string, unknown>
+          }
+          isOpen={showAttributesEditor}
+          onClose={() => setShowAttributesEditor(false)}
+          onApply={(obj) => {
+            const json = JSON.stringify(obj, null, 2);
+            const idx = localGroupedSections.findIndex(
+              (g) => g.title === 'Image / Visual Description' || g.title === 'Visual Description'
+            );
+            let updated = [...localGroupedSections];
+            if (idx >= 0) updated[idx] = { ...updated[idx], text: json };
+            else updated = [{ title: 'Image / Visual Description', text: json }, ...updated];
+            setLocalGroupedSections(updated);
+          }}
+        />
+      )}
+
       {showPromptEditor && (
         <PromptEditorModal
-          ad={ad as unknown as Ad}
+          ad={adData as unknown as Ad}
           isOpen={showPromptEditor}
           onClose={() => setShowPromptEditor(false)}
         />
       )}
     </div>
   );
-}
+});

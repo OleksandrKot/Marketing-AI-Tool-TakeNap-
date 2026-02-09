@@ -12,20 +12,31 @@ export default function StructuredAttributesModal({
   groupedSections,
   ad,
   onApply,
+  isOpen,
+  onClose,
 }: {
   groupedSections: { title: string; text: string }[];
   ad?: Record<string, unknown>;
   onApply?: (obj: Record<string, unknown>) => void;
+  isOpen?: boolean;
+  onClose?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [generated, setGenerated] = useState<string>('');
   const editorRef = useRef<StructuredAttributesRef>(null);
   const { showToast } = useToast();
 
+  // If isOpen is provided externally, use it; otherwise use internal state
+  const modalOpen = isOpen !== undefined ? isOpen : open;
+  const setModalOpen = (val: boolean) => {
+    if (isOpen === undefined) setOpen(val);
+    if (!val && onClose) onClose();
+  };
+
   // When opening the modal, if the provided `ad` contains a `shortPromptJson`,
   // initialize the Live JSON Preview with it (only if preview is empty).
   useEffect(() => {
-    if (open && (!generated || generated.trim() === '') && ad) {
+    if (modalOpen && (!generated || generated.trim() === '') && ad) {
       try {
         const sp = (ad as Record<string, unknown>)['shortPromptJson'];
         if (sp && typeof sp === 'object') {
@@ -51,7 +62,7 @@ export default function StructuredAttributesModal({
       const parsed = JSON.parse(generated || '{}');
       if (parsed && typeof parsed === 'object') {
         onApply(parsed as Record<string, unknown>);
-        setOpen(false);
+        setModalOpen(false);
         showToast({ message: 'Applied prompt to Visual Description', type: 'success' });
       }
     } catch (e) {
@@ -64,7 +75,7 @@ export default function StructuredAttributesModal({
       const payload = generated || '{}';
       await navigator.clipboard.writeText(payload);
       showToast({ message: 'Copied prompt JSON', type: 'success' });
-      if (closeAfter) setOpen(false);
+      if (closeAfter) setModalOpen(false);
     } catch (e) {
       showToast({ message: 'Failed to copy JSON', type: 'error' });
     }
@@ -99,13 +110,15 @@ export default function StructuredAttributesModal({
 
   return (
     <>
-      <Button variant="outline" onClick={() => setOpen(true)} className="w-full">
-        Edit prompt
-      </Button>
-      {open && (
+      {!modalOpen && (
+        <Button variant="outline" onClick={() => setModalOpen(true)} className="w-full">
+          Edit Attributes
+        </Button>
+      )}
+      {modalOpen && (
         <ModalWrapper
-          isOpen={open}
-          onClose={() => setOpen(false)}
+          isOpen={modalOpen}
+          onClose={() => setModalOpen(false)}
           panelClassName="max-w-7xl w-[95vw]"
         >
           <div className="bg-white rounded-lg overflow-hidden max-h-[95vh] flex flex-col">
@@ -129,7 +142,7 @@ export default function StructuredAttributesModal({
                 <Button variant="destructive" size="sm" onClick={resetToOriginal}>
                   Reset to Original
                 </Button>
-                <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
+                <Button variant="outline" size="sm" onClick={() => setModalOpen(false)}>
                   Cancel
                 </Button>
               </div>

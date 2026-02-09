@@ -428,7 +428,7 @@ export const buildMetaAnalysis = (ad: Ad, visualMainParagraphs: string[]) => {
     Format:
       String(ad.display_format || '').toLowerCase() ||
       (ad.display_format === 'VIDEO' ? 'video' : 'image'),
-    Realisation: getOrWip(ad.realisation as string),
+    Realisation: getOrWip(ad.realization as string),
     Topic: getOrWip(ad.topic as string),
     Hook: getOrWip(cleanExtraSymbols(ad.hook || '')),
     Character: getOrWip(ad.character as string),
@@ -547,10 +547,7 @@ export const buildGroupedSections = (
 
   pushUnique(out, 'Title', ad.title);
 
-  const baseAdText =
-    cleanAndSplit(ad.text).join('\n\n') ||
-    cleanAndSplit(ad.caption).join('\n\n') ||
-    cleanAndSplit(ad.duplicates_ad_text).join('\n\n');
+  const baseAdText = cleanAndSplit(ad.text).join('\n\n') || cleanAndSplit(ad.caption).join('\n\n');
 
   pushUnique(out, 'Ad Text', cleanExtraSymbols(baseAdText));
   pushUnique(out, 'Hook', cleanExtraSymbols(String(ad.hook || meta['Hook'] || '')));

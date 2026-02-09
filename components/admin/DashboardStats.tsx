@@ -1,56 +1,43 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useMemo } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { fetchJSON } from '@/lib/api/client';
 
 export default function DashboardStats() {
-  const [, setLoading] = useState(true);
-  const [totalUsers, setTotalUsers] = useState(0);
-  const [admins, setAdmins] = useState(0);
-  const [blocked, setBlocked] = useState(0);
-  const [pendingRequests, setPendingRequests] = useState(0);
-  const [new7, setNew7] = useState(0);
-  const [new30, setNew30] = useState(0);
+  const usersQuery = useQuery<{
+    data: Array<{ is_admin?: boolean; is_blocked?: boolean; created_at?: string }>;
+  }>({
+    queryKey: ['admin', 'users'],
+    queryFn: () => fetchJSON('/api/admins/users'),
+    refetchInterval: 30_000,
+  });
 
-  async function fetchCounts() {
-    setLoading(true);
-    try {
-      const [usersRes, reqRes] = await Promise.all([
-        fetch('/api/admins/users'),
-        fetch('/api/access-requests'),
-      ]);
-      const usersJson = await usersRes.json().catch(() => ({} as Record<string, unknown>));
-      const reqJson = await reqRes.json().catch(() => ({} as Record<string, unknown>));
-      const users = (usersJson.data || []) as Array<{
-        is_admin?: boolean;
-        is_blocked?: boolean;
-        created_at?: string;
-      }>;
-      const reqs = (reqJson.data || []) as Array<{ status?: string }>;
+  const requestsQuery = useQuery<{ data: Array<{ status?: string }> }>({
+    queryKey: ['access', 'requests'],
+    queryFn: () => fetchJSON('/api/access-requests'),
+    refetchInterval: 30_000,
+  });
 
-      const now = new Date();
-      const sevenDaysAgo = new Date(now);
-      sevenDaysAgo.setDate(now.getDate() - 7);
-      const thirtyDaysAgo = new Date(now);
-      thirtyDaysAgo.setDate(now.getDate() - 30);
+  const users = usersQuery.data?.data || [];
+  const reqs = requestsQuery.data?.data || [];
 
-      setTotalUsers(users.length);
-      setAdmins(users.filter((u) => u.is_admin).length);
-      setBlocked(users.filter((u) => u.is_blocked).length);
-      setPendingRequests(reqs.filter((r) => r.status === 'pending').length);
-      setNew7(users.filter((u) => u.created_at && new Date(u.created_at) >= sevenDaysAgo).length);
-      setNew30(users.filter((u) => u.created_at && new Date(u.created_at) >= thirtyDaysAgo).length);
-    } catch (e) {
-      // ignore
-    } finally {
-      setLoading(false);
-    }
-  }
+  const { totalUsers, admins, blocked, pendingRequests, new7, new30 } = useMemo(() => {
+    const now = new Date();
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(now.getDate() - 7);
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(now.getDate() - 30);
 
-  useEffect(() => {
-    fetchCounts();
-    const t = setInterval(fetchCounts, 30_000);
-    return () => clearInterval(t);
-  }, []);
+    return {
+      totalUsers: users.length,
+      admins: users.filter((u) => u.is_admin).length,
+      blocked: users.filter((u) => u.is_blocked).length,
+      pendingRequests: reqs.filter((r) => r.status === 'pending').length,
+      new7: users.filter((u) => u.created_at && new Date(u.created_at) >= sevenDaysAgo).length,
+      new30: users.filter((u) => u.created_at && new Date(u.created_at) >= thirtyDaysAgo).length,
+    };
+  }, [users, reqs]);
 
   return (
     <>

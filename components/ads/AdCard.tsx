@@ -1,11 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { Calendar, Tag, Check as CheckIcon } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Calendar, Check as CheckIcon } from 'lucide-react';
 import { Card, CardContent, CardFooter, CardHeader } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 import type { Ad } from '@/lib/core/types';
 import { formatDate, truncateText } from '@/lib/core/utils';
 import { getPublicImageUrl } from '@/lib/storage/helpers';
+import { useImageObjectUrl } from '@/lib/hooks/useImageObjectUrl';
 
 interface AdCardProps {
   ad: Ad;
@@ -13,6 +14,7 @@ interface AdCardProps {
   relatedCount?: number;
   from?: string;
   index?: number;
+  // defaultCardsExpanded?: boolean; // Unused
   // selection props
   selectionMode?: boolean;
   selected?: boolean;
@@ -29,12 +31,11 @@ function AdCardComponent({
   selected,
   onToggleSelect,
 }: AdCardProps) {
-  const [expanded, setExpanded] = useState(false);
   const title = ad.title || 'Untitled Ad';
   const isVideo = ad.display_format === 'VIDEO';
 
   // Calculate active days
-  const createdDate = new Date(ad.created_at);
+  const createdDate = new Date(ad.created_at as string);
   const today = new Date();
   const activeDays = Math.floor((today.getTime() - createdDate.getTime()) / (1000 * 60 * 60 * 24));
 
@@ -46,31 +47,59 @@ function AdCardComponent({
   const href = params.length > 0 ? `${baseUrl}?${params.join('&')}` : baseUrl;
 
   const previewFromStorage = !!ad.ad_archive_id;
-  // Use storage_path from database (format: business-slug/ad_archive_id.ext)
-  const bucket = 'creatives';
-  const storagePath = isVideo ? ad.video_storage_path || ad.storage_path : ad.storage_path;
+  // Prefer env-configured bucket, fallback to 'creatives'
+  const bucket = process.env.NEXT_PUBLIC_AD_BUCKET || 'creatives';
+  // For image preview, do NOT use video file path. Prefer image storage_path.
+  const storagePath = ad.storage_path;
   const signedUrl = ad.signed_image_url ?? undefined;
+
+  // DEBUG: Log what we have
+  // Only warn when we truly have no reasonable fallback image
+  if (!storagePath && !ad.image_url && !ad.video_preview_image_url) {
+    console.info('[AdCard] Missing storage_path and no image URLs for ad:', ad.ad_archive_id);
+  }
+
   const [publicSrc, setPublicSrc] = useState<string>(() => {
+    // 1) Signed URL (already resolved image)
     if (signedUrl) return signedUrl;
-    if (previewFromStorage && storagePath) {
-      return getPublicImageUrl(`${bucket}/${storagePath}`);
-    }
-    return ad.image_url || ad.video_preview_image_url || '/placeholder.svg';
+    // 2) For videos, prefer preview image URL
+    if (isVideo && ad.video_preview_image_url) return ad.video_preview_image_url;
+    // 3) External image URL if present
+    if (ad.image_url) return ad.image_url;
+    // 4) Storage image path from bucket
+    if (previewFromStorage && storagePath) return getPublicImageUrl(`${bucket}/${storagePath}`);
+    // 5) Fallback to conventional path by id (may 404 if not uploaded)
+    if (ad.ad_archive_id)
+      return getPublicImageUrl(`${bucket}/business-unknown/${ad.ad_archive_id}.jpeg`);
+    // 6) Last resort
+    return '/placeholder.svg';
   });
+
+  const { objectUrl: optimizedSrc } = useImageObjectUrl(publicSrc);
 
   // Fallback if image fails to load
   const handleImageError = () => {
-    if (!previewFromStorage) return;
-    // Try using image_url as fallback
+    // Try fallbacks in order: video preview image, external image_url, storage image, placeholder
+    if (isVideo && ad.video_preview_image_url && ad.video_preview_image_url !== publicSrc) {
+      setPublicSrc(ad.video_preview_image_url);
+      return;
+    }
     if (ad.image_url && ad.image_url !== publicSrc) {
       setPublicSrc(ad.image_url);
-    } else {
-      setPublicSrc('/placeholder.svg');
+      return;
     }
+    if (previewFromStorage && storagePath) {
+      const url = getPublicImageUrl(`${bucket}/${storagePath}`);
+      if (url !== publicSrc) {
+        setPublicSrc(url);
+        return;
+      }
+    }
+    setPublicSrc('/placeholder.svg');
   };
 
   // Fetch cards previews for this ad
-  const [cards, setCards] = useState<
+  const [, setCards] = useState<
     Array<{ storage_bucket: string; storage_path: string; card_index: number }>
   >([]);
   useEffect(() => {
@@ -96,7 +125,18 @@ function AdCardComponent({
     };
   }, [ad.ad_archive_id]);
 
-  const tags = Array.isArray(ad.tags) ? ad.tags : [];
+  // Compute unique related ads once per render; avoid calling hooks conditionally
+  const uniqueRelatedAds = useMemo(() => {
+    const seen = new Set<string>();
+    const list = (relatedAds || []).filter((r) => {
+      const k = String(r.ad_archive_id ?? r.id ?? '');
+      if (!k || k === String(ad.ad_archive_id ?? ad.id ?? '')) return false;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+    return list.slice(0, 8);
+  }, [relatedAds, ad]);
 
   return (
     <Card className="group overflow-hidden bg-white border border-slate-200 rounded-2xl h-full flex flex-col hover:border-blue-200 hover:shadow-lg transition-all duration-300 ease-out">
@@ -139,10 +179,13 @@ function AdCardComponent({
       <CardContent className="p-6 pt-0 flex flex-col flex-grow">
         <div className="mb-3 bg-slate-100 rounded-xl overflow-hidden group-hover:shadow-md transition-shadow duration-300 flex items-center justify-center h-56 md:h-64">
           <img
-            src={publicSrc}
+            src={optimizedSrc || publicSrc}
             alt={title}
             className="max-h-full max-w-full object-contain transition-all duration-300 group-hover:scale-105"
             onError={handleImageError}
+            loading="lazy"
+            decoding="async"
+            fetchPriority="low"
           />
         </div>
 
@@ -150,30 +193,8 @@ function AdCardComponent({
           {truncateText(ad.text || '', 120)}
         </p>
 
-        {tags.length > 0 && (
-          <div className="flex flex-wrap gap-1 mb-3">
-            {tags.slice(0, 3).map((tag) => (
-              <Badge
-                key={tag}
-                className="bg-purple-50 text-purple-700 border-purple-200 font-medium px-2 py-1 rounded-full border text-xs"
-              >
-                <Tag className="h-3.5 w-3.5 mr-1" />
-                {tag}
-              </Badge>
-            ))}
-            {tags.length > 3 && (
-              <Badge className="bg-slate-100 text-slate-600 border-slate-200 font-medium px-2 py-1 rounded-full border text-xs">
-                +{tags.length - 3}
-              </Badge>
-            )}
-          </div>
-        )}
-
         {/* Debug: show IDs so user can reconcile UI <-> DB quickly */}
         <div className="mt-3 text-xs text-slate-400">
-          <div>
-            id: <span className="font-mono text-slate-700">{String(ad.id)}</span>
-          </div>
           <div>
             ad_archive_id:{' '}
             <span className="font-mono text-slate-700">{String(ad.ad_archive_id ?? '')}</span>
@@ -184,7 +205,7 @@ function AdCardComponent({
           <div className="flex items-center justify-between text-xs text-slate-400 font-medium mt-3">
             <div className="flex items-center">
               <Calendar className="h-3.5 w-3.5 mr-1.5" />
-              <span>{formatDate(ad.created_at)}</span>
+              <span>{formatDate(ad.created_at as string)}</span>
             </div>
             <div className="flex items-center">
               <span className="text-orange-600 font-medium">Active: {activeDays} days</span>
@@ -204,54 +225,14 @@ function AdCardComponent({
             </div>
           </div>
 
-          {cards && cards.length > 0 && (
-            <div className="mt-4">
-              {!expanded ? (
-                <button
-                  type="button"
-                  onClick={() => setExpanded(true)}
-                  className="text-sm text-slate-600 hover:text-slate-800 font-medium"
-                >
-                  Show {cards.length} cards
-                </button>
-              ) : (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-sm text-slate-600 font-medium">Cards previews</span>
-                    <button
-                      type="button"
-                      onClick={() => setExpanded(false)}
-                      className="text-sm text-slate-500 hover:text-slate-700"
-                    >
-                      Hide
-                    </button>
-                  </div>
-                  <div className="grid grid-cols-4 gap-2">
-                    {cards.slice(0, 8).map((c) => {
-                      const src = getPublicImageUrl(`${c.storage_bucket}/${c.storage_path}`);
-                      return (
-                        <div key={c.card_index} className="relative">
-                          <img
-                            src={src}
-                            alt={`card ${c.card_index}`}
-                            className="w-full h-20 object-cover rounded-md border border-slate-100"
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
           {/* Keep existing related creatives UI if provided */}
-          {relatedAds && relatedAds.length > 0 && (
+          {uniqueRelatedAds.length > 0 && (
             <div className="mt-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-sm text-slate-600 font-medium">Similar creatives</span>
               </div>
               <div className="grid grid-cols-4 gap-2">
-                {relatedAds.slice(0, 8).map((r) => {
+                {uniqueRelatedAds.map((r, i) => {
                   const src = r.signed_image_url
                     ? r.signed_image_url
                     : r.storage_path
@@ -260,12 +241,14 @@ function AdCardComponent({
                     ? getPublicImageUrl(`creatives/business-unknown/${r.ad_archive_id}.jpeg`)
                     : r.image_url || '/placeholder.svg';
                   return (
-                    <div key={r.ad_archive_id} className="relative">
+                    <div key={`${r.ad_archive_id}-${i}`} className="relative">
                       <Link href={`/creative/${r.ad_archive_id}`} className="block">
                         <img
                           src={src}
                           alt={r.title || 'related'}
                           className="w-full h-20 object-cover rounded-md border border-slate-100"
+                          loading="lazy"
+                          decoding="async"
                         />
                       </Link>
                     </div>

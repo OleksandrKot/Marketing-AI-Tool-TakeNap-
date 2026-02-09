@@ -1,6 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  reactStrictMode: false, // Отключает двойные вызовы useEffect в dev режиме
+  reactStrictMode: false, // Disables double useEffect calls in dev mode
   eslint: {
     ignoreDuringBuilds: true,
   },

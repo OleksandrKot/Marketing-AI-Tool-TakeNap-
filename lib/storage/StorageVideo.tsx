@@ -9,25 +9,70 @@ interface Props {
   onLoaded?: () => void;
 }
 
+// Cache signed URLs to avoid repeated API calls
+const urlCache = new Map<string, { url: string; expires: number }>();
+
 export default function StorageVideo({ ad, className, onLoaded }: Props) {
-  const isVideo = ad.display_format === 'VIDEO';
+  const isVideo = ad.display_format === 'VIDEO' || ad.display_format === 'DCO';
   const [videoSrc, setVideoSrc] = useState<string | null>(null);
   const [posterSrc, setPosterSrc] = useState<string | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  // Call onLoaded when video is ready or fails to load
+  useEffect(() => {
+    if (isLoaded) {
+      onLoaded?.();
+    }
+  }, [isLoaded, onLoaded]);
+
+  // Timeout to mark as loaded if video doesn't load within 5 seconds
+  useEffect(() => {
+    if (videoSrc === null) return;
+
+    const timeout = setTimeout(() => {
+      if (!isLoaded) {
+        console.warn('[StorageVideo] Timeout waiting for video to load, marking as loaded');
+        setIsLoaded(true);
+      }
+    }, 5000);
+
+    return () => clearTimeout(timeout);
+  }, [videoSrc, isLoaded]);
+
+  // Mark as loaded when no video available
+  useEffect(() => {
+    if (videoSrc === '' && !isLoaded) {
+      console.log('[StorageVideo] No video available, marking as loaded');
+      setIsLoaded(true);
+    }
+  }, [videoSrc, isLoaded]);
 
   useEffect(() => {
     let mounted = true;
     async function fetchSignedUrl(bucket: string, path: string) {
+      // Check cache first
+      const cacheKey = `${bucket}:${path}`;
+      const cached = urlCache.get(cacheKey);
+      if (cached && cached.expires > Date.now()) {
+        return cached.url;
+      }
+
       try {
         const res = await fetch('/api/storage/signed-url', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ bucket, path, expires: 60 }),
+          body: JSON.stringify({ bucket, path, expires: 3600 }), // 1 hour instead of 60 seconds
         });
         const j = await res.json().catch(() => null);
         if (!j || typeof j !== 'object') return null;
         const rec = j as Record<string, unknown>;
         const u = rec.url;
-        return typeof u === 'string' ? u : null;
+        if (typeof u === 'string') {
+          // Cache for 50 minutes (before expiration)
+          urlCache.set(cacheKey, { url: u, expires: Date.now() + 50 * 60 * 1000 });
+          return u;
+        }
+        return null;
       } catch (_e) {
         return null;
       }
@@ -97,10 +142,16 @@ export default function StorageVideo({ ad, className, onLoaded }: Props) {
               preload="metadata"
               className="max-h-full max-w-full object-contain relative z-10"
               onLoadedData={() => {
-                onLoaded?.();
+                console.log('[StorageVideo] Video loaded');
+                setIsLoaded(true);
               }}
-              onError={() => {
-                console.error('[StorageVideo] Video load error:', videoSrc);
+              onCanPlay={() => {
+                console.log('[StorageVideo] Video can play');
+                setIsLoaded(true);
+              }}
+              onError={(e) => {
+                console.error('[StorageVideo] Video load error:', videoSrc, e);
+                setIsLoaded(true); // Mark as loaded even on error
               }}
             >
               <track kind="captions" srcLang="en" src="" />
@@ -113,10 +164,12 @@ export default function StorageVideo({ ad, className, onLoaded }: Props) {
               src={posterSrc}
               alt="Video preview"
               className="max-h-full max-w-full object-contain"
-              onLoad={() => onLoaded?.()}
+              onLoad={() => setIsLoaded(true)}
+              onError={() => setIsLoaded(true)}
             />
           </div>
         ) : videoSrc === '' ? (
+          // No video available - mark as loaded immediately
           <div className="relative w-full h-full flex items-center justify-center z-10 bg-slate-50">
             <p className="text-slate-500">Video not available</p>
           </div>

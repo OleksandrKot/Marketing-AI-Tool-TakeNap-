@@ -16,7 +16,8 @@ export default async function Home({ searchParams }: { searchParams: { business?
   console.log(`🏢 Found ${businesses.length} businesses`);
 
   // Try to fetch groups (new DB structure) filtered by business
-  const adGroups = await getAdGroups(businessId, 100);
+  const selectedBiz = businessId || (businesses[0]?.id ?? undefined);
+  const adGroups = await getAdGroups(selectedBiz, 100);
   console.log(`📦 getAdGroups returned ${adGroups.length} groups`);
 
   let initialAds;
@@ -29,7 +30,7 @@ export default async function Home({ searchParams }: { searchParams: { business?
   } else {
     // Fallback: fetch all ads using old method
     console.log('⚠️ No groups found, falling back to all ads');
-    const raw = await getAds(undefined, undefined, undefined, undefined, undefined, businessId);
+    const raw = await getAds(undefined, undefined, undefined, undefined, undefined, selectedBiz);
     console.log(`📦 getAds returned:`, raw);
     // Safely extract the ads array whether the API returned an array directly
     // or an object that contains { data: [...] }.
@@ -39,7 +40,7 @@ export default async function Home({ searchParams }: { searchParams: { business?
     console.log(`📊 Extracted ${initialAds.length} ads from getAds`);
   }
 
-  const uniquePages = await getUniquePages(businessId);
+  const uniquePages = await getUniquePages(selectedBiz);
   console.log(`📄 Found ${uniquePages.length} unique pages`);
   console.log(`🎯 Final initialAds count: ${initialAds.length}`);
 
@@ -49,7 +50,7 @@ export default async function Home({ searchParams }: { searchParams: { business?
         initialAds={initialAds}
         pages={uniquePages}
         businesses={businesses}
-        selectedBusiness={businessId}
+        selectedBusiness={selectedBiz}
       />
     </main>
   );

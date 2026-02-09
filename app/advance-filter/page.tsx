@@ -3,11 +3,9 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
-export default function AdvanceFilterPage({
-  searchParams,
-}: {
-  searchParams?: { page?: string; funnels?: string; topic?: string; hook?: string };
-}) {
+export const dynamic = 'force-dynamic';
+
+export default function AdvanceFilterPage() {
   return (
     <main className="min-h-screen bg-slate-50">
       <div className="container mx-auto px-6 py-12 max-w-7xl">
@@ -32,24 +30,7 @@ export default function AdvanceFilterPage({
             </Link>
           </div>
         </div>
-        <FilteredContainer
-          initialPageNames={
-            searchParams?.page
-              ? String(searchParams.page)
-                  .split(',')
-                  .map((s) => decodeURIComponent(s))
-              : undefined
-          }
-          initialFunnels={
-            searchParams?.funnels
-              ? String(searchParams.funnels)
-                  .split(',')
-                  .map((s) => decodeURIComponent(s))
-              : undefined
-          }
-          initialTopic={searchParams?.topic ? decodeURIComponent(searchParams.topic) : undefined}
-          initialHook={searchParams?.hook ? decodeURIComponent(searchParams.hook) : undefined}
-        />
+        <FilteredContainer showRepresentativesOnly={false} />
       </div>
     </main>
   );

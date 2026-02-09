@@ -91,6 +91,7 @@ export function CompetitorSearchCard({
             <Input
               placeholder="Product name or Meta Ad Library link..."
               ref={inputRef}
+              disabled={true}
               value={value !== undefined ? value : competitorLink}
               onChange={(e) => {
                 const nextValue = e.target.value;
@@ -111,6 +112,7 @@ export function CompetitorSearchCard({
           <div className="mt-3">
             <p className="text-xs text-slate-400 mb-1">Number of creatives to fetch</p>
             <Input
+              disabled={true}
               type="number"
               min={1}
               max={1000}

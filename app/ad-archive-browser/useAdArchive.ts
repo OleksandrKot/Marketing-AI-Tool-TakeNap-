@@ -84,9 +84,14 @@ export function useAdArchive(
 
   // --- Fetch ad groups from ads_groups_test table ---
   const fetchAdGroups = useCallback(async () => {
+    const bizKey = selectedBusinessId || null;
+    let cancelled = false;
     try {
       // Load groups with their representatives
-      const { data, error } = await supabase.from('ads_groups_test').select('*');
+      let groupQuery = supabase.from('ads_groups_test').select('*');
+      if (bizKey) groupQuery = groupQuery.eq('business_id', bizKey);
+      const { data, error } = await groupQuery;
+      if (cancelled || bizKey !== (selectedBusinessId || null)) return;
 
       if (error) {
         console.error('Error fetching ad groups:', error);
@@ -106,7 +111,10 @@ export function useAdArchive(
         ad_ids: [], // will be filled when loading ads
       }));
 
-      setAdGroups(groups);
+      setAdGroups((prev) => {
+        if (cancelled || bizKey !== (selectedBusinessId || null)) return prev;
+        return groups;
+      });
 
       // Load all ads for each group by vector_group
       const vectorGroups = Array.from(
@@ -129,12 +137,15 @@ export function useAdArchive(
       for (let i = 0; i < vectorGroups.length; i += chunkSize) {
         const chunk = vectorGroups.slice(i, i + chunkSize);
 
-        const { data: fetchedGroupAds, error: adsError } = await supabase
+        let adsQuery = supabase
           .from('ads')
           .select(
             'ad_archive_id, vector_group, title, display_format, storage_path, video_storage_path, created_at'
           )
           .in('vector_group', chunk);
+        if (selectedBusinessId) adsQuery = adsQuery.eq('business_id', selectedBusinessId);
+        const { data: fetchedGroupAds, error: adsError } = await adsQuery;
+        if (cancelled || bizKey !== (selectedBusinessId || null)) return;
 
         if (adsError) {
           console.error(`Error fetching group ads chunk ${i / chunkSize}:`, adsError);
@@ -150,16 +161,29 @@ export function useAdArchive(
         }
       }
 
-      setGroupAdsMap(map);
+      setGroupAdsMap((prev) => {
+        if (cancelled || bizKey !== (selectedBusinessId || null)) return prev;
+        return map;
+      });
     } catch (error) {
       console.error('Error fetching ad groups:', error);
     }
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedBusinessId]);
 
-  // Fetch groups on mount
+  // Clear current groups immediately when business changes
+  useEffect(() => {
+    setAdGroups([]);
+    setGroupAdsMap({});
+    setAds([]);
+  }, [selectedBusinessId]);
+
+  // Fetch groups on mount and when business changes
   useEffect(() => {
     fetchAdGroups();
-  }, [fetchAdGroups]);
+  }, [fetchAdGroups, selectedBusinessId]);
 
   // --- UI & Status Helpers ---
   const clearRequestLogs = useCallback(() => setRequestLogs([]), []);
@@ -407,8 +431,12 @@ export function useAdArchive(
     };
   }, [scheduleClearDisplay]);
 
-  // --- Polling Logic ---
+  // --- Polling Logic (DISABLED - /api/ads/head is too slow) ---
   useEffect(() => {
+    // Temporarily disabled due to performance issues
+    // TODO: Implement faster polling mechanism
+    return;
+
     if (!pollIntervalMs || pollIntervalMs <= 0) return;
 
     const intervalId = window.setInterval(async () => {
@@ -480,6 +508,8 @@ export function useAdArchive(
     requestLogs,
     clearRequestLogs,
     clearProcessingDisplay,
+    selectedBusinessId,
+    setSelectedBusinessId,
   };
 }
 
