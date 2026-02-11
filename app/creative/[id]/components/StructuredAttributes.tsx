@@ -305,16 +305,7 @@ const StructuredAttributes = (
 
       if (raw === null || raw === undefined) return;
 
-      // Handle arrays (like color_palette, background_elements) - join with commas
-      let val: string;
-      if (Array.isArray(raw)) {
-        val = raw
-          .map((item) => String(item))
-          .join(', ')
-          .trim();
-      } else {
-        val = String(raw).trim();
-      }
+      const val = stringifyValue(raw);
 
       if (!val) return;
 
@@ -387,66 +378,9 @@ const StructuredAttributes = (
     return out;
   };
 
-  /**
-   * Blocks state:
-   *  - loaded from localStorage if present (per pathname)
-   *  - otherwise built from sections / ad data
-   */
-  const [blocks, setBlocks] = useState<Block[]>(() => {
-    try {
-      if (!ignoreLocalStorage) {
-        const key = `structuredAttrs:${
-          typeof window !== 'undefined' ? window.location.pathname : 'global'
-        }`;
-        const raw = typeof window !== 'undefined' ? window.localStorage.getItem(key) : null;
-        if (raw) {
-          const parsed = JSON.parse(raw) as Block[];
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        }
-      } else {
-        // Ephemeral modal mode: start with a minimal set of fields for quick editing
-        const base = mapFromSections();
-        const wanted = ['Hook', 'Topic', 'Concept', 'Character', 'Mood', 'Style'];
-        const result: Block[] = [];
-        for (const label of wanted) {
-          const found = base.find((b) => normalizeKey(b.label) === normalizeKey(label));
-          if (found) result.push(found);
-          else {
-            const def = DEFAULT_FIELDS.find((d) => normalizeKey(d.label) === normalizeKey(label));
-            result.push({ id: uid(), label, value: def ? def.value : '', included: true });
-          }
-        }
-        return result;
-      }
-    } catch {
-      // ignore
-    }
-    return mapFromSections();
-  });
-
-  // Drag-and-drop removed: compact inline form instead
-
-  // Set of normalized labels used in blocks, to avoid duplicate properties
-  const usedPropKeys = useMemo(() => {
-    const s = new Set<string>();
-    for (const b of blocks) {
-      const k = normalizeKey(b.label);
-      if (k) s.add(k);
-    }
-    return s;
-  }, [blocks]);
-
-  /**
-   * Build a pool of available properties:
-   *  - ONLY fields from raw_json structure (creative_concepts + visual_details + ai_description)
-   *  - Add "N/A" for empty fields instead of hiding them
-   */
   const allProps = useMemo(() => {
     const result: PropItem[] = [];
     const seen = new Set<string>();
-
-    console.log('[StructuredAttributes] ad object:', ad);
-    console.log('[StructuredAttributes] ad.raw_json:', ad?.raw_json);
 
     if (ad && ad.raw_json) {
       try {
@@ -456,8 +390,6 @@ const StructuredAttributes = (
         } else if (typeof ad.raw_json === 'object' && ad.raw_json !== null) {
           rawJson = ad.raw_json as Record<string, unknown>;
         }
-
-        console.log('[StructuredAttributes] Parsed rawJson:', rawJson);
 
         if (rawJson) {
           // Helper to extract value from raw_json with nested path support
@@ -559,8 +491,39 @@ const StructuredAttributes = (
       }
     }
 
-    return result;
+    return result.filter((p) => p.value !== 'N/A');
   }, [ad]);
+
+  /**
+   * Blocks state:
+   *  - loaded from localStorage if present (per pathname)
+   *  - otherwise initialized from allProps
+   */
+  const [blocks, setBlocks] = useState<Block[]>([]);
+  const [initialized, setInitialized] = useState(false);
+
+  useEffect(() => {
+    if (!initialized && allProps.length > 0) {
+      const initialBlocks = allProps.map((p) => ({
+        id: uid(),
+        label: p.label,
+        value: p.value,
+        included: true,
+      }));
+      setBlocks(initialBlocks);
+      setInitialized(true);
+    }
+  }, [allProps, initialized]);
+
+  // Set of normalized labels used in blocks, to avoid duplicate properties
+  const usedPropKeys = useMemo(() => {
+    const s = new Set<string>();
+    for (const b of blocks) {
+      const k = normalizeKey(b.label);
+      if (k) s.add(k);
+    }
+    return s;
+  }, [blocks]);
 
   /**
    * Autosave blocks to localStorage (per pathname).
@@ -597,6 +560,7 @@ const StructuredAttributes = (
   /**
    * Generate final prompt:
    *  - format "json": returns JSON with canonical keys
+   *  - Automatically includes ALL available properties from allProps
    */
   const generatePrompt = useCallback((): string => {
     const included = blocks.filter((bl) => bl.included && bl.value && bl.value.trim());
@@ -604,14 +568,13 @@ const StructuredAttributes = (
     if (format === 'json') {
       const obj: Record<string, string> = {};
 
+      // 1. First, add values from editor blocks (user-edited values)
       for (const bl of included) {
-        // if label is known in PROMPT_FIELDS → use its outKey
         const cfg = PROMPT_FIELDS.find((f) => f.label === bl.label);
         let key: string;
         if (cfg) {
           key = cfg.outKey;
         } else {
-          // fallback: camelCase from label
           key = bl.label
             .replace(/[^a-zA-Z0-9]+/g, ' ')
             .trim()

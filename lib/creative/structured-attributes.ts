@@ -20,7 +20,7 @@ export const toKeyString = (label: string) =>
     .map((w, idx) => (idx === 0 ? w : w[0].toUpperCase() + w.slice(1)))
     .join('');
 
-export const stringifyValue = (v: unknown) => {
+export const stringifyValue = (v: unknown): string => {
   if (v === null || v === undefined) return '';
   if (typeof v === 'string') return v.trim();
   if (typeof v === 'number' || typeof v === 'boolean') return String(v);

@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef, useEffect, useMemo, memo } from 'react';
 import dynamic from 'next/dynamic';
+import { getRelatedAdsPage } from '@/app/actions';
 import { supabase } from '@/lib/core/supabase';
 import { useRouter } from 'next/navigation';
 import { Copy, Check, ExternalLink, Link, MoreHorizontal } from 'lucide-react';
@@ -46,8 +47,31 @@ const RelatedAdsSectionMemo = memo(function RelatedAdsSection({
   const router = useRouter();
   const { showToast } = useToast();
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [displayedAds, setDisplayedAds] = useState(relatedAds?.slice(0, 24) || []);
+  const [hasMore, setHasMore] = useState((relatedAds?.length || 0) > 24);
+  const [page, setPage] = useState(1);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const scraperRelated = (relatedAds || []).filter((it) =>
+  const handleLoadMore = async () => {
+    if (!hasMore || isLoading) return;
+    setIsLoading(true);
+    try {
+      const nextPageOfAds = await getRelatedAdsPage(currentAdData as Ad, page, 24);
+      if (nextPageOfAds && nextPageOfAds.length > 0) {
+        setDisplayedAds((prev) => [...prev, ...nextPageOfAds]);
+        setPage((prev) => prev + 1);
+        setHasMore(nextPageOfAds.length === 24);
+      } else {
+        setHasMore(false);
+      }
+    } catch (error) {
+      showToast({ message: 'Failed to load more ads', type: 'error' });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const scraperRelated = (displayedAds || []).filter((it) =>
     Boolean(it && (typeof it.id === 'string' || typeof it.id === 'number'))
   );
 
@@ -155,6 +179,13 @@ const RelatedAdsSectionMemo = memo(function RelatedAdsSection({
               </button>
             ))}
           </div>
+          {hasMore && (
+            <div className="text-center mt-6">
+              <Button onClick={handleLoadMore} disabled={isLoading}>
+                {isLoading ? 'Loading...' : 'Load More'}
+              </Button>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

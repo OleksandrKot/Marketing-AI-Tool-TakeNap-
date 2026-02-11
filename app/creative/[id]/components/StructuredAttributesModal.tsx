@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import ModalWrapper from '@/components/modals/ModalWrapper';
 import StructuredAttributes, { type StructuredAttributesRef } from './StructuredAttributes';
 import { Button } from '@/components/ui/button';
@@ -32,29 +32,6 @@ export default function StructuredAttributesModal({
     if (isOpen === undefined) setOpen(val);
     if (!val && onClose) onClose();
   };
-
-  // When opening the modal, if the provided `ad` contains a `shortPromptJson`,
-  // initialize the Live JSON Preview with it (only if preview is empty).
-  useEffect(() => {
-    if (modalOpen && (!generated || generated.trim() === '') && ad) {
-      try {
-        const sp = (ad as Record<string, unknown>)['shortPromptJson'];
-        if (sp && typeof sp === 'object') {
-          setGenerated(JSON.stringify(sp as Record<string, unknown>, null, 2));
-        } else if (sp && typeof sp === 'string') {
-          // if stored as string, try to pretty-print
-          try {
-            const parsed = JSON.parse(String(sp));
-            setGenerated(JSON.stringify(parsed as Record<string, unknown>, null, 2));
-          } catch {
-            setGenerated(String(sp));
-          }
-        }
-      } catch (e) {
-        // ignore failures
-      }
-    }
-  }, [open, ad]);
 
   const tryApplyToParent = () => {
     if (!onApply) return;

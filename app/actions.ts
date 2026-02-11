@@ -71,10 +71,9 @@ export async function getAdGroups(
 
     const repIds = groups.map((g) => g.rep_ad_archive_id);
 
-    // In the new schema, ad_archive_id is unique, so .in() will work correctly.
-    // But for index optimization, it's better to add business_id if it exists.
-    let adsQuery = supabase.from('ads').select('ad_archive_id').in('ad_archive_id', repIds);
-    if (businessId) adsQuery = adsQuery.eq('business_id', businessId);
+    // Fetch ALL representative ads without business filter
+    // Representatives might belong to different businesses than the group
+    const adsQuery = supabase.from('ads').select('*').in('ad_archive_id', repIds);
 
     const { data: reps, error: repsError } = await adsQuery;
 
@@ -83,18 +82,22 @@ export async function getAdGroups(
       return [];
     }
 
-    // Return only group data (without full ad data)
-    // Ads will be loaded on client
+    // Return group data with full representative ad data
     return groups
       .map((group) => {
         const rep = (reps || []).find((r) => r.ad_archive_id === group.rep_ad_archive_id);
-        if (!rep) return null;
+        if (!rep) {
+          console.warn(
+            `⚠️ Representative not found for group ${group.vector_group}, rep_id: ${group.rep_ad_archive_id}`
+          );
+          return null;
+        }
+        console.log(
+          `✅ Group ${group.vector_group}: rep=${group.rep_ad_archive_id}, items=${group.items}`
+        );
         return {
           group: group as AdsGroup,
-          representative: {
-            id: rep.ad_archive_id,
-            ad_archive_id: rep.ad_archive_id,
-          } as Ad,
+          representative: rep as Ad,
         };
       })
       .filter((item): item is { group: AdsGroup; representative: Ad } => item !== null);
@@ -419,6 +422,53 @@ export async function getRelatedAdsByGroup(businessId: string, vectorGroup: numb
     console.error('❌ Error in getRelatedAdsByGroup:', error);
     return [];
   }
+}
+
+export async function getRelatedAdsPage(
+  ad: Ad,
+  page: number,
+  pageSize: number
+): Promise<Ad[] | null> {
+  'use server';
+
+  if (!ad.business_id || ad.vector_group === null) return null;
+
+  const supabase = createServerSupabaseClient();
+  const offset = page * pageSize;
+
+  const { data, error } = await supabase
+    .from('ads')
+    .select(
+      'ad_archive_id, title, storage_path, video_storage_path, display_format, page_name, created_at, businesses ( slug )'
+    )
+    .eq('business_id', ad.business_id)
+    .eq('vector_group', ad.vector_group)
+    .neq('ad_archive_id', ad.ad_archive_id)
+    .range(offset, offset + pageSize - 1);
+
+  if (error) {
+    console.error('Error fetching related ads page:', error);
+    return null;
+  }
+
+  return (data || []).map((a) => {
+    const business = Array.isArray(a.businesses) ? a.businesses[0] : a.businesses;
+    const slug = business?.slug;
+
+    const ensureSlugInPath = (p: string | null) => {
+      if (!p || !slug) return p;
+      const cleanP = p.trim().replace(/^\/+/, '');
+      if (cleanP.startsWith(`${slug}/`)) return cleanP;
+      return `${slug}/${cleanP}`;
+    };
+
+    return {
+      ...a,
+      id: a.ad_archive_id,
+      storage_path: ensureSlugInPath(a.storage_path),
+      video_storage_path: ensureSlugInPath(a.video_storage_path),
+    };
+  }) as Ad[];
 }
 
 /**

@@ -83,7 +83,7 @@ async function getRelatedAdsByGroup(ad: Ad): Promise<Ad[] | null> {
     .eq('business_id', ad.business_id)
     .eq('vector_group', ad.vector_group)
     .neq('ad_archive_id', ad.ad_archive_id)
-    .limit(12);
+    .limit(25);
 
   if (error) return null;
 

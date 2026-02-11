@@ -122,12 +122,7 @@ export function AdArchiveBrowser({
         selectedTags={selectedTags}
         handleTagsChange={async (tags: string[]) => {
           setSelectedTags(tags);
-          await handleFilterChange({
-            search: productFilter,
-            page: currentPage.toString(),
-            date: null,
-            tags,
-          });
+          handleFilterChange();
         }}
         pagesLength={pages.length}
         pages={pages}

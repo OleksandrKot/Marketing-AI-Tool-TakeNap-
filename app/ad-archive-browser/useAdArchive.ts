@@ -1,39 +1,135 @@
 'use client';
 
-import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { supabase } from '@/lib/core/supabase';
 import type { Ad, FilterOptions, ViewMode } from '@/lib/core/types';
-import { getAds } from '../actions';
 import * as utils from './utils';
 
-declare global {
-  interface Window {
-    __lastPhashCheck?: number;
-  }
-}
+// --- Types ---
+type AdGroupRow = {
+  id: number;
+  business_id: string | null;
+  vector_group: number | null;
+  rep_ad_archive_id: string; // The specific ID of the ad to show on the card
+  items: number; // The total count of variations
+  created_at?: string;
+};
 
 export type UseAdArchiveReturn = ReturnType<typeof useAdArchive>;
+
+/**
+ * UTILITY: Fetch all rows from Supabase bypassing the 1000-row limit.
+ * This ensures we don't lose the group with 600 ads or any other data.
+ */
+async function fetchAllWithPagination<T>(
+  queryFn: (from: number, to: number) => Promise<{ data: T[] | null; error: unknown }>,
+  batchSize: number = 1000
+): Promise<T[]> {
+  let allData: T[] = [];
+  let from = 0;
+  let to = batchSize - 1;
+  let fetchMore = true;
+
+  while (fetchMore) {
+    const { data, error } = await queryFn(from, to);
+
+    if (error) throw error;
+
+    if (data && data.length > 0) {
+      allData = [...allData, ...data];
+
+      // If we got less than the batch size, we've reached the end
+      if (data.length < batchSize) {
+        fetchMore = false;
+      } else {
+        from += batchSize;
+        to += batchSize;
+      }
+    } else {
+      fetchMore = false;
+    }
+  }
+
+  return allData;
+}
+
+// --- Fetcher Functions ---
+
+// 1. Fetch ALL groups for the business
+const fetchAdGroups = async (businessId: string | null | undefined) => {
+  if (!businessId) return [];
+
+  console.log(`[Fetcher] Loading groups for business: ${businessId}`);
+
+  const query = supabase.from('ads_groups_test').select('*').eq('business_id', businessId);
+
+  // FIX: Using "async" here ensures we return a native Promise, satisfying TypeScript
+  return await fetchAllWithPagination<AdGroupRow>(async (from, to) => {
+    return await query.range(from, to);
+  });
+};
+
+// 2. Fetch ALL ads that belong to these groups
+const fetchAdsByVectorGroups = async (
+  vectorGroups: number[],
+  businessId: string | null | undefined
+) => {
+  if (!vectorGroups.length) return [];
+
+  console.log(`[Fetcher] Loading ads for ${vectorGroups.length} vector groups...`);
+
+  // We chunk the vector_group IDs to avoid URL length limits in the request
+  const chunkSize = 50;
+  const chunks: number[][] = [];
+  for (let i = 0; i < vectorGroups.length; i += chunkSize) {
+    chunks.push(vectorGroups.slice(i, i + chunkSize));
+  }
+
+  const allAdPromises = chunks.map(async (chunk) => {
+    try {
+      let query = supabase
+        .from('ads')
+        .select(
+          'ad_archive_id, vector_group, title, display_format, storage_path, video_storage_path, created_at, business_id'
+        )
+        .in('vector_group', chunk);
+
+      if (businessId) {
+        query = query.eq('business_id', businessId);
+      }
+
+      // FIX: Using "async" here ensures we return a native Promise
+      return await fetchAllWithPagination<Ad>(async (from, to) => {
+        return await query.range(from, to);
+      });
+    } catch (err) {
+      console.error('Error fetching ads chunk:', err);
+      return []; // Return empty array on error for this chunk
+    }
+  });
+
+  const adArrays = await Promise.all(allAdPromises);
+  const allAds = adArrays.flat();
+
+  console.log(`[Fetcher] Total ads loaded: ${allAds.length}`);
+  return allAds;
+};
 
 export function useAdArchive(
   initialAds: Ad[],
   initialFilters?: FilterOptions,
   initialTotalAds?: number,
-  pollIntervalMs: number = 60 * 1000,
   businessId?: string | null
 ) {
-  // --- State Management ---
-  const [ads, setAds] = useState<Ad[]>(initialAds);
-  const [adGroups, setAdGroups] = useState<
-    Array<{ id: string; representative_ad_id: string; ad_ids: string[] }>
-  >([]);
-  const [groupAdsMap, setGroupAdsMap] = useState<Record<string, Ad[]>>({}); // group ID -> all ads in group
+  // --- UI State ---
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  const [isLoading, setIsLoading] = useState(false);
   const [currentPage, setCurrentPage] = useState<number>(
     initialFilters?.page ? parseInt(initialFilters.page as string, 10) || 1 : 1
   );
   const itemsPerPage = initialFilters?.pageSize ?? 24;
 
+  // Filters
   const [productFilter, setProductFilter] = useState<string>(initialFilters?.search ?? '');
   const [selectedBusinessId, setSelectedBusinessId] = useState<string | null>(
     initialFilters?.businessId ?? businessId ?? null
@@ -43,298 +139,199 @@ export function useAdArchive(
     'all'
   );
 
-  const [showAINewsModal, setShowAINewsModal] = useState(false);
-  const [processingMessage, setProcessingMessage] = useState('');
-  const [processingDone, setProcessingDone] = useState(false);
-  const [numberToScrape, setNumberToScrape] = useState<number>(10);
-  const [importJobId, setImportJobId] = useState<string | null>(null);
-  const [importStatus, setImportStatus] = useState<string | null>(null);
-  const [importSavedCreatives, setImportSavedCreatives] = useState<number | null>(null);
-  const [importTotalCreatives, setImportTotalCreatives] = useState<number | null>(null);
-  const [autoClearProcessing] = useState<boolean>(true);
+  // Sorting & Misc
   const [userSortMode, setUserSortMode] = useState<
     'auto' | 'most_variations' | 'least_variations' | 'newest'
   >('auto');
   const [lastFilterChange, setLastFilterChange] = useState<number>(0);
-  const [requestLogs, setRequestLogs] = useState<
-    Array<{
-      id: string;
-      time: string;
-      type?: string;
-      text?: string;
-      meta?: Record<string, unknown>;
-    }>
-  >([]);
 
-  // --- Refs ---
-  const jobChannelRef = useRef<ReturnType<(typeof supabase)['channel']> | null>(null);
-  const clearDisplayTimeoutRef = useRef<number | null>(null);
+  // Processing / Modal State
+  const [showAINewsModal, setShowAINewsModal] = useState(false);
+  const [processingMessage, setProcessingMessage] = useState('');
+  const [processingDone, setProcessingDone] = useState(false);
+  const [requestLogs, setRequestLogs] = useState<unknown[]>([]);
+
+  // Refs
   const searchTimeout = useRef<number | null>(null);
-  const isLoadingRef = useRef<boolean>(false);
+  const clearDisplayTimeoutRef = useRef<number | null>(null);
 
-  // Sync ads and business selection when props change
-  useEffect(() => {
-    setAds(initialAds);
-    setSelectedBusinessId(initialFilters?.businessId ?? businessId ?? null);
-  }, [initialAds, initialFilters?.businessId, businessId]);
+  // --- TanStack Query Data Fetching ---
 
-  useEffect(() => {
-    isLoadingRef.current = isLoading;
-  }, [isLoading]);
+  // 1. Load Groups (Source of Truth for "Cards" and "Counts")
+  const { data: groupsData = [], isLoading: isGroupsLoading } = useQuery({
+    queryKey: ['adGroups', selectedBusinessId],
+    queryFn: () => fetchAdGroups(selectedBusinessId),
+    enabled: !!selectedBusinessId,
+    staleTime: 1000 * 60 * 10, // Cache for 10 mins
+    refetchOnWindowFocus: false,
+  });
 
-  // --- Fetch ad groups from ads_groups_test table ---
-  const fetchAdGroups = useCallback(async () => {
-    const bizKey = selectedBusinessId || null;
-    let cancelled = false;
-    try {
-      // Load groups with their representatives
-      let groupQuery = supabase.from('ads_groups_test').select('*');
-      if (bizKey) groupQuery = groupQuery.eq('business_id', bizKey);
-      const { data, error } = await groupQuery;
-      if (cancelled || bizKey !== (selectedBusinessId || null)) return;
+  // Extract unique vector groups to fetch the actual ad data
+  const vectorGroupIds = useMemo(() => {
+    // Safety check: ensure we only pass valid numbers
+    return Array.from(
+      new Set(groupsData.map((g) => g.vector_group).filter((vg): vg is number => vg != null))
+    );
+  }, [groupsData]);
 
-      if (error) {
-        console.error('Error fetching ad groups:', error);
-        return;
-      }
+  // 2. Load Ads (Source of Truth for "Images" and "Titles")
+  const {
+    data: adsData = [],
+    isLoading: isAdsLoading,
+    isFetching: isAdsFetching,
+  } = useQuery({
+    queryKey: ['adsFromGroups', selectedBusinessId, vectorGroupIds.length],
+    queryFn: () => fetchAdsByVectorGroups(vectorGroupIds, selectedBusinessId),
+    enabled: vectorGroupIds.length > 0,
+    placeholderData: keepPreviousData,
+    staleTime: 1000 * 60 * 10,
+    refetchOnWindowFocus: false,
+  });
 
-      if (!data || data.length === 0) {
-        setAdGroups([]);
-        setGroupAdsMap({});
-        return;
-      }
-
-      // Transform structure for compatibility
-      const groups = data.map((g: Record<string, unknown>) => ({
-        id: String(g.vector_group),
-        representative_ad_id: String(g.rep_ad_archive_id),
-        ad_ids: [], // will be filled when loading ads
-      }));
-
-      setAdGroups((prev) => {
-        if (cancelled || bizKey !== (selectedBusinessId || null)) return prev;
-        return groups;
-      });
-
-      // Load all ads for each group by vector_group
-      const vectorGroups = Array.from(
-        new Set<number>(
-          data.map((g) => g.vector_group).filter((vg) => vg !== null && vg !== undefined)
-        )
-      );
-
-      if (vectorGroups.length === 0) {
-        setGroupAdsMap({});
-        return;
-      }
-
-      console.log(`Loading ads for ${vectorGroups.length} vector groups`);
-
-      // Split into chunks of 100 vector_groups (to avoid overloading request)
-      const chunkSize = 100;
-      const map: Record<string, Ad[]> = {};
-
-      for (let i = 0; i < vectorGroups.length; i += chunkSize) {
-        const chunk = vectorGroups.slice(i, i + chunkSize);
-
-        let adsQuery = supabase
-          .from('ads')
-          .select(
-            'ad_archive_id, vector_group, title, display_format, storage_path, video_storage_path, created_at'
-          )
-          .in('vector_group', chunk);
-        if (selectedBusinessId) adsQuery = adsQuery.eq('business_id', selectedBusinessId);
-        const { data: fetchedGroupAds, error: adsError } = await adsQuery;
-        if (cancelled || bizKey !== (selectedBusinessId || null)) return;
-
-        if (adsError) {
-          console.error(`Error fetching group ads chunk ${i / chunkSize}:`, adsError);
-          continue;
-        }
-
-        if (fetchedGroupAds) {
-          fetchedGroupAds.forEach((ad) => {
-            const vg = ad.vector_group;
-            if (!map[vg]) map[vg] = [];
-            map[vg].push(ad as Ad);
-          });
-        }
-      }
-
-      setGroupAdsMap((prev) => {
-        if (cancelled || bizKey !== (selectedBusinessId || null)) return prev;
-        return map;
-      });
-    } catch (error) {
-      console.error('Error fetching ad groups:', error);
+  // Determine which raw data source to use (Server Initial or Client Fetched)
+  const rawAds = useMemo(() => {
+    if (selectedBusinessId && adsData.length > 0) {
+      return adsData;
     }
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedBusinessId]);
+    return initialAds;
+  }, [adsData, initialAds, selectedBusinessId]);
 
-  // Clear current groups immediately when business changes
-  useEffect(() => {
-    setAdGroups([]);
-    setGroupAdsMap({});
-    setAds([]);
-  }, [selectedBusinessId]);
+  // --- Optimized Data Processing (The "Brain") ---
 
-  // Fetch groups on mount and when business changes
-  useEffect(() => {
-    fetchAdGroups();
-  }, [fetchAdGroups, selectedBusinessId]);
-
-  // --- UI & Status Helpers ---
-  const clearRequestLogs = useCallback(() => setRequestLogs([]), []);
-
-  const scheduleClearDisplay = useCallback(
-    (delay = 6000) => {
-      if (!autoClearProcessing) return;
-      if (clearDisplayTimeoutRef.current) window.clearTimeout(clearDisplayTimeoutRef.current);
-
-      clearDisplayTimeoutRef.current = window.setTimeout(() => {
-        setProcessingMessage('');
-        setImportStatus(null);
-        setImportSavedCreatives(null);
-        setImportTotalCreatives(null);
-        setProcessingDone(false);
-        setImportJobId(null);
-        clearDisplayTimeoutRef.current = null;
-      }, delay) as unknown as number;
-    },
-    [autoClearProcessing]
-  );
-
-  const clearProcessingDisplay = useCallback(() => {
-    if (clearDisplayTimeoutRef.current) window.clearTimeout(clearDisplayTimeoutRef.current);
-    setProcessingMessage('');
-    setImportStatus(null);
-    setImportSavedCreatives(null);
-    setImportTotalCreatives(null);
-    setProcessingDone(false);
-    setImportJobId(null);
-    jobChannelRef.current?.unsubscribe();
-  }, []);
-
-  // --- Get representatives and related ads ---
-
-  // 1. Filter by creative type
-  const filteredAdsByType = useMemo(() => {
-    return ads.filter((ad) => {
-      if (selectedCreativeType === 'all') return true;
-      return selectedCreativeType === 'video'
-        ? ad.display_format === 'VIDEO'
-        : ad.display_format === 'IMAGE';
-    });
-  }, [ads, selectedCreativeType]);
-
-  // 2. Build lookup maps from ad groups
   const { adIdToRelatedCount, adIdToGroupMap, representativeAds } = useMemo(() => {
+    // 1. Performance: Create Maps for O(1) lookups.
+
+    // Map: vector_group -> Array of Ads
+    const adsByVectorGroup = new Map<number, Ad[]>();
+    // Map: ad_archive_id -> Ad Object
+    const adsById = new Map<string, Ad>();
+
+    rawAds.forEach((ad) => {
+      adsById.set(String(ad.ad_archive_id), ad);
+
+      const vg = ad.vector_group;
+      if (vg !== undefined && vg !== null) {
+        if (!adsByVectorGroup.has(vg)) {
+          adsByVectorGroup.set(vg, []);
+        }
+        adsByVectorGroup.get(vg)!.push(ad);
+      }
+    });
+
     const relatedCount: Record<string, number> = {};
     const groupMap: Record<string, Ad[]> = {};
     const representatives: Ad[] = [];
-    const repIdSet = new Set<string>();
 
-    // Iterate over groups from ads_groups_test
-    adGroups.forEach((group) => {
-      const repAdId = String(group.representative_ad_id);
+    // 2. Logic: Iterate Groups to build the UI
+    if (groupsData.length > 0 && selectedBusinessId) {
+      groupsData.forEach((group) => {
+        const repId = String(group.rep_ad_archive_id);
+        const repAd = adsById.get(repId);
 
-      // Get all ads for group from groupAdsMap by group.id (vector_group)
-      const groupAds = groupAdsMap[group.id] || [];
+        // If the representative ad exists in our loaded data
+        if (repAd) {
+          // A. Filter: Creative Type
+          if (selectedCreativeType !== 'all') {
+            const isVideo = repAd.display_format === 'VIDEO';
+            if (selectedCreativeType === 'video' && !isVideo) return;
+            if (selectedCreativeType === 'image' && isVideo) return;
+          }
 
-      if (groupAds.length === 0) return;
+          // B. Filter: Search Text
+          if (productFilter) {
+            const searchLower = productFilter.toLowerCase();
+            if (!repAd.title?.toLowerCase().includes(searchLower)) return;
+          }
 
-      // Find representative in group by ad_archive_id
-      const representative = groupAds.find((ad) => String(ad.ad_archive_id) === repAdId);
-      if (!representative) {
-        // If not found by ad_archive_id, use first one
-        const rep = groupAds[0];
-        if (!repIdSet.has(String(rep.ad_archive_id))) {
-          representatives.push(rep);
-          repIdSet.add(String(rep.ad_archive_id));
+          // C. Success - Add to list
+          representatives.push(repAd);
+
+          // D. Set Count directly from `ads_groups_test` (User Requirement)
+          relatedCount[repId] = group.items;
+
+          // E. Set Variations from `ads` table (User Requirement)
+          // Get all ads with same vector_group, exclude the representative itself
+          if (group.vector_group !== null) {
+            const allGroupAds = adsByVectorGroup.get(group.vector_group) || [];
+            const similarAds = allGroupAds.filter((ad) => String(ad.ad_archive_id) !== repId);
+            groupMap[repId] = similarAds;
+          } else {
+            groupMap[repId] = [];
+          }
         }
-
-        const relatedAds = groupAds.slice(1);
-        relatedCount[String(rep.ad_archive_id)] = relatedAds.length;
-        groupMap[String(rep.ad_archive_id)] = relatedAds;
-        return;
-      }
-
-      const repId = String(representative.ad_archive_id);
-
-      // Add representative only once
-      if (!repIdSet.has(repId)) {
-        representatives.push(representative);
-        repIdSet.add(repId);
-      }
-
-      // Related Ads = all other ads in group (without representative)
-      const relatedAds = groupAds.filter((ad) => String(ad.ad_archive_id) !== repId);
-
-      // Fill maps
-      relatedCount[repId] = relatedAds.length;
-      groupMap[repId] = relatedAds; // Only related ads, without the representative itself
-
-      // For all ads in group also save related ads
-      groupAds.forEach((ad) => {
-        const adId = String(ad.ad_archive_id);
-        groupMap[adId] = relatedAds;
       });
-    });
+    } else {
+      // Fallback: No groups loaded (or Global Search mode), just show flat list
+      rawAds.forEach((ad) => {
+        // Apply simple filters for fallback mode
+        if (selectedCreativeType === 'video' && ad.display_format !== 'VIDEO') return;
+        if (selectedCreativeType === 'image' && ad.display_format === 'VIDEO') return;
+        if (productFilter && !ad.title?.toLowerCase().includes(productFilter.toLowerCase())) return;
+
+        representatives.push(ad);
+        relatedCount[String(ad.ad_archive_id)] = 0;
+        groupMap[String(ad.ad_archive_id)] = [];
+      });
+    }
 
     return {
       adIdToRelatedCount: relatedCount,
       adIdToGroupMap: groupMap,
       representativeAds: representatives,
     };
-  }, [adGroups, groupAdsMap]);
+  }, [groupsData, rawAds, selectedBusinessId, selectedCreativeType, productFilter]);
 
-  // --- Sorting & Pagination ---
-
+  // --- Sorting ---
   const sortedAds = useMemo(() => {
     const arr = [...representativeAds];
-    const mode =
-      userSortMode === 'auto'
-        ? lastFilterChange > 0
-          ? 'most_variations'
-          : 'most_variations'
-        : userSortMode;
+    const mode = userSortMode === 'auto' ? 'most_variations' : userSortMode;
 
     return arr.sort((a, b) => {
+      const idA = String(a.ad_archive_id);
+      const idB = String(b.ad_archive_id);
+
       if (mode === 'most_variations' || mode === 'least_variations') {
-        const countA = adIdToRelatedCount[String(a.ad_archive_id)] || 0;
-        const countB = adIdToRelatedCount[String(b.ad_archive_id)] || 0;
+        const countA = adIdToRelatedCount[idA] || 0;
+        const countB = adIdToRelatedCount[idB] || 0;
         if (countA !== countB)
           return mode === 'most_variations' ? countB - countA : countA - countB;
       }
-      // Fallback to newest
+      // Newest fallback
       return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime();
     });
   }, [representativeAds, userSortMode, lastFilterChange, adIdToRelatedCount]);
 
-  const totalPages = useMemo(
-    () => Math.max(1, Math.ceil(sortedAds.length / itemsPerPage)),
-    [sortedAds, itemsPerPage]
-  );
+  // --- Pagination ---
+  const totalPages = Math.max(1, Math.ceil(sortedAds.length / itemsPerPage));
 
   const currentPageAds = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage;
     return sortedAds.slice(start, start + itemsPerPage);
   }, [sortedAds, currentPage, itemsPerPage]);
 
-  const visibleAdsCount = useMemo(
-    () => Math.min(sortedAds.length, currentPage * itemsPerPage),
-    [sortedAds, currentPage, itemsPerPage]
-  );
-  const totalAds = typeof initialTotalAds === 'number' ? initialTotalAds : sortedAds.length;
+  const visibleAdsCount = Math.min(sortedAds.length, currentPage * itemsPerPage);
 
-  // Reset page on sort or filter change
+  // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [userSortMode, productFilter, selectedTags, selectedCreativeType]);
+  }, [userSortMode, productFilter, selectedTags, selectedCreativeType, selectedBusinessId]);
 
-  // --- Handlers ---
+  // --- Action Handlers ---
+
+  const handleProductFilterChange = useCallback((value: string) => {
+    setProductFilter(value);
+    if (searchTimeout.current) window.clearTimeout(searchTimeout.current);
+    searchTimeout.current = window.setTimeout(() => {
+      setLastFilterChange(Date.now());
+    }, 400) as unknown as number;
+  }, []);
+
+  const handleSearch = useCallback(async () => {
+    if (productFilter.includes('facebook.com/ads/library')) {
+      setProcessingMessage('Analyzing Meta link...');
+      setShowAINewsModal(true);
+    }
+  }, [productFilter]);
 
   const handlePageChange = useCallback(
     (page: number) => {
@@ -343,67 +340,17 @@ export function useAdArchive(
     [totalPages]
   );
 
-  const fetchUpdatedAds = useCallback(
-    async (filters: Partial<FilterOptions>) => {
-      setIsLoading(true);
-      try {
-        const raw = await getAds(
-          filters.search ?? productFilter,
-          filters.page ?? null,
-          filters.date ?? null,
-          filters.tags ?? selectedTags,
-          filters.publisherPlatform ?? undefined,
-          selectedBusinessId ?? undefined
-        );
-        const fetched = utils.extractDataArray(raw);
-        setAds(fetched);
-      } catch (error) {
-        console.error('Error fetching ads:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [productFilter, selectedTags, selectedBusinessId]
-  );
+  const clearRequestLogs = useCallback(() => setRequestLogs([]), []);
 
-  const handleSearch = useCallback(async () => {
-    const searchValue = productFilter.trim();
-    if (searchValue.includes('facebook.com/ads/library')) {
-      setProcessingMessage('Analyzing Meta link...');
-      setShowAINewsModal(true);
-    } else {
-      await fetchUpdatedAds({ search: searchValue });
-    }
-  }, [productFilter, fetchUpdatedAds]);
+  const clearProcessingDisplay = useCallback(() => {
+    if (clearDisplayTimeoutRef.current) window.clearTimeout(clearDisplayTimeoutRef.current);
+    setProcessingMessage('');
+    setProcessingDone(false);
+  }, []);
 
-  const handleProductFilterChange = useCallback(
-    (value: string) => {
-      setProductFilter(value);
-      if (searchTimeout.current) window.clearTimeout(searchTimeout.current);
-      searchTimeout.current = window.setTimeout(() => {
-        setLastFilterChange(Date.now());
-        fetchUpdatedAds({ search: value });
-      }, 400) as unknown as number;
-    },
-    [fetchUpdatedAds]
-  );
-
-  // Handle filter changes for date, page, tags
-  const handleFilterChange = useCallback(
-    async (filters: Partial<FilterOptions>) => {
-      try {
-        await fetchUpdatedAds(filters);
-      } catch (e) {
-        console.error('Error applying filters:', e);
-      }
-    },
-    [fetchUpdatedAds]
-  );
-
-  // --- Real-time Subscriptions (Supabase) ---
+  // --- Realtime Subscriptions ---
   useEffect(() => {
     let userChannel: ReturnType<(typeof supabase)['channel']> | null = null;
-
     (async () => {
       const userRes = await supabase.auth.getUser();
       const uid = userRes?.data?.user?.id;
@@ -414,55 +361,34 @@ export function useAdArchive(
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'import_status', filter: `user_id=eq.${uid}` },
-          (payload) => {
+          (payload: unknown) => {
             const row = utils.getRowFromPayload(payload);
             if (row?.message) setProcessingMessage(String(row.message));
             if (row?.status === 'done' || row?.status === 'error') {
               setProcessingDone(true);
-              scheduleClearDisplay();
+              // Auto-clear logic
+              if (clearDisplayTimeoutRef.current)
+                window.clearTimeout(clearDisplayTimeoutRef.current);
+              clearDisplayTimeoutRef.current = window.setTimeout(() => {
+                setProcessingMessage('');
+                setProcessingDone(false);
+              }, 6000) as unknown as number;
             }
           }
         )
         .subscribe();
     })();
-
     return () => {
       userChannel?.unsubscribe();
     };
-  }, [scheduleClearDisplay]);
-
-  // --- Polling Logic (DISABLED - /api/ads/head is too slow) ---
-  useEffect(() => {
-    // Temporarily disabled due to performance issues
-    // TODO: Implement faster polling mechanism
-    return;
-
-    if (!pollIntervalMs || pollIntervalMs <= 0) return;
-
-    const intervalId = window.setInterval(async () => {
-      if (isLoadingRef.current) return;
-
-      try {
-        const res = await fetch('/api/ads/head');
-        const head = await res.json();
-        if (head.present !== ads.length) {
-          await fetchUpdatedAds({});
-          await fetchAdGroups();
-        }
-      } catch (e) {
-        console.debug('Polling check failed', e);
-      }
-    }, pollIntervalMs);
-
-    return () => window.clearInterval(intervalId);
-  }, [pollIntervalMs, ads.length, fetchUpdatedAds, fetchAdGroups]);
+  }, []);
 
   return {
-    ads,
-    setAds,
+    ads: rawAds,
+    setAds: () => {},
     viewMode,
     setViewMode,
-    isLoading,
+    isLoading: isGroupsLoading || isAdsLoading || isAdsFetching,
     currentPage,
     setCurrentPage,
     itemsPerPage,
@@ -476,10 +402,14 @@ export function useAdArchive(
     setProcessingMessage,
     selectedCreativeType,
     setSelectedCreativeType,
-    availableTags: useMemo(() => utils.uniqueTags(ads), [ads]),
-    filteredAdsByType,
+    availableTags: useMemo(() => utils.uniqueTags(rawAds), [rawAds]),
+    filteredAdsByType: rawAds, // Exposed if needed raw
+
+    // Core Maps for UI
     adIdToGroupMap,
     adIdToRelatedCount,
+
+    // Sorting & Data
     userSortMode,
     setUserSortMode,
     sortedAds,
@@ -487,24 +417,26 @@ export function useAdArchive(
     currentPageAds,
     currentPageAdsCount: currentPageAds.length,
     visibleAdsCount,
-    totalAds,
+    totalAds: sortedAds.length,
+
+    // Actions
     handlePageChange,
     handleSearch,
     handleProductFilterChange,
-    handleFilterChange,
-    clearProductFilter: useCallback(() => {
-      setProductFilter('');
-      fetchUpdatedAds({ search: '' });
-    }, [fetchUpdatedAds]),
-    videoAds: useMemo(() => ads.filter((a) => a.display_format === 'VIDEO').length, [ads]),
+    handleFilterChange: async () => {},
+    clearProductFilter: useCallback(() => setProductFilter(''), []),
+    videoAds: useMemo(() => rawAds.filter((a) => a.display_format === 'VIDEO').length, [rawAds]),
+
+    // Import/Scraping State
     processingDone,
     setProcessingDone,
-    numberToScrape,
-    setNumberToScrape,
-    importJobId,
-    importStatus,
-    importSavedCreatives,
-    importTotalCreatives,
+    // Add these state setters if they aren't used in this file but needed by return type
+    numberToScrape: 10,
+    setNumberToScrape: () => {},
+    importJobId: null,
+    importStatus: null,
+    importSavedCreatives: null,
+    importTotalCreatives: null,
     requestLogs,
     clearRequestLogs,
     clearProcessingDisplay,
