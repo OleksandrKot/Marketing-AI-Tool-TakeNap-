@@ -61,8 +61,17 @@ const AdDetails = memo(function AdDetails({ ad, relatedAds }: AdDetailsProps) {
 
   // Mark as ready immediately on client
   useEffect(() => {
+    console.log(`[AdDetails Client] Component mounted. Creative ID: ${creativeId}`);
+    console.log(`[AdDetails Client] Unified ad data:`, {
+      concept: adUnified?.concept,
+      title: adUnified?.title,
+      text: adUnified?.text,
+      caption: adUnified?.caption,
+      display_format: adUnified?.display_format,
+    });
+    console.log(`[AdDetails Client] Related ads count: ${relatedUnified?.length || 0}`);
     setIsReady(true);
-  }, []);
+  }, [creativeId, adUnified, relatedUnified]);
 
   const handleBack = useCallback(() => {
     try {

@@ -823,6 +823,32 @@ export const buildUnifiedAd = (ad: Ad): UnifiedAd => {
     // but use parsedAd for additional extracted info.
     const typedAd = ad;
 
+    // Extract creative concepts from raw_json (stored on the ad object itself)
+    let rawJson: Record<string, unknown> = {};
+
+    // raw_json might be a string (from DB) or already parsed object
+    if (ad.raw_json) {
+      if (typeof ad.raw_json === 'string') {
+        try {
+          rawJson = JSON.parse(ad.raw_json) as Record<string, unknown>;
+        } catch (e) {
+          console.warn(`[buildUnifiedAd] Failed to parse raw_json string:`, e);
+          rawJson = ad.raw_json as unknown as Record<string, unknown>;
+        }
+      } else {
+        rawJson = ad.raw_json as unknown as Record<string, unknown>;
+      }
+    }
+
+    const creativeConcepts = (rawJson?.creative_concepts as Record<string, string>) || {};
+
+    console.log(`[buildUnifiedAd] Ad ${ad.ad_archive_id}:`, {
+      raw_json_type: typeof ad.raw_json,
+      has_raw_json: !!ad.raw_json,
+      creative_concepts: creativeConcepts,
+      concept_from_concepts: creativeConcepts?.Concept,
+    });
+
     const { visualMainParagraphs } = getVisualParagraphs(typedAd);
 
     const rawScenarios = parseScenarios(typedAd);
@@ -883,6 +909,15 @@ export const buildUnifiedAd = (ad: Ad): UnifiedAd => {
       social_proof: getSection('Social Proof'),
       target_audience: getSection('Target Audience'),
       formats_and_creative_concepts_text: getSection('Formats & Creative Concepts'),
+
+      // Extract concept, hook, and other creative metadata from raw_json
+      // Fallback chain: table field → raw_json → empty string
+      concept: typedAd.concept || creativeConcepts?.Concept || creativeConcepts?.concept || '',
+      hook: typedAd.hook || creativeConcepts?.Hook || creativeConcepts?.hook || '',
+      topic: typedAd.topic || creativeConcepts?.Topic || creativeConcepts?.topic || '',
+      persona: typedAd.character || creativeConcepts?.Persona || creativeConcepts?.persona || '',
+      realisation:
+        typedAd.realization || creativeConcepts?.Realisation || creativeConcepts?.realisation || '',
 
       // JSONs
       core_prompt_json: buildCorePromptJson(typedAd, meta, scenarios),
