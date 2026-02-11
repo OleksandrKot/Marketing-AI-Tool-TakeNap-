@@ -634,6 +634,19 @@ export default memo(function ContentTabClient({ ad, relatedAds }: ContentTabClie
                     </div>
                   );
                 })()}
+
+                {(() => {
+                  if (!adData.group_description) return null;
+
+                  return (
+                    <div className="mt-4 pt-4 border-t border-slate-200 text-sm text-slate-700 space-y-3">
+                      <div className="font-bold text-black mb-3 text-base">Group Description:</div>
+                      <div className="whitespace-pre-wrap break-words text-slate-700">
+                        {adData.group_description}
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
           </CollapsiblePanel>

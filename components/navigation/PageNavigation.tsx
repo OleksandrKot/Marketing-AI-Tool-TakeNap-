@@ -2,14 +2,14 @@
 import React, { useState, useRef, useEffect, memo } from 'react';
 import { Button } from '@/components/ui/button';
 import { LayoutGrid, Layers, Heart, Menu, X, BarChart3 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useBusinessPersist } from '@/lib/hooks/useBusinessPersist';
 
 interface PageNavigationProps {
   currentPage: 'library' | 'adaptations' | 'personas' | 'favorites' | 'folders' | 'dashboard';
 }
 
 function PageNavigationComponent({ currentPage }: PageNavigationProps) {
-  const router = useRouter();
+  const { pushWithBusiness } = useBusinessPersist();
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement | null>(null);
 
@@ -36,22 +36,22 @@ function PageNavigationComponent({ currentPage }: PageNavigationProps) {
   const handleNavigation = (page: string) => {
     switch (page) {
       case 'library':
-        router.push('/');
+        pushWithBusiness('/');
         break;
       case 'favorites':
-        router.push('/favorites');
+        pushWithBusiness('/favorites');
         break;
       case 'folders':
-        router.push('/folders');
+        pushWithBusiness('/folders');
         break;
       case 'adaptations':
-        router.push('/adaptations');
+        pushWithBusiness('/adaptations');
         break;
       case 'personas':
-        router.push('/personas-settings');
+        pushWithBusiness('/personas-settings');
         break;
       case 'dashboard':
-        router.push('/dashboard');
+        pushWithBusiness('/dashboard');
         break;
     }
   };

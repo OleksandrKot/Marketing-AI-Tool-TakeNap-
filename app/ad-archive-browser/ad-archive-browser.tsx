@@ -2,6 +2,7 @@
 
 import Header from './components/Header';
 import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import SearchControls from './components/search-controls';
 import ResultsGrid from './components/ResultsGrid';
 import PaginationBar from './components/PaginationBar';
@@ -35,6 +36,8 @@ export function AdArchiveBrowser({
     7 * 60 * 1000, // poll every 7 minutes
     selectedBusiness
   ) as UseAdArchiveReturn;
+
+  const router = useRouter();
 
   const {
     filteredAdsByType,
@@ -85,6 +88,22 @@ export function AdArchiveBrowser({
     // run once on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Update URL when business changes via dropdown
+  useEffect(() => {
+    try {
+      // Only update URL if user changed the selection in dropdown (selectedBusinessId changed)
+      // and it differs from the current selectedBusiness prop from server
+      if (selectedBusinessId && selectedBusinessId !== selectedBusiness) {
+        console.log(
+          `[AdArchiveBrowser] Business changed: ${selectedBusiness} -> ${selectedBusinessId}`
+        );
+        router.push(`/?business=${encodeURIComponent(selectedBusinessId)}`);
+      }
+    } catch (e) {
+      console.debug('Failed to update business URL:', e);
+    }
+  }, [selectedBusinessId, selectedBusiness, router]);
 
   // No auto-advance on scroll. Use explicit Next button below.
 

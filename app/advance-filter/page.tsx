@@ -5,7 +5,15 @@ import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
-export default function AdvanceFilterPage() {
+export default function AdvanceFilterPage({
+  searchParams,
+}: {
+  searchParams: { businessId?: string };
+}) {
+  const businessParam = searchParams.businessId
+    ? `?business=${encodeURIComponent(searchParams.businessId)}`
+    : '';
+
   return (
     <main className="min-h-screen bg-slate-50">
       <div className="container mx-auto px-6 py-12 max-w-7xl">
@@ -19,7 +27,7 @@ export default function AdvanceFilterPage() {
             </p>
           </div>
           <div className="mt-4 md:mt-0">
-            <Link href="/">
+            <Link href={`/${businessParam}`}>
               <Button
                 variant="ghost"
                 className="text-slate-600 hover:text-slate-900 hover:bg-slate-100"

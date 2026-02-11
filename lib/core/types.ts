@@ -58,6 +58,9 @@ export interface Ad {
   // Storage paths (format: business-slug/ad_archive_id.ext)
   storage_path?: string | null;
   video_storage_path?: string | null;
+
+  // Group description from ads_groups_test
+  group_description?: string | null;
 }
 
 export type ViewMode = 'grid' | 'list';

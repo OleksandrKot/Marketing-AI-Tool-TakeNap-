@@ -142,6 +142,7 @@ export default function FilteredContainer({
               );
             if (savedFilters.dateRanges?.length)
               savedFilters.dateRanges.forEach((v: string) => params.append('dateRanges', v));
+            if (savedFilters.businessId) params.set('businessId', savedFilters.businessId);
 
             const queryString = params.toString();
             const newUrl = `${pathname}?${queryString}`;

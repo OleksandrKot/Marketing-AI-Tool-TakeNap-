@@ -47,6 +47,7 @@ export default async function Home({ searchParams }: { searchParams: { business?
   return (
     <main className="min-h-screen">
       <AdArchiveBrowser
+        key={selectedBiz}
         initialAds={initialAds}
         pages={uniquePages}
         businesses={businesses}

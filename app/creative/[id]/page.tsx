@@ -8,6 +8,27 @@ import type { Ad } from '@/lib/core/types';
 
 export const dynamic = 'force-dynamic';
 
+/**
+ * Fetch group description from ads_groups_test table
+ */
+async function getGroupDescription(
+  business_id: string | undefined,
+  vector_group: number | null | undefined
+): Promise<string | null> {
+  if (!business_id || vector_group === null || vector_group === undefined) return null;
+
+  const supabase = createServerSupabaseClient();
+  const { data, error } = await supabase
+    .from('ads_groups_test')
+    .select('ai_description')
+    .eq('business_id', business_id)
+    .eq('vector_group', vector_group)
+    .single();
+
+  if (error || !data) return null;
+  return data.ai_description || null;
+}
+
 async function getAdById(archiveId: string): Promise<Ad | null> {
   const supabase = createServerSupabaseClient();
 
@@ -34,12 +55,16 @@ async function getAdById(archiveId: string): Promise<Ad | null> {
     return `${slug}/${cleanP}`; // No slug, add it
   };
 
+  // Fetch group description
+  const groupDescription = await getGroupDescription(data.business_id, data.vector_group);
+
   return {
     ...data,
     id: data.ad_archive_id,
     realisation: data.realization,
     storage_path: ensureSlugInPath(data.storage_path),
     video_storage_path: ensureSlugInPath(data.video_storage_path),
+    group_description: groupDescription,
   } as unknown as Ad;
 }
 
